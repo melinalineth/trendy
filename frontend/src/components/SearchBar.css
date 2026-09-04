@@ -1,0 +1,96 @@
+/* Barra de búsqueda */
+
+.searchbar {
+  width: 100%;
+  max-width: 400px;
+
+  display: flex;
+  align-items: center;
+
+  background-color: #f8f8f8;
+
+  border: 1px solid #dddddd;
+  border-radius: 25px;
+
+  overflow: hidden;
+
+  transition: border-color 0.3s ease,
+              box-shadow 0.3s ease;
+}
+
+/* Cuando se selecciona la barra */
+
+.searchbar:focus-within {
+  border-color: #e83e8c;
+  box-shadow: 0 0 0 3px rgba(232, 62, 140, 0.1);
+}
+
+/* Input */
+
+.searchbar__input {
+  width: 100%;
+  height: 42px;
+
+  padding: 0 16px;
+
+  border: none;
+  outline: none;
+
+  background-color: transparent;
+
+  color: #333333;
+  font-size: 14px;
+}
+
+.searchbar__input::placeholder {
+  color: #999999;
+}
+
+/* Botón */
+
+.searchbar__button {
+  width: 45px;
+  height: 42px;
+
+  border: none;
+  background-color: transparent;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 17px;
+
+  cursor: pointer;
+
+  transition: background-color 0.2s ease,
+              transform 0.2s ease;
+}
+
+.searchbar__button:hover {
+  background-color: #fff0f7;
+  transform: scale(1.05);
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .searchbar {
+    max-width: 300px;
+  }
+
+  .searchbar__input {
+    height: 38px;
+    font-size: 13px;
+  }
+
+  .searchbar__button {
+    height: 38px;
+  }
+}
+
+@media (max-width: 480px) {
+  .searchbar {
+    max-width: 100%;
+  }
+}

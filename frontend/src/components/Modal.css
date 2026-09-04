@@ -1,0 +1,168 @@
+/* Fondo del Modal */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 100%;
+
+  background-color: rgba(0, 0, 0, 0.5);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  box-sizing: border-box;
+
+  z-index: 2000;
+}
+
+/* Ventana */
+
+.modal {
+  width: 100%;
+  max-width: 500px;
+
+  background-color: #ffffff;
+
+  border-radius: 15px;
+
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+
+  overflow: hidden;
+
+  animation: modalAppear 0.25s ease;
+}
+
+/* Animación */
+
+@keyframes modalAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Encabezado */
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 20px;
+
+  border-bottom: 1px solid #eeeeee;
+}
+
+.modal__title {
+  margin: 0;
+
+  color: #333333;
+
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* Botón cerrar */
+
+.modal__close {
+  width: 35px;
+  height: 35px;
+
+  border: none;
+  border-radius: 50%;
+
+  background-color: transparent;
+
+  color: #666666;
+
+  font-size: 26px;
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.modal__close:hover {
+  background-color: #fff0f7;
+  color: #e83e8c;
+}
+
+/* Contenido */
+
+.modal__body {
+  padding: 25px 20px;
+
+  color: #555555;
+
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Pie */
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+
+  padding: 15px 20px;
+
+  border-top: 1px solid #eeeeee;
+}
+
+/* Botón */
+
+.modal__button {
+  padding: 10px 20px;
+
+  border: none;
+  border-radius: 8px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.modal__button--cancel {
+  background-color: #eeeeee;
+  color: #333333;
+}
+
+.modal__button--cancel:hover {
+  background-color: #dddddd;
+  transform: translateY(-1px);
+}
+
+/* Responsive */
+
+@media (max-width: 480px) {
+  .modal {
+    max-width: 100%;
+  }
+
+  .modal__title {
+    font-size: 18px;
+  }
+
+  .modal__body {
+    padding: 20px 15px;
+  }
+}

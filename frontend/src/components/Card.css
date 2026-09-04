@@ -1,0 +1,143 @@
+/* Tarjeta */
+
+.card {
+  width: 100%;
+  max-width: 280px;
+
+  background-color: #ffffff;
+
+  border: 1px solid #eeeeee;
+  border-radius: 15px;
+
+  overflow: hidden;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+/* Efecto hover */
+
+.card:hover {
+  transform: translateY(-5px);
+
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Contenedor de imagen */
+
+.card__image-container {
+  width: 100%;
+  height: 250px;
+
+  overflow: hidden;
+
+  background-color: #f8f8f8;
+}
+
+/* Imagen */
+
+.card__image {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  display: block;
+
+  transition: transform 0.3s ease;
+}
+
+.card:hover .card__image {
+  transform: scale(1.05);
+}
+
+/* Contenido */
+
+.card__content {
+  padding: 18px;
+}
+
+/* Título */
+
+.card__title {
+  margin: 0 0 8px;
+
+  color: #333333;
+
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Descripción */
+
+.card__description {
+  margin: 0 0 12px;
+
+  color: #777777;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Precio */
+
+.card__price {
+  margin: 0 0 15px;
+
+  color: #e83e8c;
+
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Botón */
+
+.card__button {
+  width: 100%;
+
+  padding: 11px 15px;
+
+  border: none;
+  border-radius: 8px;
+
+  background-color: #e83e8c;
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.card__button:hover {
+  background-color: #d63384;
+
+  transform: translateY(-1px);
+}
+
+/* Responsive */
+
+@media (max-width: 480px) {
+  .card {
+    max-width: 100%;
+  }
+
+  .card__image-container {
+    height: 220px;
+  }
+
+  .card__title {
+    font-size: 16px;
+  }
+
+  .card__price {
+    font-size: 18px;
+  }
+}

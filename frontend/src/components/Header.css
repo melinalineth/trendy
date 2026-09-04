@@ -1,0 +1,23 @@
+.app-header {
+  background: linear-gradient(90deg, #4b6cb7, #182848);
+  color: #fff;
+  padding: 16px 24px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.header-content {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.header-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}

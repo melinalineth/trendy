@@ -1,0 +1,152 @@
+/* Footer principal */
+
+.footer {
+  width: 100%;
+  background-color: #222222;
+  color: #ffffff;
+  margin-top: 50px;
+}
+
+/* Contenedor principal */
+
+.footer__container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 50px 24px;
+
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1fr;
+  gap: 40px;
+}
+
+/* Secciones */
+
+.footer__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer__section h3 {
+  margin: 0 0 8px;
+
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* Logo */
+
+.footer__logo {
+  margin: 0;
+
+  color: #e83e8c;
+  font-size: 30px;
+  font-style: italic;
+}
+
+.footer__about p {
+  max-width: 280px;
+  margin: 0;
+
+  color: #cccccc;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* Enlaces */
+
+.footer__section a {
+  width: fit-content;
+
+  color: #cccccc;
+  font-size: 14px;
+  text-decoration: none;
+
+  transition: color 0.2s ease;
+}
+
+.footer__section a:hover {
+  color: #e83e8c;
+}
+
+/* Redes sociales */
+
+.footer__social {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Parte inferior */
+
+.footer__bottom {
+  max-width: 1200px;
+  margin: 0 auto;
+
+  padding: 20px 24px;
+
+  border-top: 1px solid #444444;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.footer__bottom p {
+  margin: 0;
+
+  color: #aaaaaa;
+  font-size: 13px;
+}
+
+.footer__legal {
+  display: flex;
+  gap: 20px;
+}
+
+.footer__legal a {
+  color: #aaaaaa;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.footer__legal a:hover {
+  color: #e83e8c;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .footer__container {
+    grid-template-columns: 1fr 1fr;
+    gap: 35px;
+  }
+
+  .footer__bottom {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .footer__legal {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .footer__container {
+    grid-template-columns: 1fr;
+    padding: 40px 20px;
+  }
+
+  .footer__bottom {
+    padding: 20px;
+  }
+
+  .footer__legal {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

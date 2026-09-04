@@ -1,0 +1,145 @@
+/* Sección de categorías */
+
+.categorias {
+  width: 100%;
+  padding: 50px 20px;
+  background-color: #ffffff;
+}
+
+/* Contenedor */
+
+.categorias__container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Encabezado */
+
+.categorias__header {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.categorias__title {
+  margin: 0 0 10px;
+
+  color: #333333;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.categorias__subtitle {
+  margin: 0;
+
+  color: #777777;
+  font-size: 15px;
+}
+
+/* Grid */
+
+.categorias__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+/* Tarjeta */
+
+.categoria-card {
+  min-height: 180px;
+
+  padding: 25px 20px;
+
+  background-color: #fff7fb;
+
+  border: 1px solid #f3d7e5;
+  border-radius: 15px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+  text-decoration: none;
+
+  transition: transform 0.3s ease,
+              box-shadow 0.3s ease,
+              border-color 0.3s ease;
+}
+
+/* Efecto hover */
+
+.categoria-card:hover {
+  transform: translateY(-5px);
+
+  border-color: #e83e8c;
+
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Icono */
+
+.categoria-card__icon {
+  width: 65px;
+  height: 65px;
+
+  margin-bottom: 15px;
+
+  background-color: #ffffff;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 32px;
+}
+
+/* Nombre */
+
+.categoria-card__title {
+  margin: 0 0 10px;
+
+  color: #333333;
+
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Enlace */
+
+.categoria-card__link {
+  color: #e83e8c;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Responsive */
+
+@media (max-width: 900px) {
+  .categorias__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .categorias {
+    padding: 35px 15px;
+  }
+
+  .categorias__title {
+    font-size: 23px;
+  }
+
+  .categorias__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .categoria-card {
+    min-height: 150px;
+  }
+}
