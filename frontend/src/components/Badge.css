@@ -1,0 +1,46 @@
+.badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Estilo predeterminado */
+.badge--default {
+  background-color: #e83e8c;
+  color: white;
+}
+
+/* Nuevo */
+.badge--new {
+  background-color: #f3e5f5;
+  color: #8e24aa;
+}
+
+/* Oferta */
+.badge--sale {
+  background-color: #fdeaea;
+  color: #d32f2f;
+}
+
+/* Descuento */
+.badge--discount {
+  background-color: #e83e8c;
+  color: white;
+}
+
+/* Éxito */
+.badge--success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .badge {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+}
