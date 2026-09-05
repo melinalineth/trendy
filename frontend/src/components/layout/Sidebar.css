@@ -1,0 +1,91 @@
+.sidebar {
+  width: 250px;
+  padding: 20px;
+  background-color: #fff;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.sidebar__title {
+  margin: 0 0 20px;
+  color: #333;
+  font-size: 20px;
+}
+
+.sidebar__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar__list li {
+  margin-bottom: 12px;
+}
+
+.sidebar__list a {
+  color: #555;
+  text-decoration: none;
+  transition: 0.3s;
+}
+
+.sidebar__list a:hover {
+  color: #e83e8c;
+}
+
+.sidebar__filter {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.sidebar__filter h3 {
+  font-size: 16px;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.sidebar__filter label {
+  display: block;
+  margin-bottom: 12px;
+  color: #666;
+  font-size: 14px;
+}
+
+.sidebar__filter input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 6px;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.sidebar__filter input:focus {
+  border-color: #e83e8c;
+}
+
+.sidebar__button {
+  width: 100%;
+  padding: 11px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 8px;
+  background-color: #e83e8c;
+  color: white;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.sidebar__button:hover {
+  background-color: #c72f73;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+}

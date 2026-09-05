@@ -1,0 +1,117 @@
+/* Navbar principal */
+
+.navbar {
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 1px solid #eeeeee;
+}
+
+/* Contenedor */
+
+.navbar__container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Lista */
+
+.navbar__menu {
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 35px;
+
+  list-style: none;
+}
+
+/* Elementos */
+
+.navbar__item {
+  position: relative;
+}
+
+/* Enlaces */
+
+.navbar__link {
+  display: block;
+
+  padding: 18px 5px;
+
+  color: #333333;
+
+  font-size: 14px;
+  font-weight: 500;
+
+  text-decoration: none;
+
+  transition: color 0.2s ease;
+}
+
+.navbar__link:hover {
+  color: #e83e8c;
+}
+
+/* Línea debajo del enlace */
+
+.navbar__link::after {
+  content: "";
+
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+
+  width: 0;
+  height: 2px;
+
+  background-color: #e83e8c;
+
+  transition: width 0.2s ease;
+}
+
+.navbar__link:hover::after {
+  width: 100%;
+}
+
+/* Ofertas */
+
+.navbar__link--offer {
+  color: #e83e8c;
+  font-weight: 700;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .navbar__container {
+    padding: 0 16px;
+  }
+
+  .navbar__menu {
+    gap: 20px;
+
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .navbar__link {
+    padding: 15px 4px;
+    font-size: 13px;
+
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar__menu {
+    gap: 16px;
+  }
+
+  .navbar__link {
+    font-size: 12px;
+  }
+}
