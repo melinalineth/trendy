@@ -1,0 +1,35 @@
+.roles-page {
+  max-width: 960px;
+  margin: 0 auto;
+
+  padding: 32px 16px;
+}
+
+.roles-page h1 {
+  margin: 0 0 24px;
+}
+
+.roles-page__permisos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  margin-bottom: 20px;
+}
+
+.roles-page__permiso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  font-size: 14px;
+  font-weight: normal;
+}
+
+.roles-page__vacio {
+  margin: 0 0 16px;
+
+  color: #666666;
+
+  font-size: 14px;
+}

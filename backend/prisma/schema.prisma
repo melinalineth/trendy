@@ -12,15 +12,16 @@ datasource db {
 }
 
 model Usuario {
-  id           Int           @id @default(autoincrement())
-  nombre       String
-  correo       String        @unique
-  passwordHash String
-  rolId        Int
-  estado       EstadoUsuario @default(ACTIVO)
-  creadoEn     DateTime      @default(now())
-  rol          Rol           @relation(fields: [rolId], references: [id])
-  direcciones  Direccion[]
+  id                   Int                   @id @default(autoincrement())
+  nombre               String
+  correo               String                @unique
+  passwordHash         String
+  rolId                Int
+  estado               EstadoUsuario         @default(ACTIVO)
+  creadoEn             DateTime              @default(now())
+  rol                  Rol                   @relation(fields: [rolId], references: [id])
+  direcciones          Direccion[]
+  passwordResetTokens  PasswordResetToken[]
 }
 
 enum EstadoUsuario {
@@ -54,4 +55,15 @@ model Direccion {
   referencia   String?
   esPrincipal  Boolean @default(false)
   usuario      Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+// RF-003 (recuperación de contraseña): token de un solo uso con vencimiento.
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  token     String   @unique
+  expiraEn  DateTime
+  usado     Boolean  @default(false)
+  creadoEn  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
 }
