@@ -1,0 +1,37 @@
+.inventario-panel {
+  max-width: 960px;
+  margin: 0 auto;
+
+  padding: 32px 16px;
+}
+
+.inventario-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  margin-bottom: 24px;
+}
+
+.inventario-panel__header h1 {
+  margin: 0;
+}
+
+.inventario-panel__toolbar {
+  max-width: 320px;
+  margin-bottom: 16px;
+}
+
+.inventario-panel__acciones-fila {
+  display: flex;
+  gap: 8px;
+}
+
+.inventario-panel__stock {
+  font-weight: 600;
+}
+
+.inventario-panel__stock--bajo {
+  color: var(--color-danger-500);
+}

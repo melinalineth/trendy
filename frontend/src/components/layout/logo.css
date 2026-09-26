@@ -13,7 +13,7 @@
 /* Texto del logo */
 
 .logo__text {
-  color: #e83e8c;
+  color: var(--color-brand-500);
 
   font-size: 30px;
   font-weight: 700;
@@ -33,9 +33,9 @@
 
   margin-top: 4px;
 
-  background-color: #e83e8c;
+  background-color: var(--color-brand-500);
 
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 
   transition: width 0.3s ease;
 }
@@ -43,7 +43,7 @@
 /* Efecto al pasar el mouse */
 
 .logo:hover .logo__text {
-  color: #d63384;
+  color: var(--color-brand-600);
   transform: scale(1.03);
 }
 

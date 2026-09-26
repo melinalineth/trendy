@@ -1,0 +1,33 @@
+.formulario-ajuste-stock {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formulario-ajuste-stock__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.formulario-ajuste-stock__textarea {
+  min-height: 70px;
+  padding: 10px 12px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: normal;
+
+  resize: vertical;
+}
+
+.formulario-ajuste-stock__acciones {
+  display: flex;
+  gap: 12px;
+}

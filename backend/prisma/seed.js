@@ -9,6 +9,11 @@ const prisma = require("../src/config/prisma");
 
 const ROLES = ["cliente", "vendedor", "admin"];
 
+// Sprint 2 / MOD-02 (RF-008 a RF-011): ERS §2.8.3 deja la gestión dinámica
+// de categorías para v2.0 — en el MVP las categorías son una semilla fija,
+// no hay CRUD de categorías expuesto por la API.
+const CATEGORIAS = ["Remeras", "Pantalones", "Camperas", "Calzado", "Accesorios"];
+
 async function main() {
   for (const nombre of ROLES) {
     const rol = await prisma.rol.upsert({
@@ -17,6 +22,15 @@ async function main() {
       create: { nombre },
     });
     console.log(`Rol listo: ${rol.nombre} (id=${rol.id})`);
+  }
+
+  for (const nombre of CATEGORIAS) {
+    const categoria = await prisma.categoria.upsert({
+      where: { nombre },
+      update: {},
+      create: { nombre },
+    });
+    console.log(`Categoria lista: ${categoria.nombre} (id=${categoria.id})`);
   }
 }
 

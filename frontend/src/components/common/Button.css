@@ -1,9 +1,9 @@
 .btn {
-  background-color: #4caf50;
-  color: white;
+  background-color: var(--color-brand-500);
+  color: var(--color-text-inverse);
   border: none;
-  padding: 12px 20px;
-  border-radius: 8px;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 16px;
   font-weight: bold;
@@ -11,7 +11,7 @@
 }
 
 .btn:hover {
-  background-color: #388e3c;
+  background-color: var(--color-brand-600);
 }
 
 .btn:active {
@@ -19,6 +19,8 @@
 }
 
 .btn:disabled {
+  /* #bdbdbd no tiene un token neutro equivalente (no coincide con
+     --color-border ni --color-text-muted); se deja sin tokenizar. */
   background-color: #bdbdbd;
   cursor: not-allowed;
 }

@@ -1,15 +1,16 @@
 .sidebar {
   width: 250px;
   padding: 20px;
-  background-color: #fff;
-  border: 1px solid #eee;
-  border-radius: 12px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   box-sizing: border-box;
 }
 
 .sidebar__title {
   margin: 0 0 20px;
-  color: #333;
+  color: var(--color-text);
+  font-family: var(--font-heading);
   font-size: 20px;
 }
 
@@ -24,31 +25,31 @@
 }
 
 .sidebar__list a {
-  color: #555;
+  color: var(--color-text-muted);
   text-decoration: none;
   transition: 0.3s;
 }
 
 .sidebar__list a:hover {
-  color: #e83e8c;
+  color: var(--color-brand-500);
 }
 
 .sidebar__filter {
   margin-top: 25px;
   padding-top: 20px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--color-border);
 }
 
 .sidebar__filter h3 {
   font-size: 16px;
-  color: #333;
+  color: var(--color-text);
   margin-bottom: 15px;
 }
 
 .sidebar__filter label {
   display: block;
   margin-bottom: 12px;
-  color: #666;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -56,14 +57,14 @@
   width: 100%;
   padding: 10px;
   margin-top: 6px;
-  border: 1px solid #ddd;
-  border-radius: 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
   outline: none;
 }
 
 .sidebar__filter input:focus {
-  border-color: #e83e8c;
+  border-color: var(--color-brand-500);
 }
 
 .sidebar__button {
@@ -71,15 +72,15 @@
   padding: 11px;
   margin-top: 8px;
   border: none;
-  border-radius: 8px;
-  background-color: #e83e8c;
-  color: white;
+  border-radius: var(--radius-md);
+  background-color: var(--color-brand-500);
+  color: var(--color-text-inverse);
   cursor: pointer;
   transition: 0.3s;
 }
 
 .sidebar__button:hover {
-  background-color: #c72f73;
+  background-color: var(--color-brand-600);
 }
 
 /* Responsive */

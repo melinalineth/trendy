@@ -1,139 +1,146 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import Breadcrumb from "../components/Breadcrumb/Breadcrumb";
-import Sidebar from "../components/Sidebar/Sidebar";
-import ProductCard from "../components/ProductCard/ProductCard";
-import Pagination from "../components/Pagination/Pagination";
-import Loading from "../components/Loading/Loading";
+import Breadcrumb from "../../components/common/Breadcrumb";
+import SearchBar from "../../components/products/SearchBar";
+import ProductFilters from "../../components/products/ProductFilters";
+import ProductCard from "../../components/products/ProductCard";
+import Pagination from "../../components/common/Pagination";
+import Loading from "../../components/common/Loading";
+import { useProducts } from "../../hooks/useProducts";
 
 import "./Catalogo.css";
 
-function Catalogo() {
+const PRODUCTOS_POR_PAGINA = 8;
+const IMAGEN_PLACEHOLDER = "/images/placeholder.jpg";
+
+const FILTROS_INICIALES = {
+  categoria: "",
+  talla: "",
+  precioMin: "",
+  precioMax: "",
+  q: "",
+};
+
+// El contrato de /api/v1/productos no define una forma fija para
+// `imagenes` (puede llegar como array de strings o de objetos {url}), así
+// que la resolvemos de forma defensiva en vez de asumir un shape.
+function obtenerImagen(producto) {
+  const primera = producto.imagenes?.[0];
+
+  if (!primera) return IMAGEN_PLACEHOLDER;
+
+  return typeof primera === "string" ? primera : primera.url;
+}
+
+function formatearPrecio(precio) {
+  if (typeof precio !== "number") return precio;
+
+  return precio.toLocaleString("es-CO");
+}
+
+// Catálogo público (RF-008 a RF-011): combina búsqueda de texto, filtros
+// combinables (categoría, talla, rango de precio) y paginación sobre la
+// lista de productos que devuelve el backend.
+//
+// `filtros` vive acá (no en el hook) porque tanto el SearchBar de arriba
+// como el panel de ProductFilters escriben sobre el mismo campo `q`, y
+// necesitan quedar sincronizados entre sí.
+function Catalog() {
+  const navigate = useNavigate();
+  const [filtros, setFiltros] = useState(FILTROS_INICIALES);
   const [currentPage, setCurrentPage] = useState(1);
-  const [loading] = useState(false);
 
-  const products = [
-    {
-      id: 1,
-      image: "/images/vestido.jpg",
-      name: "Vestido casual",
-      category: "Mujer",
-      price: "89.900",
-      oldPrice: "109.900",
-      discount: "18",
-    },
-    {
-      id: 2,
-      image: "/images/camiseta.jpg",
-      name: "Camiseta básica",
-      category: "Hombre",
-      price: "49.900",
-    },
-    {
-      id: 3,
-      image: "/images/jean.jpg",
-      name: "Jean clásico",
-      category: "Mujer",
-      price: "99.900",
-      oldPrice: "119.900",
-      discount: "17",
-    },
-    {
-      id: 4,
-      image: "/images/chaqueta.jpg",
-      name: "Chaqueta moderna",
-      category: "Hombre",
-      price: "129.900",
-    },
-    {
-      id: 5,
-      image: "/images/blusa.jpg",
-      name: "Blusa elegante",
-      category: "Mujer",
-      price: "69.900",
-    },
-    {
-      id: 6,
-      image: "/images/zapatos.jpg",
-      name: "Zapatos casuales",
-      category: "Accesorios",
-      price: "119.900",
-    },
-  ];
+  const { productos, loading, error } = useProducts(filtros);
 
-  const handleViewProduct = (product) => {
-    console.log("Ver producto:", product.name);
+  // Paginación en el cliente: el contrato de /api/v1/productos devuelve el
+  // array completo, sin metadata de paginación, así que la recortamos acá.
+  // En vez de resetear `currentPage` a 1 con un efecto cuando cambian los
+  // filtros (lo que dispara react-hooks/set-state-in-effect por el setState
+  // síncrono), la página se "clampea" en el render: si el resultado
+  // filtrado tiene menos páginas que la página guardada, mostramos la
+  // última válida sin necesidad de un setState extra.
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(productos.length / PRODUCTOS_POR_PAGINA),
+  );
+  const paginaActual = Math.min(currentPage, totalPaginas);
+  const inicio = (paginaActual - 1) * PRODUCTOS_POR_PAGINA;
+  const productosPagina = productos.slice(inicio, inicio + PRODUCTOS_POR_PAGINA);
+
+  const handleSearch = (texto) => {
+    setCurrentPage(1);
+    setFiltros((prev) => ({ ...prev, q: texto }));
   };
 
-  const handleAddToCart = (product) => {
-    console.log("Producto agregado al carrito:", product.name);
+  const handleFiltrosChange = (nuevosFiltros) => {
+    setCurrentPage(1);
+    setFiltros(nuevosFiltros);
   };
-
-  if (loading) {
-    return <Loading text="Cargando productos..." />;
-  }
 
   return (
     <main className="catalogo">
       <div className="catalogo__container">
-
         <Breadcrumb
-          items={[
-            { label: "Inicio", link: "/" },
-            { label: "Catálogo" }
-          ]}
+          items={[{ label: "Inicio", link: "/" }, { label: "Catálogo" }]}
         />
 
         <div className="catalogo__header">
           <div>
-            <h1 className="catalogo__title">
-              Catálogo de productos
-            </h1>
-
+            <h1 className="catalogo__title">Catálogo de productos</h1>
             <p className="catalogo__subtitle">
-              Encuentra las últimas tendencias para ti.
+              Encontrá las últimas tendencias para vos.
             </p>
           </div>
 
           <span className="catalogo__count">
-            {products.length} productos
+            {productos.length} producto{productos.length === 1 ? "" : "s"}
           </span>
         </div>
 
-        <div className="catalogo__content">
+        <div className="catalogo__searchbar">
+          <SearchBar onSearch={handleSearch} />
+        </div>
 
-          <Sidebar />
+        {error && <p className="catalogo__error">{error}</p>}
+
+        <div className="catalogo__content">
+          <ProductFilters filtros={filtros} onChange={handleFiltrosChange} />
 
           <section className="catalogo__products">
+            {loading ? (
+              <Loading text="Cargando productos..." />
+            ) : productosPagina.length === 0 ? (
+              <p className="catalogo__vacio">
+                No encontramos productos con esos filtros.
+              </p>
+            ) : (
+              <>
+                <div className="catalogo__grid">
+                  {productosPagina.map((producto) => (
+                    <ProductCard
+                      key={producto.id}
+                      image={obtenerImagen(producto)}
+                      name={producto.nombre}
+                      category={producto.categoria?.nombre}
+                      price={formatearPrecio(producto.precio)}
+                      onView={() => navigate(`/productos/${producto.id}`)}
+                    />
+                  ))}
+                </div>
 
-            <div className="catalogo__grid">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  image={product.image}
-                  name={product.name}
-                  category={product.category}
-                  price={product.price}
-                  oldPrice={product.oldPrice}
-                  discount={product.discount}
-                  onView={() => handleViewProduct(product)}
-                  onAddToCart={() => handleAddToCart(product)}
+                <Pagination
+                  currentPage={paginaActual}
+                  totalPages={totalPaginas}
+                  onPageChange={setCurrentPage}
                 />
-              ))}
-            </div>
-
-            <Pagination
-              currentPage={currentPage}
-              totalPages={3}
-              onPageChange={setCurrentPage}
-            />
-
+              </>
+            )}
           </section>
-
         </div>
       </div>
     </main>
   );
 }
 
-export default Catalogo;
+export default Catalog;

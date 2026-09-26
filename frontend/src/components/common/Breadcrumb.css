@@ -4,31 +4,31 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 15px 20px;
-  margin: 20px 0;
-  background-color: #fff;
-  border-radius: 10px;
+  margin: var(--space-5) 0;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
   font-size: 14px;
 }
 
 .breadcrumb__link {
-  color: #e83e8c;
+  color: var(--color-brand-500);
   text-decoration: none;
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
 .breadcrumb__link:hover {
-  color: #c72f73;
+  color: var(--color-brand-600);
   text-decoration: underline;
 }
 
 .breadcrumb__separator {
-  color: #999;
+  color: var(--color-text-muted);
   font-size: 18px;
 }
 
 .breadcrumb__current {
-  color: #666;
+  color: var(--color-text-muted);
   font-weight: 600;
 }
 

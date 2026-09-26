@@ -1,4 +1,5 @@
 import React from "react";
+import SearchBar from "../products/SearchBar";
 import "./Header.css";
 
 const Header = ({ title = "Mi aplicación", subtitle }) => {
