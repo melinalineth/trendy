@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 
 import Input from "../../components/common/Input";
 import Button from "../../components/common/Button";
-import Alert from "../../components/Alert";
+import Alert from "../../components/common/Alert";
 import authService from "../../services/auth.service";
 import "./auth.css";
 

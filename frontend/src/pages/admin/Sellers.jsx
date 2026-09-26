@@ -3,7 +3,7 @@ import { useState } from "react";
 import Table from "../../components/common/Table";
 import Button from "../../components/common/Button";
 import Loading from "../../components/common/Loading";
-import Alert from "../../components/Alert";
+import Alert from "../../components/common/Alert";
 import vendedorService from "../../services/vendedor.service";
 import { useUsuarios } from "../../hooks/useUsuarios";
 import "./Sellers.css";

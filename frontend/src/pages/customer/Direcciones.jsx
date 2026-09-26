@@ -4,7 +4,7 @@ import Modal from "../../components/common/Modal";
 import Input from "../../components/common/Input";
 import Button from "../../components/common/Button";
 import Loading from "../../components/common/Loading";
-import Alert from "../../components/Alert";
+import Alert from "../../components/common/Alert";
 import { useDirecciones } from "../../hooks/useDirecciones";
 import "./Direcciones.css";
 
