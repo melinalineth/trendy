@@ -67,3 +67,115 @@ model PasswordResetToken {
   creadoEn  DateTime @default(now())
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
 }
+
+
+model Categoria {
+  id        Int       @id @default(autoincrement())
+  nombre    String    @unique
+  estado    Boolean   @default(true)
+  productos Producto[]
+}
+
+model Producto {
+  id          Int        @id @default(autoincrement())
+  nombre      String
+  descripcion String     @db.Text
+  precio      Decimal    @db.Decimal(10, 2)
+  categoriaId Int
+  estado      EstadoProducto @default(ACTIVO)
+
+  categoria   Categoria  @relation(fields: [categoriaId], references: [id])
+  variantes   Variante[]
+  imagenes    Imagen[]
+}
+
+model Variante {
+  id                   Int                    @id @default(autoincrement())
+  productoId           Int
+  sku                  String                 @unique
+  talla                String
+  color                String?
+  stock                Int                    @default(0)
+
+  producto             Producto               @relation(fields: [productoId], references: [id])
+  inventarioMovimientos InventarioMovimiento[]
+
+  @@unique([productoId, talla, color])
+}
+
+model Imagen {
+  id          Int      @id @default(autoincrement())
+  productoId  Int
+  url         String
+  esPrincipal Boolean  @default(false)
+  orden       Int      @default(0)
+
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@index([productoId])
+}
+
+model InventarioMovimiento {
+  id         Int      @id @default(autoincrement())
+  varianteId Int
+  cantidad   Int
+  tipoAjuste String
+  motivo     String?
+  usuarioId  Int
+  creadoEn   DateTime @default(now())
+
+  variante   Variante @relation(fields: [varianteId], references: [id])
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([varianteId])
+  @@index([usuarioId])
+  @@index([creadoEn])
+}
+model Carrito {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int      @unique
+  creadoEn  DateTime @default(now())
+
+  usuario   Usuario      @relation(fields: [usuarioId], references: [id])
+  items     ItemCarrito[]
+}
+
+model ItemCarrito {
+  id         Int @id @default(autoincrement())
+  carritoId  Int
+  varianteId Int
+  cantidad   Int
+
+  carrito    Carrito  @relation(fields: [carritoId], references: [id], onDelete: Cascade)
+  variante   Variante @relation(fields: [varianteId], references: [id])
+
+  @@unique([carritoId, varianteId])
+  @@index([carritoId])
+  @@index([varianteId])
+}
+
+model ZonaCobertura {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  departamento String
+  ciudad       String
+  estado       Boolean  @default(true)
+
+  tarifas      TarifaEnvio[]
+
+  @@index([departamento, ciudad])
+}
+
+model TarifaEnvio {
+  id              Int      @id @default(autoincrement())
+  zonaCoberturaId Int
+  costo           Decimal  @db.Decimal(10, 2)
+  estado          Boolean  @default(true)
+
+  zonaCobertura   ZonaCobertura @relation(
+    fields: [zonaCoberturaId],
+    references: [id]
+  )
+
+  @@index([zonaCoberturaId])
+}
