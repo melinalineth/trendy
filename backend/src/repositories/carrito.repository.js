@@ -62,6 +62,34 @@ const carritoRepository = {
       },
     });
   },
+
+async obtenerOCrear(usuarioId) {
+  let carrito = await prisma.carrito.findUnique({
+    where: {
+      usuarioId,
+    },
+  });
+
+  if (!carrito) {
+    carrito = await prisma.carrito.create({
+      data: {
+        usuarioId,
+      },
+    });
+  }
+
+  return carrito;
+},
+
+async agregarItem(carritoId, varianteId, cantidad) {
+  return await prisma.itemCarrito.create({
+    data: {
+      carritoId,
+      varianteId,
+      cantidad,
+    },
+  });
+}
 };
 
 module.exports = carritoRepository;

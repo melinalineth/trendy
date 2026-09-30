@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
 import Header from "./components/layout/Header";
+import { AuthProvider } from "./context/AuthContext";
+import AppRoutes from "./router/AppRouter";
 
 function App() {
-  
-
   return (
-    <div>
-      <Header/>
-    </div>
+    <AuthProvider>
+      <div>
+        <Header />
+        <AppRoutes />
+      </div>
+    </AuthProvider>
   );
 }
 
