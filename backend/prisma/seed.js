@@ -347,9 +347,9 @@ async function main() {
   for (const nombre of CATEGORIAS) {
     const categoria = await prisma.categoria.upsert({
       where: { nombre },
-      update: {
-        estado: "ACTIVO",
-      },
+      // update vacío: el seed solo crea lo que falta, nunca pisa datos que
+      // alguien ya editó (ej. una categoría desactivada a propósito).
+      update: {},
       create: {
         nombre,
         estado: "ACTIVO",
@@ -389,19 +389,10 @@ async function main() {
           estado: "ACTIVO",
         },
       });
-    } else {
-      producto = await prisma.producto.update({
-        where: {
-          id: producto.id,
-        },
-        data: {
-          descripcion: productoData.descripcion,
-          precio: productoData.precio,
-          categoriaId: categoria.id,
-          estado: "ACTIVO",
-        },
-      });
     }
+    // Si el producto ya existe NO se actualiza: precio, descripción o estado
+    // pudieron cambiarse desde el panel (un producto INACTIVO volvería a
+    // quedar ACTIVO en cada corrida del seed).
 
     // ------------------------------------------------
     // Imagen principal: Imagen no tiene flag esPrincipal, la principal es
@@ -443,12 +434,10 @@ async function main() {
         where: {
           sku,
         },
-        update: {
-          talla: varianteData.talla,
-          color: varianteData.color,
-          stock: varianteData.stock,
-          productoId: producto.id,
-        },
+        // update vacío: el stock real lo manejan los movimientos de
+        // inventario (RF-017); re-sembrar no debe resetearlo al valor de
+        // ejemplo.
+        update: {},
         create: {
           productoId: producto.id,
           sku,
