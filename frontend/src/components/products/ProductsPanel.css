@@ -1,0 +1,32 @@
+.products-panel {
+  max-width: 960px;
+  margin: 0 auto;
+
+  padding: 32px 16px;
+}
+
+.products-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  margin-bottom: 24px;
+}
+
+.products-panel__header h1 {
+  margin: 0;
+}
+
+.products-panel__acciones-fila {
+  display: flex;
+  gap: 8px;
+}
+
+.products-panel__secciones {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  margin-top: 20px;
+}

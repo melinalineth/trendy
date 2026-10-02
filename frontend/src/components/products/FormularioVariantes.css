@@ -1,0 +1,58 @@
+.formulario-variantes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg);
+}
+
+.formulario-variantes__titulo {
+  margin: 0;
+  font-size: 15px;
+}
+
+.formulario-variantes__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.formulario-variantes__vacio {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.formulario-variantes__item {
+  display: grid;
+  grid-template-columns: 1fr 80px 100px 80px;
+  gap: 8px;
+  align-items: center;
+
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+
+  font-size: 13px;
+}
+
+.formulario-variantes__sku {
+  font-weight: 600;
+}
+
+.formulario-variantes__form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.formulario-variantes__form .btn {
+  grid-column: 1 / -1;
+}

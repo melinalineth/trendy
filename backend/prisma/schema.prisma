@@ -22,6 +22,7 @@ model Usuario {
   rol                  Rol                   @relation(fields: [rolId], references: [id])
   direcciones          Direccion[]
   passwordResetTokens  PasswordResetToken[]
+  movimientosInventario InventarioMovimiento[]
 }
 
 enum EstadoUsuario {
@@ -66,4 +67,92 @@ model PasswordResetToken {
   usado     Boolean  @default(false)
   creadoEn  DateTime @default(now())
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+}
+
+// Sprint 2 / Ronda 1 (MOD-02, RF-008 a RF-011): estos 4 modelos (Categoria,
+// Producto, Variante, Imagen) NO existían todavía en el schema al empezar
+// esta ronda. Producto y Variante siguen el fragmento EXACTO del DDS §4.2
+// (verificado contra el docx original, no inventado) — el primer intento de
+// esta ronda se había desviado (le faltaba sku/color en Variante, entre
+// otras cosas) y se corrigió antes de mergear. Categoria e Imagen no tienen
+// fragmento en el DDS, son campos razonables propuestos para el MVP.
+enum EstadoProducto {
+  ACTIVO
+  INACTIVO
+}
+
+// ERS §2.8.3: gestión dinámica de categorías es v2.0, fuera de alcance del
+// MVP. Acá solo se listan las activas (semilla directa en la base, ver
+// prisma/seed.js) — no hay create/update/delete de categorías en esta ronda.
+model Categoria {
+  id        Int            @id @default(autoincrement())
+  nombre    String         @unique
+  estado    EstadoProducto @default(ACTIVO)
+  productos Producto[]
+}
+
+// DDS §4.2 — fragmento textual, sin modificar.
+model Producto {
+  id          Int            @id @default(autoincrement())
+  nombre      String
+  descripcion String         @db.Text
+  precio      Decimal        @db.Decimal(10, 2)
+  categoriaId Int
+  estado      EstadoProducto @default(ACTIVO)
+  categoria   Categoria      @relation(fields: [categoriaId], references: [id])
+  variantes   Variante[]
+  imagenes    Imagen[]
+}
+
+// DDS §4.2 — fragmento textual, sin modificar. RF-016 exige sku por
+// variante; RN-001 (ver producto.repository.js) exige stock > 0 para que un
+// producto se considere disponible.
+model Variante {
+  id          Int                    @id @default(autoincrement())
+  productoId  Int
+  sku         String                 @unique
+  talla       String
+  color       String?
+  stock       Int                    @default(0)
+  producto    Producto               @relation(fields: [productoId], references: [id])
+  movimientos InventarioMovimiento[]
+
+  @@unique([productoId, talla, color])
+}
+
+model Imagen {
+  id         Int      @id @default(autoincrement())
+  productoId Int
+  url        String
+  orden      Int      @default(0)
+  producto   Producto @relation(fields: [productoId], references: [id])
+}
+
+// Sprint 2 / Ronda 4 (MOD-03, RF-017): registro y ajuste de stock por
+// variante. Sin fragmento textual del DDS para este modelo (a diferencia de
+// Producto/Variante en Ronda 1) — son campos razonables propuestos para el
+// MVP:
+//   - cantidad: delta aplicado al stock (positivo o negativo, nunca 0 — se
+//     valida en inventario.dto.js). Se guarda el delta, no el stock
+//     resultante, para que el historial sea auditable movimiento a
+//     movimiento.
+//   - tipoAjuste: ENTRADA/SALIDA/AJUSTE como String en vez de un enum de
+//     Prisma — se mantiene simple porque no hay otro lugar del schema que
+//     necesite este enum todavía; se puede migrar a un `enum` real si crece.
+//   - motivo: opcional en general, pero inventario.dto.js lo exige cuando
+//     tipoAjuste es "AJUSTE" (una corrección manual de stock, a diferencia
+//     de una ENTRADA/SALIDA de mercadería, necesita justificarse).
+//   - usuarioId: quién hizo el ajuste, para trazabilidad (RN-002: el stock
+//     nunca queda negativo, y saber quién ajustó ayuda a auditar cuando se
+//     rechaza un ajuste).
+model InventarioMovimiento {
+  id         Int      @id @default(autoincrement())
+  varianteId Int
+  cantidad   Int
+  tipoAjuste String
+  motivo     String?
+  usuarioId  Int
+  creadoEn   DateTime @default(now())
+  variante   Variante @relation(fields: [varianteId], references: [id])
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
 }
