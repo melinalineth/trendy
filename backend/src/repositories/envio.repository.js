@@ -5,7 +5,8 @@ const envioRepository = {
    * Busca una zona de cobertura activa por ciudad y departamento
    * y obtiene su tarifa de envío activa.
    *
-   * `estado` es Boolean en ZonaCobertura y TarifaEnvio (true = activa).
+   * `estado` es el enum EstadoProducto en ZonaCobertura y TarifaEnvio
+   * ("ACTIVO" = activa), igual que en Categoria.
    * No se usa `mode: "insensitive"`: ese modificador solo existe en
    * PostgreSQL/MongoDB; en MySQL la comparación ya es case-insensitive por
    * la collation utf8mb4_unicode_ci de las tablas.
@@ -23,12 +24,12 @@ const envioRepository = {
         departamento: {
           equals: departamento,
         },
-        estado: true,
+        estado: "ACTIVO",
       },
       include: {
         tarifas: {
           where: {
-            estado: true,
+            estado: "ACTIVO",
           },
         },
       },

@@ -184,14 +184,16 @@ model ItemCarrito {
   @@index([varianteId])
 }
 
-// Sprint 3 / MOD-05: zonas de cobertura de envío. `estado` es Boolean
-// (activa/inactiva), a diferencia de EstadoProducto/EstadoUsuario.
+// Sprint 3 / MOD-05: zonas de cobertura de envío. `estado` reutiliza el enum
+// EstadoProducto (ACTIVO/INACTIVO), igual que Categoria, en vez de un Boolean:
+// así los tres catálogos (categoría, zona, tarifa) se filtran con los mismos
+// valores. El nombre del enum es heredado de Producto, pero sirve tal cual.
 model ZonaCobertura {
-  id           Int           @id @default(autoincrement())
+  id           Int            @id @default(autoincrement())
   nombre       String
   departamento String
   ciudad       String
-  estado       Boolean       @default(true)
+  estado       EstadoProducto @default(ACTIVO)
   tarifas      TarifaEnvio[]
 
   @@index([departamento, ciudad])
@@ -200,9 +202,9 @@ model ZonaCobertura {
 model TarifaEnvio {
   id              Int           @id @default(autoincrement())
   zonaCoberturaId Int
-  costo           Decimal       @db.Decimal(10, 2)
-  estado          Boolean       @default(true)
-  zonaCobertura   ZonaCobertura @relation(fields: [zonaCoberturaId], references: [id])
+  costo           Decimal        @db.Decimal(10, 2)
+  estado          EstadoProducto @default(ACTIVO)
+  zonaCobertura   ZonaCobertura  @relation(fields: [zonaCoberturaId], references: [id])
 
   @@index([zonaCoberturaId])
 }

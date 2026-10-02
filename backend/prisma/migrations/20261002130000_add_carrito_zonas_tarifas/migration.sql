@@ -1,7 +1,8 @@
 -- Sprint 3 (MOD-04 y MOD-05, RF-018, RF-021): agrega Carrito, ItemCarrito,
 -- ZonaCobertura y TarifaEnvio. ItemCarrito se borra en cascada con su Carrito
 -- y tiene unique (carritoId, varianteId); ZonaCobertura y TarifaEnvio usan
--- `estado` Boolean (activa/inactiva).
+-- `estado` ENUM('ACTIVO', 'INACTIVO') (el enum EstadoProducto, igual que
+-- Categoria).
 -- Generada sin base MySQL viva con `prisma migrate diff --from-schema` (el
 -- schema de main) `--to-schema` (el schema actual) `--script`; sigue el mismo
 -- estilo que las migraciones `20260917145452_init` y
@@ -36,7 +37,7 @@ CREATE TABLE `ZonaCobertura` (
     `nombre` VARCHAR(191) NOT NULL,
     `departamento` VARCHAR(191) NOT NULL,
     `ciudad` VARCHAR(191) NOT NULL,
-    `estado` BOOLEAN NOT NULL DEFAULT true,
+    `estado` ENUM('ACTIVO', 'INACTIVO') NOT NULL DEFAULT 'ACTIVO',
 
     INDEX `ZonaCobertura_departamento_ciudad_idx`(`departamento`, `ciudad`),
     PRIMARY KEY (`id`)
@@ -47,7 +48,7 @@ CREATE TABLE `TarifaEnvio` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `zonaCoberturaId` INTEGER NOT NULL,
     `costo` DECIMAL(10, 2) NOT NULL,
-    `estado` BOOLEAN NOT NULL DEFAULT true,
+    `estado` ENUM('ACTIVO', 'INACTIVO') NOT NULL DEFAULT 'ACTIVO',
 
     INDEX `TarifaEnvio_zonaCoberturaId_idx`(`zonaCoberturaId`),
     PRIMARY KEY (`id`)
