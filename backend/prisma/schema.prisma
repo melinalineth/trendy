@@ -23,6 +23,7 @@ model Usuario {
   direcciones          Direccion[]
   passwordResetTokens  PasswordResetToken[]
   movimientosInventario InventarioMovimiento[]
+  pedidos Pedido[]
 }
 
 enum EstadoUsuario {
@@ -56,6 +57,8 @@ model Direccion {
   referencia   String?
   esPrincipal  Boolean @default(false)
   usuario      Usuario @relation(fields: [usuarioId], references: [id])
+  pedidos Pedido[]
+infoEnvios InfoEnvio[]
 }
 
 // RF-003 (recuperación de contraseña): token de un solo uso con vencimiento.
@@ -115,6 +118,7 @@ model Variante {
   color       String?
   stock       Int                    @default(0)
   producto    Producto               @relation(fields: [productoId], references: [id])
+  detallesPedido DetallePedido[]
   movimientos InventarioMovimiento[]
 
   @@unique([productoId, talla, color])
@@ -156,3 +160,123 @@ model InventarioMovimiento {
   variante   Variante @relation(fields: [varianteId], references: [id])
   usuario    Usuario  @relation(fields: [usuarioId], references: [id])
 }
+
+model Pedido {
+  id Int @id @default(autoincrement())
+  numero String @unique
+  usuarioId Int
+  subtotal Decimal @db.Decimal(10,2)
+  costoEnvio Decimal @db.Decimal(10,2)
+  total Decimal @db.Decimal(10,2)
+  estado EstadoPedido @default(PENDIENTE)
+  metodoPago MetodoPago
+  direccionId Int
+  creadoEn DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  direccion Direccion @relation(fields: [direccionId], references: [id])
+  detalles DetallePedido[]
+  pago Pago?
+  infoEnvio InfoEnvio?
+}
+
+model DetallePedido {
+  id Int @id @default(autoincrement())
+  pedidoId Int
+  varianteId Int
+  cantidad Int
+  precioUnitario Decimal @db.Decimal(10,2)
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  variante Variante @relation(fields: [varianteId], references: [id])
+}
+
+model Pago {
+  id Int @id @default(autoincrement())
+  pedidoId Int @unique
+  metodo MetodoPago
+  estado EstadoPago @default(PENDIENTE)
+  referenciaExterna String?
+  monto Decimal @db.Decimal(10,2)
+  actualizadoEn DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+}
+
+model InfoEnvio {
+  id Int @id @default(autoincrement())
+  pedidoId Int @unique
+  direccionId Int
+  costoEnvio Decimal @db.Decimal(10,2)
+  estadoEnvio EstadoEnvio
+  actualizadoEn DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  direccion Direccion @relation(fields: [direccionId], references: [id])
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  PAGO_APROBADO
+  CONFIRMADO
+  EN_PREPARACION
+  ENVIADO
+  EN_TRANSITO
+  ENTREGADO
+  CANCELADO
+  PAGO_RECHAZADO
+  PAGO_PENDIENTE
+}
+
+enum MetodoPago {
+  MERCADO_PAGO
+  CONTRA_ENTREGA
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  CANCELADO
+}
+
+enum EstadoEnvio {
+  EN_PREPARACION
+  ENVIADO
+  EN_TRANSITO
+  ENTREGADO
+}
+
+model ZonaCobertura {
+  id Int @id @default(autoincrement())
+  nombre String
+  departamento String
+  ciudad String
+  estado EstadoZonaCobertura @default(ACTIVO)
+  permiteContraEntrega Boolean @default(false)
+
+  tarifas TarifaEnvio[]
+}
+
+model TarifaEnvio {
+  id Int @id @default(autoincrement())
+  zonaCoberturaId Int
+  costo Decimal @db.Decimal(10,2)
+  estado EstadoTarifaEnvio @default(ACTIVO)
+
+  zonaCobertura ZonaCobertura @relation(
+    fields: [zonaCoberturaId],
+    references: [id]
+  )
+}
+
+enum EstadoZonaCobertura {
+  ACTIVO
+  INACTIVO
+}
+
+enum EstadoTarifaEnvio {
+  ACTIVO
+  INACTIVO
+}
+
