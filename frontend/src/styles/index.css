@@ -1,0 +1,10 @@
+/*
+ * Punto de entrada único del design system. Se importa UNA vez, en
+ * main.jsx, antes que cualquier otro CSS de la app — así los tokens ya
+ * existen en :root cuando el CSS de cada componente los use.
+ *
+ * Orden importa: tokens primero (define las variables), base después (las
+ * consume).
+ */
+@import "./tokens.css";
+@import "./base.css";

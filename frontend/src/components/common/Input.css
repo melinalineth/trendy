@@ -1,8 +1,8 @@
 .input-task {
   width: 100%;
   padding: 12px;
-  border: 2px solid #dcdcdc;
-  border-radius: 8px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 16px;
   transition: all 0.3s ease;
   box-sizing: border-box;
@@ -10,10 +10,12 @@
 
 .input-task:focus {
   outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 5px rgba(76, 175, 80, 0.4);
+  /* Unificado a rosa de marca (antes verde, único caso del proyecto con
+     foco de otro color — Select/SearchBar/ProductFilters ya usaban rosa). */
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-focus-brand);
 }
 
 .input-task::placeholder {
-  color: #999;
+  color: var(--color-text-muted);
 }

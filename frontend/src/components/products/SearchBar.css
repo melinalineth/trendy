@@ -7,10 +7,10 @@
   display: flex;
   align-items: center;
 
-  background-color: #f8f8f8;
+  background-color: var(--color-bg);
 
-  border: 1px solid #dddddd;
-  border-radius: 25px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
 
   overflow: hidden;
 
@@ -21,8 +21,8 @@
 /* Cuando se selecciona la barra */
 
 .searchbar:focus-within {
-  border-color: #e83e8c;
-  box-shadow: 0 0 0 3px rgba(232, 62, 140, 0.1);
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-focus-brand);
 }
 
 /* Input */
@@ -38,12 +38,12 @@
 
   background-color: transparent;
 
-  color: #333333;
+  color: var(--color-text);
   font-size: 14px;
 }
 
 .searchbar__input::placeholder {
-  color: #999999;
+  color: var(--color-text-muted);
 }
 
 /* Botón */
@@ -68,7 +68,7 @@
 }
 
 .searchbar__button:hover {
-  background-color: #fff0f7;
+  background-color: var(--color-brand-50);
   transform: scale(1.05);
 }
 
