@@ -97,6 +97,171 @@ async function agregarItem(usuarioId, body) {
   );
 }
 
+/**
+ * Modifica la cantidad de un item del carrito.
+ *
+ * La nueva cantidad no puede superar el stock disponible
+ * de la variante.
+ */
+async function modificarItem(usuarioId, itemId, cantidad) {
+  const nuevaCantidad = Number(cantidad);
+
+  if (!Number.isInteger(nuevaCantidad) || nuevaCantidad <= 0) {
+    const error = new Error(
+      "La cantidad debe ser un entero mayor que cero"
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  // Obtener el carrito del usuario
+  const carrito = await carritoRepository.obtenerOCrear(usuarioId);
+
+  // Verificar que el item pertenezca al carrito del usuario
+  const item = carrito.items?.find(
+    (itemCarrito) => Number(itemCarrito.id) === Number(itemId)
+  );
+
+  if (!item) {
+    const error = new Error(
+      "El item no pertenece al carrito del usuario"
+    );
+    error.status = 404;
+    throw error;
+  }
+
+  // Consultar la variante para obtener el stock actual
+  const variante = await prisma.variante.findUnique({
+    where: {
+      id: Number(item.varianteId),
+    },
+  });
+
+  if (!variante) {
+    const error = new Error("La variante no existe");
+    error.status = 404;
+    throw error;
+  }
+
+  // Validar stock disponible
+  if (nuevaCantidad > variante.stock) {
+    throw new StockInsuficienteError(
+      `Stock insuficiente. Disponible: ${variante.stock}`
+    );
+  }
+
+  // Actualizar mediante el repository
+  await carritoRepository.actualizarCantidad(
+    itemId,
+    nuevaCantidad
+  );
+
+  // Devolver el resumen actualizado
+  return resumen(usuarioId);
+}
+
+
+/**
+ * Elimina un item del carrito.
+ */
+async function eliminarItem(usuarioId, itemId) {
+  // Obtener el carrito del usuario
+  const carrito = await carritoRepository.obtenerOCrear(usuarioId);
+
+  // Verificar que el item pertenezca al carrito
+  const item = carrito.items?.find(
+    (itemCarrito) => Number(itemCarrito.id) === Number(itemId)
+  );
+
+  if (!item) {
+    const error = new Error(
+      "El item no pertenece al carrito del usuario"
+    );
+    error.status = 404;
+    throw error;
+  }
+
+  // Eliminar mediante el repository
+  await carritoRepository.eliminarItem(itemId);
+
+  // Obtener nuevamente el carrito
+  const carritoActualizado =
+    await carritoRepository.obtenerConItems(carrito.id);
+
+  const items = carritoActualizado?.items || [];
+
+  // Si quedó vacío, informarlo explícitamente
+  if (items.length === 0) {
+    return {
+      carritoId: carrito.id,
+      items: [],
+      subtotal: 0,
+      costoEnvio: 0,
+      total: 0,
+      vacio: true,
+      mensaje: "El carrito ha quedado vacío",
+    };
+  }
+
+  return resumen(usuarioId);
+}
+
+
+/**
+ * Calcula el resumen del carrito.
+ *
+ * subtotal = precio * cantidad de cada item
+ * costoEnvio = costo calculado según la dirección
+ * total = subtotal + costoEnvio
+ */
+async function resumen(usuarioId, direccionId = null) {
+  // Obtener el carrito del usuario
+  const carrito = await carritoRepository.obtenerOCrear(usuarioId);
+
+  // Obtener items con variante y producto
+  const carritoCompleto =
+    await carritoRepository.obtenerConItems(carrito.id);
+
+  const items = carritoCompleto?.items || [];
+
+  // Calcular subtotal
+  const subtotal = items.reduce((acumulado, item) => {
+    const precio = Number(
+      item.variante?.producto?.precio || 0
+    );
+
+    const cantidad = Number(item.cantidad || 0);
+
+    return acumulado + precio * cantidad;
+  }, 0);
+
+  // Por defecto no hay costo de envío
+  let costoEnvio = 0;
+
+  // Si se proporciona dirección, calcular envío
+  if (direccionId) {
+    const resultadoEnvio =
+      await envioService.calcularCosto(
+        direccionId,
+        usuarioId
+      );
+
+    costoEnvio = Number(resultadoEnvio.costo || 0);
+  }
+
+  // Calcular total
+  const total = subtotal + costoEnvio;
+
+  return {
+    carritoId: carrito.id,
+    items,
+    subtotal,
+    costoEnvio,
+    total,
+    vacio: items.length === 0,
+  };
+}
+
 module.exports = {
   agregarItem,
   StockInsuficienteError,
