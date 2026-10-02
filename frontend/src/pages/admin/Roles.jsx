@@ -4,7 +4,7 @@ import Table from "../../components/common/Table";
 import Modal from "../../components/common/Modal";
 import Button from "../../components/common/Button";
 import Loading from "../../components/common/Loading";
-import Alert from "../../components/Alert";
+import Alert from "../../components/common/Alert";
 import { useRoles } from "../../hooks/useRoles";
 import "./Roles.css";
 
