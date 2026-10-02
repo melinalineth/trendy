@@ -196,7 +196,14 @@ model ZonaCobertura {
   estado       EstadoProducto @default(ACTIVO)
   tarifas      TarifaEnvio[]
 
-  @@index([departamento, ciudad])
+  // Una ciudad pertenece a una sola zona: sin esto, buscarZonaPorDireccion
+  // (findFirst) podía devolver una zona u otra según el orden de la tabla.
+  // El unique ya crea el índice, no hace falta un @@index aparte. Las tarifas
+  // NO llevan unique por zona a propósito: se desactivan en vez de borrarse
+  // para conservar el costo histórico (RF-026), así que una zona puede tener
+  // varias tarifas inactivas. "Una sola tarifa ACTIVA por zona" se valida en
+  // el service (MySQL no tiene índices únicos parciales).
+  @@unique([departamento, ciudad])
 }
 
 model TarifaEnvio {
