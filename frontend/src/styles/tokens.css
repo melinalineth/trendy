@@ -1,0 +1,119 @@
+/*
+ * Design tokens de Trendy.
+ *
+ * Los valores salen de los 4 mapas de pantalla en docs/ (Posibles pantallas
+ * trendy.png, Mapa_de_pantallas_usuario_{cliente,vendedor,admin}.png), leídos
+ * a ojo sobre la imagen — no son un hex exacto sacado con cuentagotas del
+ * archivo de diseño original (Figma/similar), así que si el equipo tiene esa
+ * fuente, ajustá estos valores contra ella antes de darlos por definitivos.
+ *
+ * Ningún componente debe escribir un color/tamaño/radio "a mano" — siempre
+ * un var(--token). Así, cambiar el rosa de marca es tocar UNA línea acá, no
+ * cazar hex sueltos por 30 archivos .css (que es exactamente el problema que
+ * tiene hoy el proyecto: Button.css usa #4caf50 verde Material, Header.css
+ * usa un degradé azul — ninguno de los dos existe en el diseño real).
+ */
+
+:root {
+  /* ---- Marca (rosa magenta de "Trendy", header/CTAs cliente) ---- */
+  --color-brand-50: #fdf2f8;
+  --color-brand-100: #fce7f3;
+  --color-brand-300: #f472b6;
+  --color-brand-500: #ec1876;
+  --color-brand-600: #d4126a;
+  --color-brand-700: #b30f58;
+
+  /* ---- Superficie oscura (sidebar de admin/vendedor) ---- */
+  --color-navy-900: #1e1b33;
+  --color-navy-800: #26223f;
+  --color-navy-700: #322c53;
+
+  /* ---- Estado (badges: Activo/Enviado, Pendiente/Procesando, Pagado, Inactivo) ---- */
+  --color-success-500: #22c55e;
+  --color-success-100: #dcfce7;
+  --color-warning-500: #f59e0b;
+  --color-warning-100: #fef3c7;
+  --color-info-500: #3b82f6;
+  --color-info-100: #dbeafe;
+  --color-danger-500: #ef4444;
+  --color-danger-300: #f6c3da;
+  --color-danger-100: #fee2e2;
+
+  /* Acento adicional fuera de la paleta de estado (ej. stat-icon "purple"
+     del dashboard, badge "Nuevo") — no representa un estado semántico como
+     success/warning/info/danger, es solo un quinto color decorativo. */
+  --color-purple-500: #7352db;
+  --color-purple-100: #eee8ff;
+
+  /* ---- Neutros (fondo de página, bordes, texto) ---- */
+  --color-bg: #f7f7fb;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-text-inverse: #ffffff;
+
+  /* ---- Texto/bordes sobre superficie oscura (navy) ----
+   * --color-text-muted/--color-border están pensados para fondos claros y
+   * pierden contraste sobre --color-navy-900 (ej. Footer, sidebar de
+   * admin/vendedor) — estas son sus contrapartes para fondo oscuro.
+   */
+  --color-text-inverse-muted: #cccccc;
+  --color-border-inverse: rgba(255, 255, 255, 0.1);
+  --color-overlay-inverse: rgba(255, 255, 255, 0.08);
+
+  /* ---- Tipografía ----
+   * Los mapas usan una sans redondeada tipo Poppins/Montserrat para
+   * encabezados y una sans estándar para el cuerpo. Mientras no se cargue
+   * la webfont (Google Fonts o self-hosted), --font-heading cae al mismo
+   * stack del sistema — cuando se agregue la fuente real, solo hay que
+   * cambiar esta línea, ningún componente debería referenciar el nombre de
+   * la fuente directamente.
+   */
+  --font-heading: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 2rem;
+
+  /* ---- Espaciado (escala de 4px) ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  /* ---- Bordes y sombras (tarjetas/botones redondeados de los mapas) ---- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --shadow-md: 0 4px 12px rgba(17, 24, 39, 0.08);
+  --shadow-lg: 0 8px 24px rgba(17, 24, 39, 0.12);
+
+  /* Sombras CON color (a diferencia de --shadow-* de arriba, que son
+     neutras): ring de foco de inputs/botones y el "glow" del item activo
+     del sidebar. rgb(236,24,118) es --color-brand-500 en rgb — no se puede
+     interpolar un var() dentro de rgba(), por eso el rgb queda repetido acá
+     en vez de compuesto desde --color-brand-500. */
+  --shadow-focus-brand: 0 0 0 3px rgba(236, 24, 118, 0.15);
+  --shadow-glow-brand: 0 5px 15px rgba(236, 24, 118, 0.25);
+
+  --overlay-scrim: rgba(0, 0, 0, 0.5);
+
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+
+  /* ---- Layout ---- */
+  --content-max-width: 1100px;
+}

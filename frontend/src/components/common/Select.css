@@ -12,7 +12,7 @@
 /* Etiqueta */
 
 .select-group__label {
-  color: #333333;
+  color: var(--color-text);
 
   font-size: 14px;
   font-weight: 600;
@@ -26,13 +26,13 @@
 
   padding: 0 14px;
 
-  border: 1px solid #dcdcdc;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 
   outline: none;
 
-  background-color: #ffffff;
-  color: #333333;
+  background-color: var(--color-surface);
+  color: var(--color-text);
 
   font-size: 14px;
 
@@ -46,23 +46,22 @@
 /* Cuando se selecciona */
 
 .select-group__select:focus {
-  border-color: #e83e8c;
-
-  box-shadow: 0 0 0 3px rgba(232, 62, 140, 0.1);
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-focus-brand);
 }
 
 /* Opciones */
 
 .select-group__select option {
-  color: #333333;
-  background-color: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-surface);
 }
 
 /* Select deshabilitado */
 
 .select-group__select:disabled {
-  background-color: #f3f3f3;
-  color: #999999;
+  background-color: var(--color-bg);
+  color: var(--color-text-muted);
 
   cursor: not-allowed;
 }

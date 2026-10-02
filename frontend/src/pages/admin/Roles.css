@@ -29,7 +29,7 @@
 .roles-page__vacio {
   margin: 0 0 16px;
 
-  color: #666666;
+  color: var(--color-text-muted);
 
   font-size: 14px;
 }

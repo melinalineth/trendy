@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import Input from "../../components/common/Input";
 import Button from "../../components/common/Button";
-import Alert from "../../components/Alert";
+import Alert from "../../components/common/Alert";
 import { useAuth } from "../../hooks/useAuth";
 import "./auth.css";
 
