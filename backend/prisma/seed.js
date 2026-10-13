@@ -324,6 +324,19 @@ const productos = [
   },
 ];
 
+// Sprint 3 / MOD-05 (RF-025, RF-026): zonas de cobertura de ejemplo con su
+// tarifa inicial, para que en desarrollo el cálculo de envío
+// (GET /api/v1/envios/tarifa y /carrito/resumen) responda sin cargar zonas a
+// mano. El admin las gestiona luego por /api/v1/zonas-cobertura. La cobertura
+// se resuelve por coincidencia exacta de departamento y ciudad (sin distinguir
+// mayúsculas ni tildes, por la collation de MySQL).
+const ZONAS = [
+  { nombre: "Bogotá", departamento: "Cundinamarca", ciudad: "Bogotá", costo: 8000 },
+  { nombre: "Medellín", departamento: "Antioquia", ciudad: "Medellín", costo: 10000 },
+  { nombre: "Cali", departamento: "Valle del Cauca", ciudad: "Cali", costo: 12000 },
+  { nombre: "Barranquilla", departamento: "Atlántico", ciudad: "Barranquilla", costo: 15000 },
+];
+
 async function main() {
   console.log("🌱 Iniciando seed de Trendy...");
 
@@ -450,6 +463,48 @@ async function main() {
 
     console.log(`   ✔ ${productoData.nombre}`);
   }
+
+  // --------------------------------------------------
+  // 4. Zonas de cobertura y tarifa inicial
+  // --------------------------------------------------
+  for (const zonaData of ZONAS) {
+    const zona = await prisma.zonaCobertura.upsert({
+      where: {
+        departamento_ciudad: {
+          departamento: zonaData.departamento,
+          ciudad: zonaData.ciudad,
+        },
+      },
+      // update vacío: si el admin ya la desactivó o la renombró, el seed no
+      // la pisa.
+      update: {},
+      create: {
+        nombre: zonaData.nombre,
+        departamento: zonaData.departamento,
+        ciudad: zonaData.ciudad,
+        estado: "ACTIVO",
+      },
+    });
+
+    // La tarifa inicial se crea solo si la zona no tiene NINGUNA (ni siquiera
+    // inactiva): así no se duplica al re-correr el seed ni se pisa una tarifa
+    // que el admin ya cambió (cambiar la tarifa deja la anterior INACTIVO).
+    const tarifas = await prisma.tarifaEnvio.count({
+      where: { zonaCoberturaId: zona.id },
+    });
+
+    if (tarifas === 0) {
+      await prisma.tarifaEnvio.create({
+        data: {
+          zonaCoberturaId: zona.id,
+          costo: zonaData.costo,
+          estado: "ACTIVO",
+        },
+      });
+    }
+  }
+
+  console.log(`✅ ${ZONAS.length} zonas de cobertura listas.`);
 
   console.log(
     `\n🎉 Seed completado: ${productos.length} prendas disponibles.`

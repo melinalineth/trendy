@@ -148,6 +148,12 @@ async function crearZona({ costo = "12000.00", estadoZona = "ACTIVO", estadoTari
   return zona;
 }
 
+// Registra una zona creada por fuera de `crearZona` (ej. vía la API admin de
+// zonas) para que `limpiar` la borre junto con sus tarifas.
+function registrarZona(id) {
+  creado.zonas.push(id);
+}
+
 // Dirección del usuario; por defecto en una ciudad SIN zona de cobertura.
 async function crearDireccion(usuarioId, { ciudad, departamento } = {}) {
   const suf = sufijo();
@@ -200,6 +206,8 @@ module.exports = {
   crearUsuario,
   crearVariante,
   crearZona,
+  registrarZona,
   crearDireccion,
+  sufijo,
   limpiar,
 };
