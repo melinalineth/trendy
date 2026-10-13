@@ -1,11 +1,13 @@
 
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import {
   obtenerPorId,
   obtenerSeguimiento,
 } from "../../services/pedido.service";
 import "./OrderDetail.css";
+
+
 
 function formatoFecha(fecha) {
   if (!fecha) return "No disponible";
@@ -42,6 +44,10 @@ export default function OrderDetail() {
   const [seguimiento, setSeguimiento] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  
+const location = useLocation();
+const mensajeRetorno = location.state?.mensaje;
+
 
   useEffect(() => {
     let activo = true;
@@ -145,6 +151,13 @@ export default function OrderDetail() {
           <Link to="/pedidos" className="order-detail__back">
             ← Volver a mis pedidos
           </Link>
+          
+{mensajeRetorno && (
+  <p role="status" className="order-detail__notice">
+    {mensajeRetorno}
+  </p>
+)}
+
           <h1>Detalle del pedido</h1>
           <p>
             Pedido{" "}
