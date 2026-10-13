@@ -95,41 +95,42 @@ export function useCarrito({ direccionId = null, autoCargar = true } = {}) {
   const solicitudRef = useRef(0);
   const procesandoRef = useRef(false);
 
-  // Vuelca en el estado el resultado de una solicitud (null = falló),
-  // siempre que siga siendo la más reciente.
-  const aplicar = useCallback(
-    (solicitud, resultado) => {
-      if (solicitud !== solicitudRef.current) return;
+  // Dirección vigente. `recargar` la lee de acá y no de su closure: una
+  // mutación que arrancó antes de cambiar de dirección terminaría
+  // recargando con la dirección vieja (y pisando la solicitud nueva).
+  const direccionIdRef = useRef(direccionId);
 
-      setEstado((previo) =>
-        resultado
-          ? { direccionId, ...resultado, error: "" }
-          : {
-              direccionId,
-              carrito: previo?.carrito ?? null,
-              errorEnvio: previo?.errorEnvio ?? "",
-              error: MENSAJE_ERROR_CARGAR,
-            },
-      );
-    },
-    [direccionId],
-  );
+  useEffect(() => {
+    direccionIdRef.current = direccionId;
+  }, [direccionId]);
 
-  // `consultarResumen` que nunca rechaza: devuelve null si falló.
-  const pedir = useCallback(
-    () => consultarResumen(direccionId).catch(() => null),
-    [direccionId],
-  );
+  // Vuelca en el estado el resultado de una solicitud para `direccion`
+  // (null = falló), siempre que siga siendo la más reciente.
+  const aplicar = useCallback((solicitud, direccion, resultado) => {
+    if (solicitud !== solicitudRef.current) return;
+
+    setEstado((previo) =>
+      resultado
+        ? { direccionId: direccion, ...resultado, error: "" }
+        : {
+            direccionId: direccion,
+            carrito: previo?.carrito ?? null,
+            errorEnvio: previo?.errorEnvio ?? "",
+            error: MENSAJE_ERROR_CARGAR,
+          },
+    );
+  }, []);
 
   const recargar = useCallback(async () => {
     solicitudRef.current += 1;
     const solicitud = solicitudRef.current;
-    const resultado = await pedir();
+    const direccion = direccionIdRef.current;
+    const resultado = await consultarResumen(direccion).catch(() => null);
 
-    aplicar(solicitud, resultado);
+    aplicar(solicitud, direccion, resultado);
 
     return resultado?.carrito ?? null;
-  }, [aplicar, pedir]);
+  }, [aplicar]);
 
   // Carga inicial y recarga al cambiar de dirección. El estado solo se
   // actualiza dentro del callback de la promesa (nunca de forma síncrona en
@@ -140,14 +141,16 @@ export function useCarrito({ direccionId = null, autoCargar = true } = {}) {
     solicitudRef.current += 1;
     const solicitud = solicitudRef.current;
 
-    pedir().then((resultado) => aplicar(solicitud, resultado));
+    consultarResumen(direccionId)
+      .catch(() => null)
+      .then((resultado) => aplicar(solicitud, direccionId, resultado));
 
     return () => {
       // Invalida lo que esté en vuelo si el componente se desmonta o cambia
       // la dirección antes de que responda.
       solicitudRef.current += 1;
     };
-  }, [autoCargar, pedir, aplicar]);
+  }, [autoCargar, direccionId, aplicar]);
 
   const ejecutar = useCallback(
     async (accion) => {

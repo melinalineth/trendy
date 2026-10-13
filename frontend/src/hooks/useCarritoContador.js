@@ -46,6 +46,9 @@ export function useCarritoContador() {
 
     return () => {
       activo = false;
+      // Al cambiar de usuario o cerrar sesión no arrastramos la cuenta del
+      // anterior, ni siquiera si el próximo fetch falla.
+      setCantidad(0);
       window.removeEventListener(CARRITO_ACTUALIZADO_EVENT, alActualizar);
     };
   }, [esCliente, usuarioId]);

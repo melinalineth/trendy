@@ -231,7 +231,11 @@ function ProductDetail() {
                       max={varianteSeleccionada.stock}
                       disabled={procesando}
                       label={producto.nombre}
-                      onChange={setCantidad}
+                      onChange={(nueva) => {
+                        setCantidad(nueva);
+                        setAgregado(false);
+                        limpiarErrorAccion();
+                      }}
                     />
                   </div>
                 )}

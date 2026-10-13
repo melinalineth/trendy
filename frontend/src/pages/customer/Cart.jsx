@@ -160,7 +160,9 @@ function Cart() {
                       quantity={item.cantidad}
                       min={1}
                       max={stock}
-                      disabled={procesando}
+                      // Sin stock el backend rechazaría cualquier cantidad
+                      // (409): solo queda "Eliminar".
+                      disabled={procesando || stock <= 0}
                       label={producto.nombre}
                       onChange={(nueva) => cambiarCantidad(item, nueva)}
                     />
