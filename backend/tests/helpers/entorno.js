@@ -177,6 +177,12 @@ async function crearDireccion(usuarioId, { ciudad, departamento } = {}) {
 async function limpiar() {
   const { usuarios, direcciones, zonas, categorias, productos, variantes } = creado;
 
+  // Los movimientos de inventario tienen FK a variante y usuario: van primero.
+  await prisma.inventarioMovimiento.deleteMany({
+    where: {
+      OR: [{ varianteId: { in: variantes } }, { usuarioId: { in: usuarios } }],
+    },
+  });
   await prisma.itemCarrito.deleteMany({
     where: {
       OR: [

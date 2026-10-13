@@ -16,12 +16,17 @@ const { z } = require("zod");
 // flujo normal de venta/reposición.
 const crearAjusteSchema = z
   .object({
+    // Tope Int32: las columnas Int de MySQL no admiten más y Prisma tiraría
+    // un error genérico de la base.
     varianteId: z
       .number({ error: "La variante es requerida" })
-      .int("La variante es inválida"),
+      .int("La variante es inválida")
+      .max(2147483647, "La variante es inválida"),
     cantidad: z
       .number({ error: "La cantidad es requerida" })
       .int("La cantidad debe ser un número entero")
+      .min(-2147483647, "La cantidad está fuera de rango")
+      .max(2147483647, "La cantidad está fuera de rango")
       .refine((valor) => valor !== 0, "La cantidad no puede ser 0"),
     tipoAjuste: z.enum(["ENTRADA", "SALIDA", "AJUSTE"], {
       error: "El tipo de ajuste debe ser ENTRADA, SALIDA o AJUSTE",
