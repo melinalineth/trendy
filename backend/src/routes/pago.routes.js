@@ -28,4 +28,9 @@ router.patch(
   pagoController.confirmarRecepcion
 );
 
+router.get(
+  "/:id/pago",
+  auth,
+  pagoController.obtenerPagoPorPedido
+);
 module.exports = router;
