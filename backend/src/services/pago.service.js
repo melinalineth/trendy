@@ -322,6 +322,321 @@ async function procesarWebhook(payload, firma) {
     procesado: false,
     estadoPago: pagoMP.status,
   };
+
+
+  
+class ContraEntregaNoDisponibleError extends Error {
+  constructor(
+    message = "El pago contra entrega no está disponible para este pedido"
+  ) {
+    super(message);
+    this.name = "ContraEntregaNoDisponibleError";
+  }
+}
+
+async function registrarContraEntrega(pedidoId, usuarioId) {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const pedido = await prisma.pedido.findFirst({
+    where: {
+      id,
+      usuarioId: Number(usuarioId),
+    },
+    include: {
+      direccion: true,
+    },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (pedido.estado !== "PENDIENTE") {
+    throw new PagoInvalidoError(
+      "Solo se puede registrar contra entrega para pedidos pendientes"
+    );
+  }
+
+  if (!pedido.direccion) {
+    throw new ContraEntregaNoDisponibleError(
+      "El pedido no tiene una dirección de entrega"
+    );
+  }
+
+  const zona = await envioRepository.buscarZonaPorDireccion(
+    pedido.direccion.ciudad,
+    pedido.direccion.departamento
+  );
+
+  if (!zona || zona.permiteContraEntrega !== true) {
+    throw new ContraEntregaNoDisponibleError();
+  }
+
+  const pagoExistente = await pagoRepository.buscarPorPedido(id);
+
+  if (pagoExistente) {
+    if (pagoExistente.metodo === "CONTRA_ENTREGA") {
+      // Evita crear registros duplicados si se repite la solicitud.
+      return pagoExistente;
+    }
+
+    throw new PagoInvalidoError(
+      "El pedido ya tiene registrado otro método de pago"
+    );
+  }
+
+  return pagoRepository.crear({
+    pedidoId: id,
+    metodo: "CONTRA_ENTREGA",
+    monto: pedido.total,
+    estado: "PENDIENTE",
+    referenciaExterna: null,
+  });
+}
+
+async function confirmarRecepcionContraEntrega(pedidoId, usuarioId) {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  const pago = await pagoRepository.buscarPorPedido(id);
+
+  if (!pago || pago.metodo !== "CONTRA_ENTREGA") {
+    throw new PagoInvalidoError(
+      "El pedido no tiene un pago contra entrega registrado"
+    );
+  }
+
+  if (pago.estado === "APROBADO") {
+    return pago;
+  }
+
+  if (pago.estado !== "PENDIENTE") {
+    throw new PagoInvalidoError(
+      "El pago no se encuentra pendiente de confirmación"
+    );
+  }
+
+  // El acceso debe estar restringido a admin/vendedor en las rutas.
+  return pagoRepository.actualizarEstado(
+    id,
+    "APROBADO",
+    pago.referenciaExterna
+  );
+}
+
+async function consultarEstadoPago(pedidoId, usuarioId, rol = "cliente") {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const esPersonalAutorizado = ["admin", "administrador", "vendedor"].includes(
+    String(rol).toLowerCase()
+  );
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      usuarioId: true,
+    },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (
+    !esPersonalAutorizado &&
+    Number(pedido.usuarioId) !== Number(usuarioId)
+  ) {
+    // No revelar la existencia de pedidos de otros clientes.
+    throw new PedidoNoEncontradoError();
+  }
+
+  const pago = await pagoRepository.buscarPorPedido(id);
+
+  if (!pago) {
+    throw new PagoInvalidoError(
+      "Este pedido todavía no tiene un pago registrado"
+    );
+  }
+
+  return pago;
+}
+
+class ContraEntregaNoDisponibleError extends Error {
+  constructor(
+    message = "El pago contra entrega no está disponible para este pedido"
+  ) {
+    super(message);
+    this.name = "ContraEntregaNoDisponibleError";
+  }
+}
+
+async function registrarContraEntrega(pedidoId, usuarioId) {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const pedido = await prisma.pedido.findFirst({
+    where: {
+      id,
+      usuarioId: Number(usuarioId),
+    },
+    include: {
+      direccion: true,
+    },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (pedido.estado !== "PENDIENTE") {
+    throw new PagoInvalidoError(
+      "Solo se puede registrar contra entrega para pedidos pendientes"
+    );
+  }
+
+  if (!pedido.direccion) {
+    throw new ContraEntregaNoDisponibleError(
+      "El pedido no tiene una dirección de entrega"
+    );
+  }
+
+  const zona = await envioRepository.buscarZonaPorDireccion(
+    pedido.direccion.ciudad,
+    pedido.direccion.departamento
+  );
+
+  if (!zona || zona.permiteContraEntrega !== true) {
+    throw new ContraEntregaNoDisponibleError();
+  }
+
+  const pagoExistente = await pagoRepository.buscarPorPedido(id);
+
+  if (pagoExistente) {
+    if (pagoExistente.metodo === "CONTRA_ENTREGA") {
+      // Evita crear registros duplicados si se repite la solicitud.
+      return pagoExistente;
+    }
+
+    throw new PagoInvalidoError(
+      "El pedido ya tiene registrado otro método de pago"
+    );
+  }
+
+  return pagoRepository.crear({
+    pedidoId: id,
+    metodo: "CONTRA_ENTREGA",
+    monto: pedido.total,
+    estado: "PENDIENTE",
+    referenciaExterna: null,
+  });
+}
+
+async function confirmarRecepcionContraEntrega(pedidoId, usuarioId) {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  const pago = await pagoRepository.buscarPorPedido(id);
+
+  if (!pago || pago.metodo !== "CONTRA_ENTREGA") {
+    throw new PagoInvalidoError(
+      "El pedido no tiene un pago contra entrega registrado"
+    );
+  }
+
+  if (pago.estado === "APROBADO") {
+    return pago;
+  }
+
+  if (pago.estado !== "PENDIENTE") {
+    throw new PagoInvalidoError(
+      "El pago no se encuentra pendiente de confirmación"
+    );
+  }
+
+  // El acceso debe estar restringido a admin/vendedor en las rutas.
+  return pagoRepository.actualizarEstado(
+    id,
+    "APROBADO",
+    pago.referenciaExterna
+  );
+}
+
+async function consultarEstadoPago(pedidoId, usuarioId, rol = "cliente") {
+  const id = Number(pedidoId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new PagoInvalidoError("El identificador del pedido no es válido");
+  }
+
+  const esPersonalAutorizado = ["admin", "administrador", "vendedor"].includes(
+    String(rol).toLowerCase()
+  );
+
+  const pedido = await prisma.pedido.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      usuarioId: true,
+    },
+  });
+
+  if (!pedido) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (
+    !esPersonalAutorizado &&
+    Number(pedido.usuarioId) !== Number(usuarioId)
+  ) {
+    // No revelar la existencia de pedidos de otros clientes.
+    throw new PedidoNoEncontradoError();
+  }
+
+  const pago = await pagoRepository.buscarPorPedido(id);
+
+  if (!pago) {
+    throw new PagoInvalidoError(
+      "Este pedido todavía no tiene un pago registrado"
+    );
+  }
+
+  return pago;
+}
+
 }
 
 module.exports = {
