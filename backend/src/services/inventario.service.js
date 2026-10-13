@@ -14,6 +14,15 @@ async function registrarAjuste(varianteId, cantidad, tipoAjuste, motivo, usuario
   );
 }
 
+// RF-019: sin endpoint HTTP — la invoca Sprint 4 (pedidos/pagos). items es
+// [{ varianteId, cantidad }]; se pasa tal cual (sin Number()) porque llega de
+// código interno y el repository rechaza lo que no sea entero positivo en vez
+// de coercionarlo en silencio. Ver opciones (usuarioId, pedidoId, tx) en el
+// repository.
+async function descontarPorPedido(items, opciones) {
+  return inventarioRepository.descontarPorPedido(items, opciones);
+}
+
 async function listarPorVariante(varianteId) {
   return inventarioRepository.listarPorVariante(Number(varianteId));
 }
@@ -24,8 +33,10 @@ async function listarTodo() {
 
 module.exports = {
   registrarAjuste,
+  descontarPorPedido,
   listarPorVariante,
   listarTodo,
   VarianteNoEncontradaError: inventarioRepository.VarianteNoEncontradaError,
   StockInsuficienteError: inventarioRepository.StockInsuficienteError,
+  DescuentoInvalidoError: inventarioRepository.DescuentoInvalidoError,
 };
