@@ -15,6 +15,82 @@ class DireccionNoAutorizadaError extends Error {
   }
 }
 
+// RF-029: estados de envío y su orden. Son los valores del enum EstadoEnvio
+// que Sprint 4 incorporó al schema junto con InfoEnvio (ver
+// docs/diseno/info-envio.md); hasta que ese modelo exista en esta rama se
+// mantienen acá como constantes para que la regla viva en un solo lugar.
+const ESTADOS_ENVIO = Object.freeze([
+  "EN_PREPARACION",
+  "ENVIADO",
+  "EN_TRANSITO",
+  "ENTREGADO",
+]);
+
+// Desde cada estado, únicamente el siguiente: lineal, hacia adelante y sin
+// saltear pasos. ENTREGADO es terminal. Para permitir saltos bastaría con
+// agregar los destinos acá; la función no cambia.
+const TRANSICIONES_ENVIO = Object.freeze({
+  EN_PREPARACION: Object.freeze(["ENVIADO"]),
+  ENVIADO: Object.freeze(["EN_TRANSITO"]),
+  EN_TRANSITO: Object.freeze(["ENTREGADO"]),
+  ENTREGADO: Object.freeze([]),
+});
+
+// DDS §5.2: un valor fuera del conjunto definido es un error de validación
+// de entrada (400)...
+class EstadoEnvioInvalidoError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "EstadoEnvioInvalidoError";
+    this.status = 400;
+    this.codigo = "ESTADO_ENVIO_INVALIDO";
+  }
+}
+
+// ...mientras que pedir un cambio que el estado actual no admite es un
+// conflicto de negocio (409). `status` y `codigo` viajan en el error, así
+// errorHandler lo formatea sin tener que registrarlo.
+class TransicionEnvioInvalidaError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TransicionEnvioInvalidaError";
+    this.status = 409;
+    this.codigo = "TRANSICION_ENVIO_INVALIDA";
+  }
+}
+
+/**
+ * Valida un cambio de estado de envío (RF-029). Función pura, sin DB.
+ *
+ * - Estado actual o nuevo fuera de ESTADOS_ENVIO -> EstadoEnvioInvalidoError (400).
+ * - Mismo estado, retroceso, salto de pasos o salida de ENTREGADO ->
+ *   TransicionEnvioInvalidaError (409).
+ * - Si es válida devuelve el estado nuevo, listo para usar en el update.
+ */
+function validarTransicionEstado(estadoActual, estadoNuevo) {
+  for (const estado of [estadoActual, estadoNuevo]) {
+    // includes sobre el array (y no `in`/propiedad del objeto) para que
+    // valores como "constructor" o "__proto__" no pasen por estados.
+    if (typeof estado !== "string" || !ESTADOS_ENVIO.includes(estado)) {
+      throw new EstadoEnvioInvalidoError(
+        `Estado de envío desconocido: ${String(estado)}. Estados válidos: ${ESTADOS_ENVIO.join(", ")}`
+      );
+    }
+  }
+
+  if (!TRANSICIONES_ENVIO[estadoActual].includes(estadoNuevo)) {
+    const siguientes = TRANSICIONES_ENVIO[estadoActual];
+    throw new TransicionEnvioInvalidaError(
+      `No se puede pasar el envío de ${estadoActual} a ${estadoNuevo}` +
+        (siguientes.length > 0
+          ? `; desde ${estadoActual} solo se puede pasar a ${siguientes.join(", ")}`
+          : `; ${estadoActual} es un estado final`)
+    );
+  }
+
+  return estadoNuevo;
+}
+
 /**
  * Calcula el costo de envío para una dirección del usuario.
  *
@@ -77,6 +153,11 @@ async function calcularCosto(direccionId, usuarioId) {
 
 module.exports = {
   calcularCosto,
+  validarTransicionEstado,
+  ESTADOS_ENVIO,
+  TRANSICIONES_ENVIO,
   CoberturaNoDisponibleError,
   DireccionNoAutorizadaError,
+  EstadoEnvioInvalidoError,
+  TransicionEnvioInvalidaError,
 };
