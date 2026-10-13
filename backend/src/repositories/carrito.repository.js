@@ -2,8 +2,15 @@ const prisma = require("../config/prisma");
 
 const carritoRepository = {
   /**
-   * Devuelve el carrito del usuario; si todavía no tiene, lo crea.
-   * Carrito.usuarioId es @unique, por eso se puede buscar con findUnique.
+   * Devuelve el carrito del usuario CON sus items; si todavía no tiene, lo
+   * crea (con items vacío). Carrito.usuarioId es @unique, por eso se puede
+   * buscar con findUnique.
+   *
+   * Los items son necesarios: carrito.service.agregarItem hace
+   * `carrito.items.find(...)` para sumar a la línea existente y validar que
+   * el TOTAL no supere el stock. Sin el include, `items` era undefined, esa
+   * rama nunca corría y se podía superar el stock agregando varias veces
+   * (RF-018).
    */
   async obtenerOCrear(usuarioId) {
     const id = Number(usuarioId);
@@ -12,12 +19,18 @@ const carritoRepository = {
       where: {
         usuarioId: id,
       },
+      include: {
+        items: true,
+      },
     });
 
     if (!carrito) {
       carrito = await prisma.carrito.create({
         data: {
           usuarioId: id,
+        },
+        include: {
+          items: true,
         },
       });
     }

@@ -25,8 +25,13 @@ class DireccionNoAutorizadaError extends Error {
  * 5. Retorna el costo.
  */
 async function calcularCosto(direccionId, usuarioId) {
-  // 1. Obtener la dirección usando el repository existente
-  const direccion = await direccionRepository.obtenerPorId(direccionId);
+  // 1. Obtener la dirección del usuario (RN-003: el repository filtra por
+  // usuarioId, así que una dirección ajena llega como null, igual que una
+  // inexistente, y no se revela que existe)
+  const direccion = await direccionRepository.obtenerPorId(
+    direccionId,
+    usuarioId
+  );
 
   if (!direccion) {
     const error = new Error("La dirección no existe");

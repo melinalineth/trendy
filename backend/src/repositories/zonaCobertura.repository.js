@@ -1,9 +1,12 @@
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../config/prisma");
 
-const prisma = new PrismaClient();
+// `estado` de ZonaCobertura y TarifaEnvio es el enum EstadoProducto
+// ("ACTIVO" / "INACTIVO"), no un Boolean. ZonaCobertura tiene unique
+// (departamento, ciudad): crear una segunda zona para la misma ciudad lanza
+// P2002, que el service debe traducir a 409.
 
 // Crear una zona de cobertura
-const crearZona = async ({ nombre, departamento, ciudad, estado = true }) => {
+const crearZona = async ({ nombre, departamento, ciudad, estado = "ACTIVO" }) => {
   return await prisma.zonaCobertura.create({
     data: {
       nombre,
@@ -39,7 +42,7 @@ const cambiarEstadoZona = async (id, estado) => {
 };
 
 // Crear una tarifa de envío para una zona
-const crearTarifa = async (zonaCoberturaId, costo, estado = true) => {
+const crearTarifa = async (zonaCoberturaId, costo, estado = "ACTIVO") => {
   return await prisma.tarifaEnvio.create({
     data: {
       zonaCoberturaId,

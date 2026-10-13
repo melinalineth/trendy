@@ -1,4 +1,4 @@
-const prisma = require("../../prisma/client");
+const prisma = require("../config/prisma");
 const carritoRepository = require("../repositories/carrito.repository");
 const { validarAgregarItem } = require("../dtos/carrito.dto");
 

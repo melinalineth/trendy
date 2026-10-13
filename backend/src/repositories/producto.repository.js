@@ -39,19 +39,20 @@ const productoRepository = {
       };
     }
 
-    // Búsqueda por nombre o descripción
+    // Búsqueda por nombre o descripción. Sin `mode: "insensitive"`: ese
+    // modificador solo existe en PostgreSQL/MongoDB y en MySQL Prisma lo
+    // rechaza ("Unknown argument `mode`"); la collation utf8mb4_unicode_ci
+    // de las tablas ya compara sin distinguir mayúsculas.
     if (q) {
       where.OR = [
         {
           nombre: {
             contains: q,
-            mode: "insensitive",
           },
         },
         {
           descripcion: {
             contains: q,
-            mode: "insensitive",
           },
         },
       ];

@@ -16,14 +16,14 @@ const ROLES = ["cliente", "vendedor", "admin"];
 // Sprint 2 / MOD-02 (RF-008 a RF-011): ERS §2.8.3 deja la gestión dinámica
 // de categorías para v2.0 — en el MVP las categorías son una semilla fija,
 // no hay CRUD de categorías expuesto por la API.
-// Las primeras 5 son las categorías base de Sprint 2; las demás son las que
-// usan los productos de ejemplo de abajo (Sprint 3).
+// Son las 6 que usan los productos de ejemplo de abajo y que coinciden con los
+// mapas de pantalla (docs/Mapa_de_pantallas_usuario_cliente.png: Mujer, Hombre,
+// Jeans, Camisetas, Vestidos) más Chaquetas. Se descartaron Remeras, Pantalones,
+// Camperas, Calzado y Accesorios: ningún producto las usa y se solapaban con
+// Camisetas/Chaquetas. Un producto tiene una sola categoría, así que "Mujer" y
+// "Hombre" (público) conviven con Jeans/Camisetas (tipo de prenda), igual que
+// en el mapa; separar el género como atributo propio queda para v2.
 const CATEGORIAS = [
-  "Remeras",
-  "Pantalones",
-  "Camperas",
-  "Calzado",
-  "Accesorios",
   "Mujer",
   "Hombre",
   "Jeans",
