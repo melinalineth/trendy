@@ -29,6 +29,10 @@ function validarAgregarItem(body) {
     const error = new Error("Datos inválidos");
     error.statusCode = 400;
     error.errores = errores;
+    // errorHandler.js (DDS §5.3) lee status / codigo / detalles
+    error.status = 400;
+    error.codigo = "VALIDACION_FALLIDA";
+    error.detalles = errores;
 
     throw error;
   }
