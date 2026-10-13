@@ -25,7 +25,13 @@ const VALORES_INICIALES = {
 
 function formatearCosto(costo) {
   if (typeof costo !== "number") return "—";
-  return `$${costo.toLocaleString("es-CO", { maximumFractionDigits: 2 })}`;
+  // Enteros sin decimales ($12.000); con centavos, siempre 2 ($12.000,50).
+  const decimales = Number.isInteger(costo) ? 0 : 2;
+
+  return `$${costo.toLocaleString("es-CO", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  })}`;
 }
 
 // Devuelve el mensaje de error del campo de texto, o "" si es válido.
@@ -72,6 +78,18 @@ function validarCosto(valor) {
 function useFocoInicial(ref) {
   useEffect(() => {
     ref.current?.querySelector("input, button")?.focus();
+  }, [ref]);
+}
+
+// Foco inicial del modal de confirmación: cae en "Cancelar" (botón del footer
+// del Modal común), nunca en la acción destructiva, para que un Enter
+// accidental no confirme la desactivación.
+function useFocoEnCancelar(ref) {
+  useEffect(() => {
+    ref.current
+      ?.closest(".modal")
+      ?.querySelector(".modal__button--cancel")
+      ?.focus();
   }, [ref]);
 }
 
@@ -278,7 +296,7 @@ function FormularioTarifa({ zona, onGuardar, procesando }) {
 function ConfirmarDesactivar({ zona, onConfirmar, procesando, error }) {
   const contenedorRef = useRef(null);
 
-  useFocoInicial(contenedorRef);
+  useFocoEnCancelar(contenedorRef);
 
   return (
     <div ref={contenedorRef} className="zonas-form">
