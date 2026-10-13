@@ -2,24 +2,42 @@ const prisma = require("../config/prisma");
 
 // RF-017: RN-002 dice que el stock nunca puede quedar negativo, pero el
 // campo Variante.stock no tiene un CHECK a nivel de columna (Prisma/MySQL no
-// modelan eso limpiamente vía schema.prisma) — la regla se hace cumplir acá,
-// leyendo el stock actual DENTRO de la misma transacción que lo actualiza,
-// para evitar una condición de carrera entre el "leer stock" y el
-// "escribir stock" si dos ajustes llegan casi al mismo tiempo para la misma
-// variante.
+// modelan eso limpiamente vía schema.prisma) — la regla se hace cumplir acá
+// con un UPDATE condicional atómico (ver registrarAjuste y
+// descontarPorPedido), no leyendo el stock y escribiendo después.
 //
 // Dos errores de dominio separados (mismo criterio que
 // ProductoNoEncontradoError/VarianteDuplicadaError en variante.service.js):
 // que la variante no exista es un 404, que el ajuste deje el stock en
 // negativo es un 409 — son causas distintas y el controller necesita
-// distinguirlas.
-class VarianteNoEncontradaError extends Error {}
-class StockInsuficienteError extends Error {
-  constructor(message, varianteId) {
+// distinguirlas (inventario.controller usa instanceof).
+//
+// `status`/`codigo`/`detalles` viajan en la instancia para que errorHandler
+// los formatee (DDS §5.3) si algún día se dejan propagar sin try/catch, sin
+// tener que registrarlos en su lista (que apunta a la StockInsuficienteError
+// de carrito.service, otra clase).
+class VarianteNoEncontradaError extends Error {
+  constructor(message) {
     super(message);
+    this.name = "VarianteNoEncontradaError";
+    this.status = 404;
+    this.codigo = "VARIANTE_NO_ENCONTRADA";
+  }
+}
+
+class StockInsuficienteError extends Error {
+  constructor(message, varianteId, disponible) {
+    super(message);
+    this.name = "StockInsuficienteError";
+    this.status = 409;
+    this.codigo = "STOCK_INSUFICIENTE";
     // Qué variante dejó sin stock al pedido (RF-019): el llamador (checkout)
     // puede avisarle al cliente cuál línea no alcanza.
     this.varianteId = varianteId;
+    // DDS §5.3: { varianteId, disponible } cuando se conoce la variante.
+    if (varianteId !== undefined) {
+      this.detalles = { varianteId, disponible };
+    }
   }
 }
 
@@ -29,6 +47,7 @@ class StockInsuficienteError extends Error {
 class DescuentoInvalidoError extends Error {
   constructor(message) {
     super(message);
+    this.name = "DescuentoInvalidoError";
     this.status = 400;
     this.codigo = "DESCUENTO_INVALIDO";
   }
@@ -36,7 +55,28 @@ class DescuentoInvalidoError extends Error {
 
 const MOTIVO_PEDIDO_CONFIRMADO = "Pedido confirmado";
 
-const esEnteroPositivo = (valor) => Number.isInteger(valor) && valor > 0;
+// Las columnas Int de MySQL son de 32 bits con signo: pasado ese tope Prisma
+// tira un error genérico de la base en vez de uno de dominio.
+const INT32_MAX = 2147483647;
+
+const esEnteroPositivo = (valor) => Number.isInteger(valor) && valor > 0 && valor <= INT32_MAX;
+
+// Falló un UPDATE condicional (count === 0): o la variante no existe o el
+// stock no alcanzaba. Un solo helper para que ambas operaciones lancen
+// exactamente los mismos errores.
+// Los mensajes los pasa cada operación porque el controller de RF-017 los
+// devuelve tal cual en su respuesta HTTP y no deben cambiar.
+async function lanzarPorFilaNoActualizada(cliente, varianteId, mensajeNoExiste, mensajeSinStock) {
+  const variante = await cliente.variante.findUnique({
+    where: { id: varianteId },
+    select: { stock: true },
+  });
+
+  if (!variante) {
+    throw new VarianteNoEncontradaError(mensajeNoExiste);
+  }
+  throw new StockInsuficienteError(mensajeSinStock, varianteId, variante.stock);
+}
 
 // Valida las líneas y suma las repetidas de la misma variante. Devuelve
 // [{ varianteId, cantidad }] ordenado por varianteId: tomar los locks de fila
@@ -53,12 +93,24 @@ function agruparItems(items) {
 
   for (const item of items) {
     if (!item || !esEnteroPositivo(item.varianteId)) {
-      throw new DescuentoInvalidoError("Cada línea requiere un varianteId entero positivo");
+      throw new DescuentoInvalidoError(
+        `Cada línea requiere un varianteId entero entre 1 y ${INT32_MAX}`
+      );
     }
     if (!esEnteroPositivo(item.cantidad)) {
-      throw new DescuentoInvalidoError("La cantidad de cada línea debe ser un entero mayor que 0");
+      throw new DescuentoInvalidoError(
+        `La cantidad de cada línea debe ser un entero entre 1 y ${INT32_MAX}`
+      );
     }
-    porVariante.set(item.varianteId, (porVariante.get(item.varianteId) ?? 0) + item.cantidad);
+
+    // La suma de duplicadas también tiene que caber en Int32.
+    const suma = (porVariante.get(item.varianteId) ?? 0) + item.cantidad;
+    if (suma > INT32_MAX) {
+      throw new DescuentoInvalidoError(
+        `La cantidad total de la variante ${item.varianteId} supera ${INT32_MAX}`
+      );
+    }
+    porVariante.set(item.varianteId, suma);
   }
 
   return [...porVariante]
@@ -67,25 +119,42 @@ function agruparItems(items) {
 }
 
 const inventarioRepository = {
-  // (a) lee el stock actual de la variante, (b) si stockActual + cantidad
-  // queda negativo aborta con un error de dominio (no deja que la DB
-  // truene con algo genérico), (c) crea el InventarioMovimiento, (d)
-  // actualiza Variante.stock — todo dentro de una única transacción para
-  // que un fallo en cualquier paso revierta los anteriores.
+  // `cantidad` es el delta firmado a aplicar sobre Variante.stock. El ajuste
+  // es un UPDATE atómico relativo (`increment`), no "leer stock, sumar en
+  // memoria y escribir el valor absoluto": ese patrón, sobre un snapshot
+  // REPEATABLE READ, pisa un descuento concurrente (lost update -> sobreventa).
+  //   - delta negativo: `WHERE id = ? AND stock >= -delta`; count 0 = la
+  //     variante no existe o el stock no alcanza (RN-002).
+  //   - delta positivo: increment sin condición.
+  // El movimiento se inserta DESPUÉS, con el lock de la fila ya tomado: crearlo
+  // antes tomaría un lock S por la FK y el UPDATE posterior pediría X, receta
+  // de deadlock entre dos ajustes concurrentes. Todo en una única transacción,
+  // y mismo contrato externo de siempre ({ movimiento, variante }, mismos
+  // errores y mensajes).
   async registrarAjuste(varianteId, cantidad, tipoAjuste, motivo, usuarioId) {
+    // Una variante fuera del rango de Int32 no puede existir.
+    if (!esEnteroPositivo(varianteId)) {
+      throw new VarianteNoEncontradaError("La variante no existe");
+    }
+    if (!Number.isInteger(cantidad) || Math.abs(cantidad) > INT32_MAX) {
+      throw new DescuentoInvalidoError(
+        `La cantidad del ajuste debe ser un entero con valor absoluto de hasta ${INT32_MAX}`
+      );
+    }
+
     return prisma.$transaction(async (tx) => {
-      const variante = await tx.variante.findUnique({
-        where: { id: varianteId },
+      const { count } = await tx.variante.updateMany({
+        where: cantidad < 0 ? { id: varianteId, stock: { gte: -cantidad } } : { id: varianteId },
+        data: { stock: { increment: cantidad } },
       });
 
-      if (!variante) {
-        throw new VarianteNoEncontradaError("La variante no existe");
-      }
-
-      const stockResultante = variante.stock + cantidad;
-
-      if (stockResultante < 0) {
-        throw new StockInsuficienteError(
+      // Con delta 0 el UPDATE puede no "cambiar" filas aunque la variante
+      // exista; solo en ese caso no alcanza `count` para saber si existe.
+      if (count === 0 && cantidad !== 0) {
+        await lanzarPorFilaNoActualizada(
+          tx,
+          varianteId,
+          "La variante no existe",
           "El ajuste dejaría el stock en negativo"
         );
       }
@@ -100,12 +169,11 @@ const inventarioRepository = {
         },
       });
 
-      const varianteActualizada = await tx.variante.update({
-        where: { id: varianteId },
-        data: { stock: stockResultante },
-      });
+      // Si con delta 0 la variante no existía, la FK del movimiento ya hizo
+      // fallar la transacción; acá la fila existe y se lee ya actualizada.
+      const variante = await tx.variante.findUnique({ where: { id: varianteId } });
 
-      return { movimiento, variante: varianteActualizada };
+      return { movimiento, variante };
     });
   },
 
@@ -120,22 +188,40 @@ const inventarioRepository = {
   // lanza un error de dominio y la transacción completa se revierte.
   //
   // opciones:
-  //   - usuarioId (obligatorio): InventarioMovimiento.usuarioId es NOT NULL;
-  //     el Pedido de Sprint 4 trae el usuario comprador.
-  //   - pedidoId (opcional): se anota en el motivo para trazabilidad.
+  //   - usuarioId (obligatorio): InventarioMovimiento.usuarioId es NOT NULL.
+  //     El movimiento queda atribuido al usuario comprador del pedido (no
+  //     hay usuario "sistema"), así que quien llame debe pasar
+  //     pedido.usuarioId.
+  //   - pedidoId (opcional): SOLO se anota en el motivo para trazabilidad.
   //   - tx (opcional): cliente de una transacción abierta por el llamador
   //     (p. ej. la que crea el Pedido); si viene, se usa en vez de abrir una
   //     propia, así el descuento y el pedido confirman o revierten juntos.
+  //     Debe ser el cliente que recibe el callback de prisma.$transaction,
+  //     NUNCA el `prisma` raíz: con éste cada operación correría en su propia
+  //     conexión/transacción y se perdería la atomicidad.
+  //
+  // IMPORTANTE — NO es idempotente: llamarla dos veces con el mismo pedidoId
+  // descuenta dos veces. La idempotencia (RN-009: un evento de pago repetido
+  // no descuenta de nuevo) y la reposición de stock por cancelación (ERS
+  // RF-019) quedan para Sprint 4 y requieren un guard o una columna que
+  // identifique el pedido en InventarioMovimiento (hoy no existe: cambiar el
+  // schema está fuera del alcance de esta tarjeta).
   async descontarPorPedido(items, { usuarioId, pedidoId, tx } = {}) {
     const lineas = agruparItems(items);
 
     if (!esEnteroPositivo(usuarioId)) {
-      throw new DescuentoInvalidoError("El descuento requiere el usuarioId que origina el pedido");
+      throw new DescuentoInvalidoError(
+        `El descuento requiere el usuarioId (entero entre 1 y ${INT32_MAX}) que origina el pedido`
+      );
+    }
+    if (pedidoId != null && !esEnteroPositivo(pedidoId)) {
+      throw new DescuentoInvalidoError(`El pedidoId debe ser un entero entre 1 y ${INT32_MAX}`);
     }
 
-    const motivo = esEnteroPositivo(pedidoId)
-      ? `${MOTIVO_PEDIDO_CONFIRMADO} (pedido #${pedidoId})`
-      : MOTIVO_PEDIDO_CONFIRMADO;
+    const motivo =
+      pedidoId != null
+        ? `${MOTIVO_PEDIDO_CONFIRMADO} (pedido #${pedidoId})`
+        : MOTIVO_PEDIDO_CONFIRMADO;
 
     const ejecutar = async (cliente) => {
       const movimientos = [];
@@ -147,17 +233,11 @@ const inventarioRepository = {
         });
 
         if (count === 0) {
-          const existe = await cliente.variante.findUnique({
-            where: { id: varianteId },
-            select: { id: true },
-          });
-
-          if (!existe) {
-            throw new VarianteNoEncontradaError(`La variante ${varianteId} no existe`);
-          }
-          throw new StockInsuficienteError(
-            `Stock insuficiente para la variante ${varianteId}`,
-            varianteId
+          await lanzarPorFilaNoActualizada(
+            cliente,
+            varianteId,
+            `La variante ${varianteId} no existe`,
+            `Stock insuficiente para la variante ${varianteId}`
           );
         }
 
