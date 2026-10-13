@@ -7,6 +7,13 @@ import useCarrito from "../../hooks/useCarrito";
 import usePedidos from "../../hooks/usePedidos";
 import direccionService from "../../services/direccion.service";
 
+import {
+  crearPreferencia,
+  pagarContraEntrega,
+} from "../../services/pago.service";
+
+
+
 export default function Checkout() {
   const navigate = useNavigate();
 
@@ -118,85 +125,67 @@ export default function Checkout() {
     });
   }
 
-  async function confirmarPedido(evento) {
-    evento.preventDefault();
-    setError("");
-    setMensaje("");
-
-    if (!direccionId) {
-      setError("Selecciona una dirección de entrega.");
-      return;
-    }
-
-    if (!resumenPedido) {
-      setError("Espera a que se calcule el total del pedido.");
-      return;
-    }
-
-    if (metodoPago === "CONTRA_ENTREGA" && !permiteContraEntrega) {
-      setError(
-        "El pago contra entrega no está disponible para esta dirección."
-      );
-      return;
-    }
-
-    setProcesando(true);
-
-    try {
-      const respuesta = await crearPedido({
-        direccionId: Number(direccionId),
-        metodoPago,
-      });
-
-      const pedido = respuesta?.datos ?? respuesta?.pedido ?? respuesta;
-      const pedidoId = pedido?.id;
-
-      if (!pedidoId) {
-        throw new Error(
-          "El pedido se creó, pero no se recibió su identificador."
-        );
-      }
-
-      if (metodoPago === "MERCADO_PAGO") {
-        const pagoRespuesta = await axios.post(
-          "/api/v1/pagos/mercadopago/preferencia",
-          { pedidoId }
-        );
-
-        const pago = pagoRespuesta.data?.datos ?? pagoRespuesta.data;
-        const checkoutUrl = pago?.checkoutUrl || pago?.init_point;
-
-        if (!checkoutUrl) {
-          throw new Error(
-            "El pedido se creó, pero no se recibió el enlace de pago."
-          );
-        }
-
-        window.location.assign(checkoutUrl);
-        return;
-      }
-
-      setMensaje("¡Pedido confirmado! Pagarás al recibirlo.");
-      navigate(`/pedidos/${pedidoId}`, {
-        state: { mensaje: "Pedido creado con pago contra entrega." },
-      });
-    } catch (err) {
-      if (err.response?.status === 409) {
-        setError(
-          err.response?.data?.mensaje ||
-            "No se puede completar el pedido con esa modalidad de pago. Revisa la disponibilidad e inténtalo de nuevo."
-        );
-      } else {
-        setError(
-          err.response?.data?.mensaje ||
-            err.message ||
-            "No se pudo confirmar el pedido."
-        );
-      }
-    } finally {
-      setProcesando(false);
-    }
+ 
+async function confirmarPedido() {
+  if (!direccionId) {
+    setError("Selecciona una dirección de entrega.");
+    return;
   }
+
+  if (!metodoPago) {
+    setError("Selecciona un método de pago.");
+    return;
+  }
+
+  setError("");
+  setProcesando(true);
+
+  try {
+    // Crear el pedido antes de iniciar el pago.
+    const respuesta = await crearPedido({
+      direccionId: Number(direccionId),
+      metodoPago,
+    });
+
+    const pedido = respuesta?.datos ?? respuesta?.data ?? respuesta;
+    const pedidoId = pedido?.id ?? pedido?.pedido?.id;
+
+    if (!pedidoId) {
+      throw new Error("No se recibió el identificador del pedido.");
+    }
+
+    if (metodoPago === "MERCADO_PAGO") {
+      // Redirige al checkout hospedado de Mercado Pago.
+      const initPoint = await crearPreferencia(pedidoId);
+      window.location.href = initPoint;
+      return;
+    }
+
+    if (metodoPago === "CONTRA_ENTREGA") {
+      await pagarContraEntrega(pedidoId);
+
+      navigate(`/pedidos/${pedidoId}`, {
+        state: {
+          mensaje: "Pagás al recibir tu pedido.",
+        },
+      });
+      return;
+    }
+
+    throw new Error("El método de pago seleccionado no es válido.");
+  } catch (err) {
+    const mensaje =
+      err?.response?.data?.mensaje ??
+      err?.response?.data?.message ??
+      err.message ??
+      "No fue posible procesar el pedido.";
+
+    setError(mensaje);
+  } finally {
+    setProcesando(false);
+  }
+}
+
 
   if (cargandoDirecciones) {
     return <main className="checkout"><p>Cargando direcciones...</p></main>;
@@ -291,8 +280,12 @@ export default function Checkout() {
             )}
           </section>
 
+          {error && <p role="alert">{error}</p>}
+
           <button
             type="submit"
+            onClick={confirmarPedido}
+ 
             disabled={
               procesando ||
               !direccionId ||
