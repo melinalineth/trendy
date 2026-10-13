@@ -1,5 +1,6 @@
 const prisma = require("../config/prisma");
 const carritoRepository = require("../repositories/carrito.repository");
+const envioService = require("./envio.service");
 const { validarAgregarItem } = require("../dtos/carrito.dto");
 
 class StockInsuficienteError extends Error {
@@ -262,7 +263,19 @@ async function resumen(usuarioId, direccionId = null) {
   };
 }
 
+/**
+ * Carrito del usuario autenticado (GET /api/v1/carrito): ítems con variante y
+ * producto más subtotal/total, sin costo de envío (todavía no hay dirección).
+ */
+async function obtenerCarrito(usuarioId) {
+  return resumen(usuarioId);
+}
+
 module.exports = {
+  obtenerCarrito,
   agregarItem,
+  modificarItem,
+  eliminarItem,
+  resumen,
   StockInsuficienteError,
 };
