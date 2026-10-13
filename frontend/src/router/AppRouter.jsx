@@ -8,6 +8,7 @@ import Register from "../pages/auth/Register";
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import RestablecerPassword from "../pages/auth/RestablecerPassword";
 import Direcciones from "../pages/customer/Direcciones";
+import Cart from "../pages/customer/Cart";
 import RoleGuard from "../components/auth/RoleGuard";
 import Sellers from "../pages/admin/Sellers";
 import Users from "../pages/admin/Users";
@@ -35,6 +36,14 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["cliente"]}>
             <Direcciones />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/carrito"
+        element={
+          <RoleGuard roles={["cliente"]}>
+            <Cart />
           </RoleGuard>
         }
       />
