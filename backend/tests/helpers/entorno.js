@@ -14,6 +14,18 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+// Guarda: estos tests escriben en la base. Si el nombre no indica que es
+// descartable (test / scratch) abortamos antes de tocar nada, así un `npm test`
+// con el .env de desarrollo (base `trendy`) no ensucia datos reales.
+const nombreBase = new URL(process.env.DATABASE_URL).pathname.replace(/^\//, "");
+if (!/(test|scratch)/i.test(nombreBase)) {
+  throw new Error(
+    `Los tests HTTP se niegan a correr contra la base "${nombreBase}": usá una ` +
+      `base descartable cuyo nombre contenga "test" o "scratch" (ej. trendy_test) ` +
+      `exportando DATABASE_URL.`
+  );
+}
+
 const { once } = require("node:events");
 const prisma = require("../../src/config/prisma");
 const app = require("../../src/app");
