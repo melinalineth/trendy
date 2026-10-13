@@ -1,115 +1,56 @@
 const carritoService = require("../services/carrito.service");
+const { validarDireccionId } = require("../dtos/envio.dto");
+
+// Controller delgado: toma el usuario del JWT y delega en el service. Los
+// errores (validación, stock, cobertura, ítem ajeno) se propagan con throw —
+// Express 5 reenvía las rejections async a errorHandler.js, que los traduce a
+// { error: { codigo, mensaje, detalles } } (DDS §5.3).
+//
+// RN-003: el usuarioId sale SIEMPRE de req.usuario (seteado por auth.js a
+// partir del JWT), nunca del body/params/query.
 
 const obtenerCarrito = async (req, res) => {
-  try {
-    const usuarioId = req.user.id;
+  const carrito = await carritoService.obtenerCarrito(req.usuario.id);
 
-    const carrito = await carritoService.obtenerCarrito(usuarioId);
-
-    return res.status(200).json(carrito);
-  } catch (error) {
-    return res.status(500).json({
-      mensaje: "Error al obtener el carrito",
-      error: error.message,
-    });
-  }
+  return res.status(200).json(carrito);
 };
 
 const agregarItem = async (req, res) => {
-  try {
-    const usuarioId = req.user.id;
-    const { varianteId, cantidad } = req.body;
+  const item = await carritoService.agregarItem(req.usuario.id, req.body);
 
-    const item = await carritoService.agregarItem(
-      usuarioId,
-      varianteId,
-      cantidad
-    );
-
-    return res.status(201).json(item);
-  } catch (error) {
-    if (error instanceof carritoService.StockInsuficienteError) {
-      return res.status(409).json({
-        mensaje: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      mensaje: "Error al agregar el producto al carrito",
-      error: error.message,
-    });
-  }
+  return res.status(201).json(item);
 };
 
 const modificarItem = async (req, res) => {
-  try {
-    const usuarioId = req.user.id;
-    const itemId = Number(req.params.id);
-    const { cantidad } = req.body;
+  const itemId = Number(req.params.id);
+  const { cantidad } = req.body ?? {};
 
-    const item = await carritoService.modificarItem(
-      usuarioId,
-      itemId,
-      cantidad
-    );
+  const resultado = await carritoService.modificarItem(
+    req.usuario.id,
+    itemId,
+    cantidad
+  );
 
-    return res.status(200).json(item);
-  } catch (error) {
-    if (error instanceof carritoService.StockInsuficienteError) {
-      return res.status(409).json({
-        mensaje: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      mensaje: "Error al modificar el item del carrito",
-      error: error.message,
-    });
-  }
+  return res.status(200).json(resultado);
 };
 
 const eliminarItem = async (req, res) => {
-  try {
-    const usuarioId = req.user.id;
-    const itemId = Number(req.params.id);
+  const itemId = Number(req.params.id);
 
-    const resultado = await carritoService.eliminarItem(
-      usuarioId,
-      itemId
-    );
+  const resultado = await carritoService.eliminarItem(req.usuario.id, itemId);
 
-    return res.status(200).json(resultado);
-  } catch (error) {
-    return res.status(500).json({
-      mensaje: "Error al eliminar el item del carrito",
-      error: error.message,
-    });
-  }
+  return res.status(200).json(resultado);
 };
 
+// direccionId es opcional: sin él devuelve subtotal y total sin envío.
 const resumen = async (req, res) => {
-  try {
-    const usuarioId = req.user.id;
-    const direccionId = Number(req.query.direccionId);
+  const direccionId = validarDireccionId(req.query.direccionId, {
+    obligatorio: false,
+  });
 
-    const resultado = await carritoService.resumen(
-      usuarioId,
-      direccionId
-    );
+  const resultado = await carritoService.resumen(req.usuario.id, direccionId);
 
-    return res.status(200).json(resultado);
-  } catch (error) {
-    if (error instanceof carritoService.SinCoberturaError) {
-      return res.status(409).json({
-        mensaje: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      mensaje: "Error al obtener el resumen del carrito",
-      error: error.message,
-    });
-  }
+  return res.status(200).json(resultado);
 };
 
 module.exports = {
@@ -119,4 +60,3 @@ module.exports = {
   eliminarItem,
   resumen,
 };
-
