@@ -173,6 +173,10 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       ["costo texto", bodyZona("abc")],
       ["costo numérico como string", bodyZona("15000")],
       ["costo con más de 2 decimales", bodyZona(1.005)],
+      // Un valor positivo pero minúsculo pasaba la tolerancia de decimales y
+      // MySQL lo guardaba como DECIMAL(10,2) = 0.00 (tarifa en cero).
+      ["costo positivo que se redondea a 0.00 (1e-8)", bodyZona(1e-8)],
+      ["costo por debajo del mínimo (0.004)", bodyZona(0.004)],
       ["costo sobre el tope", bodyZona(1000000.01)],
       ["costo infinito (JSON lo serializa como null)", bodyZona(Infinity)],
     ];

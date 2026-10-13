@@ -8,6 +8,9 @@
 // Tope razonable para un costo de envío y límite de los textos (las columnas
 // son VARCHAR(191); se exige menos para no aceptar basura).
 const COSTO_MAXIMO = 1000000;
+// Unidad mínima de DECIMAL(10, 2): por debajo, MySQL redondearía a 0.00 y la
+// tarifa quedaría en cero aunque el valor enviado fuera "mayor que cero".
+const COSTO_MINIMO = 0.01;
 const LARGO_MAXIMO_TEXTO = 100;
 const ID_MAXIMO = 2147483647; // INT de MySQL
 
@@ -51,6 +54,11 @@ function validarCosto(costo, campo, errores) {
 
   if (typeof costo !== "number" || !Number.isFinite(costo) || costo <= 0) {
     errores.push(`${campo} debe ser un número mayor que cero`);
+    return null;
+  }
+
+  if (costo < COSTO_MINIMO) {
+    errores.push(`${campo} debe ser como mínimo ${COSTO_MINIMO}`);
     return null;
   }
 
