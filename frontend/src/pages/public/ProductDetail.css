@@ -83,6 +83,49 @@
   font-size: 13px;
 }
 
+/* Agregar al carrito (RF-021) */
+
+.detalle-producto__compra {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+
+  margin-top: var(--space-5);
+}
+
+.detalle-producto__cantidad {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.detalle-producto__cantidad-label {
+  color: var(--color-text);
+
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detalle-producto__ayuda {
+  margin: 0;
+
+  color: var(--color-text-muted);
+
+  font-size: 13px;
+}
+
+.detalle-producto__compra .alert {
+  max-width: none;
+  margin: 0;
+}
+
+.detalle-producto__compra .alert a {
+  color: inherit;
+
+  font-weight: 700;
+}
+
 .detalle-producto__no-encontrado,
 .detalle-producto__error {
   padding: 60px 20px;

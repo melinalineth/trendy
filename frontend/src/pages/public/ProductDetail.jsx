@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
+import Alert from "../../components/common/Alert";
 import Breadcrumb from "../../components/common/Breadcrumb";
+import Button from "../../components/common/Button";
 import Loading from "../../components/common/Loading";
 import Badge from "../../components/common/Badge";
 import ImageGallery from "../../components/products/ImageGallery";
+import QuantitySelector from "../../components/products/QuantitySelector";
 import SelectorTalla from "../../components/products/SelectorTalla";
+import { useAuth } from "../../hooks/useAuth";
+import { useCarrito } from "../../hooks/useCarrito";
 import productoService from "../../services/producto.service";
 
 import "./ProductDetail.css";
@@ -48,9 +53,17 @@ function formatearPrecio(precio) {
 // siguiendo el mismo patrón que useProducts.
 function ProductDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { usuario, isAuthenticated } = useAuth();
 
   const [resultado, setResultado] = useState(RESULTADO_INICIAL);
   const [varianteSeleccionada, setVarianteSeleccionada] = useState(null);
+  const [cantidad, setCantidad] = useState(1);
+  const [agregado, setAgregado] = useState(false);
+
+  // Acá solo se agrega (RF-021): no hace falta pedir el carrito completo.
+  const { agregarItem, errorAccion, limpiarErrorAccion, procesando } =
+    useCarrito({ autoCargar: false });
 
   useEffect(() => {
     let activo = true;
@@ -61,6 +74,8 @@ function ProductDetail() {
         if (!activo) return;
 
         setVarianteSeleccionada(null);
+        setCantidad(1);
+        setAgregado(false);
         setResultado({ id, producto: data, error: "", notFound: false });
       })
       .catch((err) => {
@@ -69,6 +84,8 @@ function ProductDetail() {
         const esNotFound = err.response?.status === 404;
 
         setVarianteSeleccionada(null);
+        setCantidad(1);
+        setAgregado(false);
         setResultado({
           id,
           producto: null,
@@ -83,6 +100,29 @@ function ProductDetail() {
   }, [id]);
 
   const loading = resultado.id !== id;
+
+  // Elegir otra variante reinicia la cantidad (el stock máximo cambia) y
+  // limpia el resultado del último intento de agregar.
+  function seleccionarVariante(variante) {
+    setVarianteSeleccionada(variante);
+    setCantidad(1);
+    setAgregado(false);
+    limpiarErrorAccion();
+  }
+
+  async function handleAgregarAlCarrito() {
+    // Sin sesión no hay carrito: se manda a iniciar sesión.
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+
+    setAgregado(false);
+
+    const exito = await agregarItem(varianteSeleccionada.id, cantidad);
+
+    setAgregado(exito);
+  }
 
   if (loading) {
     return (
@@ -120,6 +160,10 @@ function ProductDetail() {
   const variantes = producto.variantes ?? [];
   const agotado =
     variantes.length > 0 && variantes.every((variante) => !variante.disponible);
+
+  // Vendedor y admin no tienen carrito: no se les ofrece agregar.
+  const puedeComprar = !isAuthenticated || usuario?.rol?.nombre === "cliente";
+  const sinStock = !varianteSeleccionada || varianteSeleccionada.stock <= 0;
 
   return (
     <main className="detalle-producto">
@@ -165,13 +209,70 @@ function ProductDetail() {
             <SelectorTalla
               key={id}
               variantes={variantes}
-              onSelect={setVarianteSeleccionada}
+              onSelect={seleccionarVariante}
             />
 
             {varianteSeleccionada && (
               <p className="detalle-producto__stock">
                 Stock disponible: {varianteSeleccionada.stock}
               </p>
+            )}
+
+            {puedeComprar && (
+              <div className="detalle-producto__compra">
+                {varianteSeleccionada && !sinStock && (
+                  <div className="detalle-producto__cantidad">
+                    <span className="detalle-producto__cantidad-label">
+                      Cantidad
+                    </span>
+                    <QuantitySelector
+                      quantity={cantidad}
+                      min={1}
+                      max={varianteSeleccionada.stock}
+                      disabled={procesando}
+                      label={producto.nombre}
+                      onChange={(nueva) => {
+                        setCantidad(nueva);
+                        setAgregado(false);
+                        limpiarErrorAccion();
+                      }}
+                    />
+                  </div>
+                )}
+
+                <Button
+                  text={procesando ? "Agregando..." : "Agregar al carrito"}
+                  onClick={handleAgregarAlCarrito}
+                  disabled={sinStock || procesando}
+                />
+
+                {!varianteSeleccionada && (
+                  <p className="detalle-producto__ayuda">
+                    Elegí una talla y color para agregar al carrito.
+                  </p>
+                )}
+
+                <div aria-live="polite">
+                  {errorAccion && (
+                    <Alert
+                      type="error"
+                      message={errorAccion}
+                      onClose={limpiarErrorAccion}
+                    />
+                  )}
+                  {agregado && !errorAccion && (
+                    <Alert
+                      type="success"
+                      message={
+                        <>
+                          Agregaste el producto a tu carrito.{" "}
+                          <Link to="/carrito">Ver carrito</Link>
+                        </>
+                      }
+                    />
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
