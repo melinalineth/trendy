@@ -6,3 +6,7 @@ frontend/dist/
 .env
 backend/.env
 mysql/.env
+
+# Herramientas de asistencia (contexto local y worktrees de agentes)
+.atl/
+.claude/
