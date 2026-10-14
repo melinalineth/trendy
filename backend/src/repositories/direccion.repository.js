@@ -13,6 +13,16 @@ async function listarPorUsuario(usuarioId) {
   });
 }
 
+// Una dirección del usuario por id. Cumple RN-003 como el resto: el where
+// lleva usuarioId, así que una dirección ajena devuelve null (igual que una
+// inexistente) en vez de depender de que el caller compare el dueño. La usa
+// envio.service.calcularCosto.
+async function obtenerPorId(id, usuarioId) {
+  return prisma.direccion.findFirst({
+    where: { id: Number(id), usuarioId: Number(usuarioId) },
+  });
+}
+
 // `client` es opcional para poder participar de un prisma.$transaction
 // (el service lo usa al desmarcar la dirección principal anterior). Fuera
 // de una transacción, usa el cliente centralizado de config/prisma.js.
@@ -34,6 +44,7 @@ async function desmarcarPrincipales(usuarioId, client = prisma) {
 
 module.exports = {
   listarPorUsuario,
+  obtenerPorId,
   crear,
   desmarcarPrincipales,
 };

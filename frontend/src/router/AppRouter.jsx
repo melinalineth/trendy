@@ -8,6 +8,7 @@ import Register from "../pages/auth/Register";
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import RestablecerPassword from "../pages/auth/RestablecerPassword";
 import Direcciones from "../pages/customer/Direcciones";
+import Cart from "../pages/customer/Cart";
 import RoleGuard from "../components/auth/RoleGuard";
 import Sellers from "../pages/admin/Sellers";
 import Users from "../pages/admin/Users";
@@ -16,6 +17,7 @@ import AdminProducts from "../pages/admin/Products";
 import SellerProducts from "../pages/seller/Products";
 import AdminInventory from "../pages/admin/Inventory";
 import SellerInventory from "../pages/seller/Inventory";
+import ZonasCobertura from "../pages/admin/ZonasCobertura";
 
 function AppRoutes() {
   return (
@@ -35,6 +37,14 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["cliente"]}>
             <Direcciones />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/carrito"
+        element={
+          <RoleGuard roles={["cliente"]}>
+            <Cart />
           </RoleGuard>
         }
       />
@@ -91,6 +101,15 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["vendedor"]}>
             <SellerInventory />
+          </RoleGuard>
+        }
+      />
+      {/* RF-026: zonas de cobertura y tarifas de envío (solo admin). */}
+      <Route
+        path="/admin/envios"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <ZonasCobertura />
           </RoleGuard>
         }
       />

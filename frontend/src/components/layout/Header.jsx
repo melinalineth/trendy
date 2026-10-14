@@ -1,8 +1,19 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import SearchBar from "../products/SearchBar";
+import { useAuth } from "../../hooks/useAuth";
+import { useCarritoContador } from "../../hooks/useCarritoContador";
 import "./Header.css";
 
 const Header = ({ title = "Mi aplicación", subtitle }) => {
+  const { usuario, isAuthenticated } = useAuth();
+  const cantidadCarrito = useCarritoContador();
+
+  // Solo el cliente (o quien todavía no inició sesión, que al entrar al
+  // carrito pasa por el login) tiene carrito: vendedor y admin no lo ven.
+  const rol = usuario?.rol?.nombre;
+  const mostrarCarrito = !isAuthenticated || rol === "cliente";
+
   return (
     <header className="app-header">
       <div className="header-content">
@@ -15,10 +26,20 @@ const Header = ({ title = "Mi aplicación", subtitle }) => {
     👤
   </button>
 
-  <a href="/carrito" className="header__cart">
-    🛒
-    <span className="header__cart-count">0</span>
-  </a>
+  {mostrarCarrito && (
+    <Link
+      to="/carrito"
+      className="header__cart"
+      aria-label={
+        cantidadCarrito > 0
+          ? `Carrito, ${cantidadCarrito} producto(s)`
+          : "Carrito"
+      }
+    >
+      🛒
+      <span className="header__cart-count">{cantidadCarrito}</span>
+    </Link>
+  )}
 </div>
       </div>
     </header>
