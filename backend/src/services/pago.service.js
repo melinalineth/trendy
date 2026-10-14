@@ -7,25 +7,34 @@
 // formatea como { error: { codigo, mensaje, detalles } } (DDS §5.3) sin tener
 // que registrarlos, igual que los de inventario y zonas.
 //
-// Flujo de estados vigente (Pedido / Pago):
-//   Mercado Pago, webhook "approved": Pedido PENDIENTE -> PAGO_APROBADO ->
-//     CONFIRMADO; Pago APROBADO (el stock ya se descontó al crear el pedido).
-//   Mercado Pago, webhook "rejected": Pedido PENDIENTE -> PAGO_RECHAZADO; Pago
-//     RECHAZADO; se repone el stock en la misma transacción.
+// Flujo de estados vigente (Pedido / Pago). Política de negocio: un rechazo de
+// pago NO es final; el pedido sigue pagable y el cliente puede reintentar.
+//   Pedido "pagable": PENDIENTE (y los legados PAGO_RECHAZADO / PAGO_PENDIENTE,
+//     por compatibilidad con datos que pudieran existir).
+//   Webhook "approved" sobre un pedido pagable: Pedido -> PAGO_APROBADO ->
+//     CONFIRMADO; Pago APROBADO (aunque antes hubiera un intento RECHAZADO).
+//     El stock ya se descontó al crear el pedido: no se toca.
+//   Webhook "rejected" sobre un pedido pagable: se registra el intento (Pago
+//     RECHAZADO con el paymentId); el Pedido NO cambia y el stock NO se repone.
+//   Webhook "approved" sobre un pedido CANCELADO: Pago APROBADO, el Pedido
+//     sigue CANCELADO, 200 { requiereReembolso: true } + log JSON
+//     PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO (reconciliación: Pedido CANCELADO +
+//     Pago APROBADO). "rejected" sobre CANCELADO: 200 sin cambios.
 //   Otros status (pending, in_process...): no cambian nada.
-//   Eventos repetidos o tardíos con el Pago ya APROBADO (mismo paymentId, otro
-//     paymentId aprobado, o un "rejected") -> 200 sin cambios (RN-009).
+//   Mismo evento repetido (mismo resultado y paymentId), u otro evento con el
+//     Pago ya APROBADO (un "rejected" tardío, o un segundo "approved", que se
+//     loguea como PAGO_DUPLICADO_APROBADO): 200 sin cambios (RN-009).
 //   Contra entrega: Pago PENDIENTE al registrarlo (el Pedido no cambia) ->
 //     APROBADO cuando admin/vendedor confirma la recepción.
-// PENDIENTE DE DECISIÓN DE NEGOCIO: qué hacer si llega un "approved" después
-// de un "rejected" (reintento del cliente en Checkout Pro). Hoy el pedido ya
-// está PAGO_RECHAZADO y el evento responde 409.
+// IMPORTANTE: el stock de un pedido con pago rechazado queda retenido hasta
+// que se cancele (Fase B: cancelación + vencidos con reposición bajo el mismo
+// lock, solo si no hubo pago aprobado). inventario.reponerPorPedido queda para
+// eso.
 
 const prisma = require("../config/prisma");
 const pedidoRepository = require("../repositories/pedido.repository");
 const pagoRepository = require("../repositories/pago.repository");
 const envioRepository = require("../repositories/envio.repository");
-const inventarioRepository = require("../repositories/inventario.repository");
 
 const {
   MercadoPagoConfig,
@@ -114,6 +123,27 @@ class ConfiguracionPagosError extends Error {
 
 const ROLES_PERSONAL = ["admin", "vendedor"];
 
+// Estados de Pedido sobre los que se puede (re)intentar pagar con Mercado
+// Pago. PAGO_RECHAZADO y PAGO_PENDIENTE son legados: con la política actual un
+// rechazo deja el pedido PENDIENTE, pero puede haber datos con esos estados.
+const ESTADOS_PEDIDO_PAGABLES = Object.freeze(["PENDIENTE", "PAGO_RECHAZADO", "PAGO_PENDIENTE"]);
+
+// Vigencia de la preferencia de Checkout Pro (MERCADOPAGO_PREFERENCIA_HORAS):
+// entero de 1 a 168 (una semana); cualquier otro valor usa el default.
+const HORAS_PREFERENCIA_DEFAULT = 24;
+const HORAS_PREFERENCIA_MAXIMO = 168;
+
+function horasDeVigenciaPreferencia() {
+  const texto = (process.env.MERCADOPAGO_PREFERENCIA_HORAS ?? "").trim();
+
+  if (!/^\d+$/.test(texto)) {
+    return HORAS_PREFERENCIA_DEFAULT;
+  }
+
+  const horas = Number(texto);
+  return horas >= 1 && horas <= HORAS_PREFERENCIA_MAXIMO ? horas : HORAS_PREFERENCIA_DEFAULT;
+}
+
 // RF-036 anti-replay: diferencia máxima, en SEGUNDOS, entre el `ts` de la
 // firma y el reloj del servidor (WebhookSignatureValidator compara
 // |ahora - ts*1000| / 1000 contra este valor).
@@ -194,7 +224,7 @@ async function crearPreferencia(pedidoId, usuarioId) {
     throw new PedidoNoEncontradoError();
   }
 
-  if (pedido.estado !== "PENDIENTE") {
+  if (!ESTADOS_PEDIDO_PAGABLES.includes(pedido.estado)) {
     throw new PagoInvalidoError("Solo se pueden pagar pedidos pendientes", "PEDIDO_NO_PENDIENTE");
   }
 
@@ -257,11 +287,20 @@ async function crearPreferencia(pedidoId, usuarioId) {
 
   const preference = new Preference(obtenerClienteMercadoPago());
 
+  // La preferencia vence: un link de pago viejo no debe poder usarse días
+  // después (el pedido podría haberse cancelado). ISO 8601, como pide el SDK
+  // (commonTypes.d.ts: expiration_date_from / expiration_date_to).
+  const ahora = new Date();
+  const vence = new Date(ahora.getTime() + horasDeVigenciaPreferencia() * 60 * 60 * 1000);
+
   let resultado;
   try {
     resultado = await preference.create({
       body: {
         items,
+        expires: true,
+        expiration_date_from: ahora.toISOString(),
+        expiration_date_to: vence.toISOString(),
         external_reference: String(pedido.id),
         metadata: {
           pedido_id: pedido.id,
@@ -427,31 +466,54 @@ async function procesarWebhook(payload, firma) {
       return { recibido: true, procesado: false };
     }
 
-    // Idempotencia: el mismo resultado ya aplicado no se procesa de nuevo.
-    if (pagoActual?.estado === estadoPago) {
+    // Idempotencia: el MISMO intento (mismo resultado y mismo paymentId) ya
+    // registrado no se procesa de nuevo. Un rechazo NO es final: un intento
+    // distinto (otro paymentId) sí se procesa.
+    if (pagoActual?.estado === estadoPago && pagoActual.referenciaExterna === paymentId) {
       return { recibido: true, procesado: false };
     }
 
-    const monto = Number(pagoMP.transaction_amount);
+    const resultadoPago = {
+      pedidoId,
+      metodo: "MERCADO_PAGO",
+      estado: estadoPago,
+      referenciaExterna: paymentId,
+      monto: Number(pagoMP.transaction_amount),
+    };
+
+    if (bloqueado.estado === "CANCELADO") {
+      // Un rechazo sobre un pedido cancelado no aporta nada.
+      if (estadoPago === "RECHAZADO") {
+        return { recibido: true, procesado: false };
+      }
+
+      // Pagó un pedido que ya estaba cancelado: se guarda el Pago APROBADO
+      // (la señal de reconciliación es Pedido CANCELADO + Pago APROBADO) sin
+      // tocar el pedido ni el stock, se responde 200 para cortar los
+      // reintentos y se deja una línea JSON para gestionar el reembolso.
+      await pagoRepository.guardarResultado(resultadoPago, tx);
+      console.error(
+        JSON.stringify({
+          evento: "PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO",
+          pedidoId,
+          paymentId,
+          monto: resultadoPago.monto,
+        })
+      );
+      return { recibido: true, procesado: false, requiereReembolso: true };
+    }
 
     if (estadoPago === "APROBADO") {
-      if (bloqueado.estado !== "PENDIENTE" && bloqueado.estado !== "PAGO_APROBADO") {
+      if (!ESTADOS_PEDIDO_PAGABLES.includes(bloqueado.estado) && bloqueado.estado !== "PAGO_APROBADO") {
         throw new PagoInvalidoError(
           "El pedido ya no está en un estado válido para aprobar el pago",
           "PEDIDO_NO_PENDIENTE"
         );
       }
 
-      await pagoRepository.guardarResultado(
-        {
-          pedidoId,
-          metodo: "MERCADO_PAGO",
-          estado: "APROBADO",
-          referenciaExterna: paymentId,
-          monto,
-        },
-        tx
-      );
+      // Si antes hubo un intento rechazado, el Pago pasa de RECHAZADO a
+      // APROBADO con el paymentId del intento aprobado.
+      await pagoRepository.guardarResultado(resultadoPago, tx);
 
       // Registrar el estado intermedio y luego confirmar el pedido.
       await pedidoRepository.actualizarEstado(pedidoId, "PAGO_APROBADO", tx);
@@ -463,36 +525,14 @@ async function procesarWebhook(payload, firma) {
       return { recibido: true, procesado: true };
     }
 
-    // Rechazado: se libera el stock reservado al crear el pedido, en la misma
-    // transacción que el cambio de estado (todo o nada).
-    if (bloqueado.estado !== "PENDIENTE") {
+    // Rechazado: un rechazo NO es final. Se registra el intento y el pedido
+    // queda como está (pagable: el cliente puede reintentar). El stock NO se
+    // repone: queda retenido hasta que el pedido se cancele (Fase B).
+    if (!ESTADOS_PEDIDO_PAGABLES.includes(bloqueado.estado)) {
       throw new PagoInvalidoError("El pedido ya no está pendiente de pago", "PEDIDO_NO_PENDIENTE");
     }
 
-    // Las líneas y el dueño del pedido no cambian después de crearlo: se usan
-    // los leídos antes de la transacción.
-    await inventarioRepository.reponerPorPedido(
-      pedido.detalles.map(({ varianteId, cantidad }) => ({ varianteId, cantidad })),
-      {
-        usuarioId: pedido.usuarioId,
-        pedidoId,
-        motivo: "Pedido rechazado",
-        tx,
-      }
-    );
-
-    await pagoRepository.guardarResultado(
-      {
-        pedidoId,
-        metodo: "MERCADO_PAGO",
-        estado: "RECHAZADO",
-        referenciaExterna: paymentId,
-        monto,
-      },
-      tx
-    );
-
-    await pedidoRepository.actualizarEstado(pedidoId, "PAGO_RECHAZADO", tx);
+    await pagoRepository.guardarResultado(resultadoPago, tx);
 
     return { recibido: true, procesado: true };
   });

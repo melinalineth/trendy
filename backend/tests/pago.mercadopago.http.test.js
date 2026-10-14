@@ -183,6 +183,78 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       assert.ok(body.items.some((i) => /env[ií]o/i.test(i.title) && i.unit_price === 12000));
     });
 
+    describe("expiración de la preferencia (MERCADOPAGO_PREFERENCIA_HORAS)", () => {
+      const HORA_MS = 60 * 60 * 1000;
+      const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$/;
+
+      // Crea una preferencia con la variable en `valor` (undefined = sin
+      // definir) y devuelve el body que recibió el SDK + el instante del envío.
+      async function preferenciaCon(valor) {
+        const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        if (valor === undefined) delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        else process.env.MERCADOPAGO_PREFERENCIA_HORAS = valor;
+
+        try {
+          const pedido = await pedidoDe(cliente);
+          mockCrearPreferencia.mock.resetCalls();
+          mockCrearPreferencia.mock.mockImplementation(async () => ({
+            id: "pref-exp",
+            init_point: "https://mp.test/pref-exp",
+          }));
+          const antes = Date.now();
+          const r = await api("POST", ruta, {
+            token: cliente.token,
+            body: { pedidoId: pedido.id },
+          });
+          const despues = Date.now();
+          assert.equal(r.status, 200, JSON.stringify(r.body));
+          return { body: mockCrearPreferencia.mock.calls[0].arguments[0].body, antes, despues };
+        } finally {
+          if (anterior === undefined) delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+          else process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
+        }
+      }
+
+      function assertVentana({ body, antes, despues }, horas) {
+        assert.equal(body.expires, true);
+        assert.match(body.expiration_date_from, ISO_8601);
+        assert.match(body.expiration_date_to, ISO_8601);
+        const desde = Date.parse(body.expiration_date_from);
+        const hasta = Date.parse(body.expiration_date_to);
+        // `desde` es "ahora" (tolerancia de 1 s por el redondeo a ms).
+        assert.ok(desde >= antes - 1000 && desde <= despues + 1000, body.expiration_date_from);
+        assert.equal(hasta - desde, horas * HORA_MS);
+      }
+
+      it("sin la variable: expira a las 24 horas", async () => {
+        assertVentana(await preferenciaCon(undefined), 24);
+      });
+
+      it("MERCADOPAGO_PREFERENCIA_HORAS=48: expira a las 48 horas (y 1 y 168 son válidos)", async () => {
+        assertVentana(await preferenciaCon("48"), 48);
+        assertVentana(await preferenciaCon("1"), 1);
+        assertVentana(await preferenciaCon("168"), 168);
+      });
+
+      for (const invalido of ["0", "169", "-5", "2.5", "abc", "", " 12x"]) {
+        it(`MERCADOPAGO_PREFERENCIA_HORAS=${JSON.stringify(invalido)} inválida -> default 24 horas`, async () => {
+          assertVentana(await preferenciaCon(invalido), 24);
+        });
+      }
+    });
+
+    it("pedido en estado legado PAGO_RECHAZADO sigue siendo pagable -> 200", async () => {
+      const pedido = await pedidoDe(cliente, { estado: "PAGO_RECHAZADO" });
+      mockCrearPreferencia.mock.mockImplementation(async () => ({
+        id: "pref-legado",
+        init_point: "https://mp.test/pref-legado",
+      }));
+
+      const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+    });
+
     it("un monto enviado por el cliente se rechaza (400): el body solo acepta pedidoId", async () => {
       const pedido = await pedidoDe(cliente);
 
@@ -343,7 +415,10 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       assert.equal(await stockDe(variante.id), 8);
     });
 
-    it("pago RECHAZADO: Pago RECHAZADO, Pedido PAGO_RECHAZADO y se repone el stock descontado", async () => {
+    // Política de negocio: un rechazo NO es final. Se registra el intento, el
+    // pedido sigue pagable y el stock queda retenido (no se repone) hasta que
+    // el pedido se cancele (Fase B).
+    it("pago RECHAZADO: registra el intento, el pedido sigue PENDIENTE y el stock NO se repone", async () => {
       // Stock 3 = ya descontadas las 2 unidades del pedido al crearlo.
       const variante = await crearVariante({ stock: 3 });
       const pedido = await pedidoDe(cliente, { variante });
@@ -355,19 +430,16 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(r.body.procesado, true);
-      assert.equal((await pagoEnBase(pedido.id)).estado, "RECHAZADO");
-      assert.equal(await estadoPedido(pedido.id), "PAGO_RECHAZADO");
-      assert.equal(await stockDe(variante.id), 5);
-
-      const movimientos = await movimientosDe(variante.id);
-      assert.equal(movimientos.length, 1);
-      assert.equal(movimientos[0].tipoAjuste, "ENTRADA");
-      assert.equal(movimientos[0].cantidad, 2);
-      assert.equal(movimientos[0].motivo, `Pedido rechazado (pedido #${pedido.id})`);
-      assert.equal(movimientos[0].usuarioId, cliente.id);
+      const pago = await pagoEnBase(pedido.id);
+      assert.equal(pago.estado, "RECHAZADO");
+      assert.equal(pago.metodo, "MERCADO_PAGO");
+      assert.equal(pago.referenciaExterna, "9003");
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
     });
 
-    it("evento RECHAZADO repetido (RN-009): no repone el stock dos veces", async () => {
+    it("evento RECHAZADO repetido (mismo paymentId, RN-009): 200 procesado:false, sin cambios", async () => {
       const variante = await crearVariante({ stock: 3 });
       const pedido = await pedidoDe(cliente, { variante });
       mockObtenerPago.mock.mockImplementation(async ({ id }) =>
@@ -375,15 +447,18 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       );
 
       assert.equal((await webhook(9004)).status, 200);
+      const pagoTrasPrimero = await pagoEnBase(pedido.id);
       const r = await webhook(9004);
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(r.body.procesado, false);
-      assert.equal(await stockDe(variante.id), 5);
-      assert.equal((await movimientosDe(variante.id)).length, 1);
+      assert.deepEqual(await pagoEnBase(pedido.id), pagoTrasPrimero);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
     });
 
-    it("eventos RECHAZADO repetidos SIMULTÁNEOS: el stock se repone una sola vez", async () => {
+    it("eventos RECHAZADO repetidos SIMULTÁNEOS: un solo registro, stock intacto", async () => {
       const variante = await crearVariante({ stock: 3 });
       const pedido = await pedidoDe(cliente, { variante });
       mockObtenerPago.mock.mockImplementation(async ({ id }) =>
@@ -398,9 +473,179 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         JSON.stringify(respuestas.map((r) => r.body))
       );
       assert.equal(respuestas.filter((r) => r.body.procesado === true).length, 1);
-      assert.equal(await stockDe(variante.id), 5);
-      assert.equal((await movimientosDe(variante.id)).length, 1);
       assert.equal(await prisma.pago.count({ where: { pedidoId: pedido.id } }), 1);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
+    });
+
+    it("un segundo intento RECHAZADO (otro paymentId) actualiza la referencia del intento", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "rejected" })
+      );
+
+      assert.equal((await webhook(9006)).status, 200);
+      const r = await webhook(9007);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.procesado, true);
+      const pago = await pagoEnBase(pedido.id);
+      assert.equal(pago.estado, "RECHAZADO");
+      assert.equal(pago.referenciaExterna, "9007");
+      assert.equal(await prisma.pago.count({ where: { pedidoId: pedido.id } }), 1);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+    });
+
+    it("RECHAZADO y después APROBADO (reintento con otro paymentId): pedido CONFIRMADO, Pago APROBADO, stock intacto", async () => {
+      const variante = await crearVariante({ stock: 3 });
+      const pedido = await pedidoDe(cliente, { variante });
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: id === "9008" ? "rejected" : "approved" })
+      );
+
+      assert.equal((await webhook(9008)).status, 200);
+      assert.equal((await pagoEnBase(pedido.id)).estado, "RECHAZADO");
+
+      const r = await webhook(9009);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.procesado, true);
+      const pago = await pagoEnBase(pedido.id);
+      assert.equal(pago.estado, "APROBADO");
+      assert.equal(pago.referenciaExterna, "9009");
+      assert.equal(await prisma.pago.count({ where: { pedidoId: pedido.id } }), 1);
+      assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+      // Ni repuesto por el rechazo ni re-descontado por la aprobación.
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
+    });
+
+    it("APROBADO y RECHAZADO SIMULTÁNEOS sobre el mismo pedido: el resultado final es siempre aprobado", async () => {
+      for (let ronda = 0; ronda < 4; ronda++) {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await pedidoDe(cliente, { variante });
+        const aprobado = String(9400 + ronda * 10);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: id === aprobado ? "approved" : "rejected" })
+        );
+
+        // El aprobado en distintas posiciones entre varios rechazos.
+        const ids = [1, 2, 3].map((i) => String(Number(aprobado) + i));
+        ids.splice(ronda % 4, 0, aprobado);
+        const respuestas = await Promise.all(ids.map((id) => webhook(id)));
+
+        assert.deepEqual(
+          respuestas.map((r) => r.status),
+          Array(ids.length).fill(200),
+          JSON.stringify(respuestas.map((r) => r.body))
+        );
+        const pago = await pagoEnBase(pedido.id);
+        assert.equal(pago.estado, "APROBADO");
+        assert.equal(pago.referenciaExterna, aprobado);
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+        assert.equal(await stockDe(variante.id), 3);
+        assert.equal((await movimientosDe(variante.id)).length, 0);
+      }
+    });
+
+    it("estados legados PAGO_RECHAZADO y PAGO_PENDIENTE siguen siendo pagables (approved -> CONFIRMADO)", async () => {
+      for (const [estado, id] of [
+        ["PAGO_RECHAZADO", 9501],
+        ["PAGO_PENDIENTE", 9502],
+      ]) {
+        const pedido = await pedidoDe(cliente, { estado });
+        mockObtenerPago.mock.mockImplementation(async ({ id: pid }) =>
+          pagoMercadoPago(pedido, { id: pid, status: "approved" })
+        );
+
+        const r = await webhook(id);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.procesado, true);
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+        assert.equal((await pagoEnBase(pedido.id)).estado, "APROBADO");
+      }
+    });
+
+    it("APROBADO sobre un pedido CANCELADO: 200 requiereReembolso, Pago APROBADO, pedido sigue CANCELADO y log estructurado", async () => {
+      const variante = await crearVariante({ stock: 3 });
+      const pedido = await pedidoDe(cliente, { variante, estado: "CANCELADO" });
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+
+      const mockLog = mock.method(console, "error", () => {});
+      let r;
+      try {
+        r = await webhook(9601);
+      } finally {
+        mockLog.mock.restore();
+      }
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(r.body, { recibido: true, procesado: false, requiereReembolso: true });
+      const pago = await pagoEnBase(pedido.id);
+      assert.equal(pago.estado, "APROBADO");
+      assert.equal(pago.metodo, "MERCADO_PAGO");
+      assert.equal(pago.referenciaExterna, "9601");
+      assert.equal(Number(pago.monto), Number(pedido.total));
+      assert.equal(await estadoPedido(pedido.id), "CANCELADO");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
+
+      const lineas = mockLog.mock.calls.map((c) => c.arguments.join(" "));
+      const linea = lineas.find((l) => l.includes("PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO"));
+      assert.ok(linea, `no se logueó el evento: ${JSON.stringify(lineas)}`);
+      assert.ok(!linea.includes("\n"));
+      assert.deepEqual(JSON.parse(linea), {
+        evento: "PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO",
+        pedidoId: pedido.id,
+        paymentId: "9601",
+        monto: Number(pedido.total),
+      });
+      assert.ok(!linea.includes(process.env.MERCADOPAGO_ACCESS_TOKEN));
+    });
+
+    it("APROBADO sobre CANCELADO después de un intento RECHAZADO: el Pago pasa a APROBADO, el pedido no cambia", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: id === "9602" ? "rejected" : "approved" })
+      );
+      assert.equal((await webhook(9602)).status, 200);
+      await prisma.pedido.update({ where: { id: pedido.id }, data: { estado: "CANCELADO" } });
+
+      const mockLog = mock.method(console, "error", () => {});
+      let r;
+      try {
+        r = await webhook(9603);
+      } finally {
+        mockLog.mock.restore();
+      }
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.requiereReembolso, true);
+      const pago = await pagoEnBase(pedido.id);
+      assert.equal(pago.estado, "APROBADO");
+      assert.equal(pago.referenciaExterna, "9603");
+      assert.equal(await estadoPedido(pedido.id), "CANCELADO");
+    });
+
+    it("RECHAZADO sobre un pedido CANCELADO: 200 no-op, sin Pago", async () => {
+      const variante = await crearVariante({ stock: 3 });
+      const pedido = await pedidoDe(cliente, { variante, estado: "CANCELADO" });
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "rejected" })
+      );
+
+      const r = await webhook(9604);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.procesado, false);
+      assert.equal(await pagoEnBase(pedido.id), null);
+      assert.equal(await estadoPedido(pedido.id), "CANCELADO");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
     });
 
     it("pago pendiente / en proceso: 200 sin cambiar el pedido (RF-035)", async () => {
