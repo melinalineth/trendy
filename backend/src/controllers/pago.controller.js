@@ -1,91 +1,77 @@
-
 const pagoService = require("../services/pago.service");
+const {
+  validarPreferenciaMercadoPago,
+  validarPagoContraEntrega,
+  validarWebhookMercadoPago,
+  validarPedidoIdParam,
+} = require("../dtos/pago.dto");
 
-// Registrar pago contra entrega
-const registrarContraEntrega = async (req, res) => {
-  try {
-    const { pedidoId } = req.body;
-    const usuarioId = req.user.id;
+// Sprint 4 / MOD-07 (DDS §3): pagos con Mercado Pago y contra entrega. Los
+// roles se restringen en pago.routes.js (roleGuard). Los errores (400 de
+// validación, 404/409 de dominio, 401 de firma, 502 de la pasarela) se
+// propagan con throw: Express 5 reenvía las rejections async a
+// errorHandler.js, que responde { error: { codigo, mensaje, detalles } }
+// (DDS §5.3). RN-003: el usuario sale SIEMPRE de req.usuario (JWT verificado
+// por auth.js), nunca del body.
 
-    const pago = await pagoService.registrarContraEntrega({
-      pedidoId,
-      usuarioId,
-    });
+// POST /api/v1/pagos/mercadopago/preferencia (RF-034)
+async function crearPreferencia(req, res) {
+  const { pedidoId } = validarPreferenciaMercadoPago(req.body);
 
-    return res.status(201).json(pago);
-  } catch (error) {
-    return res.status(500).json({
-      mensaje: "Error al registrar el pago contra entrega",
-      error: error.message,
-    });
-  }
-};
+  const resultado = await pagoService.crearPreferencia(pedidoId, req.usuario.id);
 
-// Consultar pago de un pedido
-const obtenerPagoPorPedido = async (req, res) => {
-  try {
-    const pedidoId = Number(req.params.id);
-    const usuarioId = req.user.id;
-    const rol = req.user.rol;
+  return res.status(200).json(resultado);
+}
 
-    const pago = await pagoService.obtenerPagoPorPedido({
-      pedidoId,
-      usuarioId,
-      rol,
-    });
+// POST /api/v1/pagos/mercadopago/webhook (RF-035, RF-036). Público: lo llama
+// Mercado Pago; la seguridad es la firma x-signature (se valida en el
+// service). Responde 200 aunque el evento ya se haya procesado (RN-009):
+// Mercado Pago reintenta mientras no reciba 200.
+async function recibirWebhook(req, res) {
+  const payload = validarWebhookMercadoPago(req.body);
 
-    return res.status(200).json(pago);
-  } catch (error) {
-    if (error.statusCode === 404) {
-      return res.status(404).json({
-        mensaje: error.message,
-      });
-    }
+  const firma = {
+    xSignature: req.get("x-signature"),
+    xRequestId: req.get("x-request-id"),
+    dataId: payload.data?.id ?? "",
+  };
 
-    if (error.statusCode === 403) {
-      return res.status(403).json({
-        mensaje: error.message,
-      });
-    }
+  const resultado = await pagoService.procesarWebhook(payload, firma);
 
-    return res.status(500).json({
-      mensaje: "Error al consultar el pago",
-      error: error.message,
-    });
-  }
-};
+  return res.status(200).json(resultado);
+}
 
-// Confirmar recepción del pago (admin/vendedor)
-const confirmarRecepcion = async (req, res) => {
-  try {
-    const pedidoId = Number(req.params.pedidoId);
-    const usuarioId = req.user.id;
+// POST /api/v1/pagos/contra-entrega (RF-037)
+async function registrarContraEntrega(req, res) {
+  const { pedidoId } = validarPagoContraEntrega(req.body);
 
-    const pago = await pagoService.confirmarRecepcion({
-      pedidoId,
-      usuarioId,
-    });
+  const pago = await pagoService.registrarContraEntrega(pedidoId, req.usuario.id);
 
-    return res.status(200).json({
-      mensaje: "Recepción del pago confirmada correctamente",
-      pago,
-    });
-  } catch (error) {
-    if (error.statusCode === 404) {
-      return res.status(404).json({
-        mensaje: error.message,
-      });
-    }
+  return res.status(201).json(pago);
+}
 
-    return res.status(500).json({
-      mensaje: "Error al confirmar la recepción del pago",
-      error: error.message,
-    });
-  }
-};
+// GET /api/v1/pedidos/:id/pago (RF-038)
+async function consultarEstadoPago(req, res) {
+  const pedidoId = validarPedidoIdParam(req.params.id);
+
+  const pago = await pagoService.consultarEstadoPago(pedidoId, req.usuario.id, req.usuario.rol);
+
+  return res.status(200).json(pago);
+}
+
+// PATCH /api/v1/pagos/:pedidoId/confirmar-recepcion (RF-037, admin/vendedor)
+async function confirmarRecepcion(req, res) {
+  const pedidoId = validarPedidoIdParam(req.params.pedidoId);
+
+  const pago = await pagoService.confirmarRecepcionContraEntrega(pedidoId);
+
+  return res.status(200).json(pago);
+}
 
 module.exports = {
+  crearPreferencia,
+  recibirWebhook,
   registrarContraEntrega,
-  obtenerPagoPorPedido,
+  consultarEstadoPago,
   confirmarRecepcion,
 };
