@@ -17,6 +17,7 @@ import AdminProducts from "../pages/admin/Products";
 import SellerProducts from "../pages/seller/Products";
 import AdminInventory from "../pages/admin/Inventory";
 import SellerInventory from "../pages/seller/Inventory";
+import ZonasCobertura from "../pages/admin/ZonasCobertura";
 
 function AppRoutes() {
   return (
@@ -100,6 +101,15 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["vendedor"]}>
             <SellerInventory />
+          </RoleGuard>
+        }
+      />
+      {/* RF-026: zonas de cobertura y tarifas de envío (solo admin). */}
+      <Route
+        path="/admin/envios"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <ZonasCobertura />
           </RoleGuard>
         }
       />
