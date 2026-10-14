@@ -39,6 +39,7 @@ const creado = {
   categorias: [],
   productos: [],
   variantes: [],
+  pedidos: [],
 };
 
 function sufijo() {
@@ -62,8 +63,10 @@ async function iniciarServidor() {
 }
 
 // Cliente HTTP mínimo: devuelve { status, body } con el JSON ya parseado.
-async function pedir(baseUrl, metodo, ruta, { token, body } = {}) {
-  const headers = {};
+// `headers` permite sumar cabeceras propias (p. ej. x-signature del webhook de
+// Mercado Pago).
+async function pedir(baseUrl, metodo, ruta, { token, body, headers: extra } = {}) {
+  const headers = { ...extra };
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
 
@@ -131,7 +134,12 @@ async function crearVariante({ precio = "19990.50", stock = 5, estado = "ACTIVO"
 }
 
 // Zona de cobertura con ciudad/departamento únicos (hay unique por ambos).
-async function crearZona({ costo = "12000.00", estadoZona = "ACTIVO", estadoTarifa = "ACTIVO" } = {}) {
+async function crearZona({
+  costo = "12000.00",
+  estadoZona = "ACTIVO",
+  estadoTarifa = "ACTIVO",
+  permiteContraEntrega = false,
+} = {}) {
   const suf = sufijo();
 
   const zona = await prisma.zonaCobertura.create({
@@ -140,6 +148,7 @@ async function crearZona({ costo = "12000.00", estadoZona = "ACTIVO", estadoTari
       departamento: `Depto-${suf}`,
       ciudad: `Ciudad-${suf}`,
       estado: estadoZona,
+      permiteContraEntrega,
       tarifas: { create: { costo, estado: estadoTarifa } },
     },
   });
@@ -173,9 +182,60 @@ async function crearDireccion(usuarioId, { ciudad, departamento } = {}) {
   return direccion;
 }
 
+// Pedido creado DIRECTO con prisma (la creación por HTTP es Sprint 4 / Fase
+// B). `lineas` es [{ variante, cantidad, precioUnitario? }]; subtotal y total
+// se calculan acá (total = subtotal + costoEnvio). No toca el stock: cada test
+// decide si simula el descuento previo.
+async function crearPedido({
+  usuarioId,
+  direccionId,
+  lineas,
+  costoEnvio = 0,
+  metodoPago = "MERCADO_PAGO",
+  estado = "PENDIENTE",
+}) {
+  const detalles = lineas.map(({ variante, cantidad, precioUnitario = "10000.00" }) => ({
+    varianteId: variante.id,
+    cantidad,
+    precioUnitario,
+  }));
+  const subtotal = detalles.reduce(
+    (suma, d) => suma + Number(d.precioUnitario) * d.cantidad,
+    0
+  );
+
+  const pedido = await prisma.pedido.create({
+    data: {
+      numero: `TEST-${sufijo()}`,
+      usuarioId,
+      direccionId,
+      subtotal: subtotal.toFixed(2),
+      costoEnvio: Number(costoEnvio).toFixed(2),
+      total: (subtotal + Number(costoEnvio)).toFixed(2),
+      metodoPago,
+      estado,
+      detalles: { create: detalles },
+    },
+    include: { detalles: true },
+  });
+  creado.pedidos.push(pedido.id);
+
+  return pedido;
+}
+
 // Borra todo lo creado, respetando el orden de las FKs, y cierra Prisma.
 async function limpiar() {
-  const { usuarios, direcciones, zonas, categorias, productos, variantes } = creado;
+  const { usuarios, direcciones, zonas, categorias, productos, variantes, pedidos } = creado;
+
+  // Pedidos (y lo que cuelga de ellos) antes que usuarios, direcciones y
+  // variantes, que son FKs del pedido y de sus detalles.
+  const filtroPedidos = {
+    OR: [{ id: { in: pedidos } }, { usuarioId: { in: usuarios } }],
+  };
+  await prisma.pago.deleteMany({ where: { pedido: filtroPedidos } });
+  await prisma.infoEnvio.deleteMany({ where: { pedido: filtroPedidos } });
+  await prisma.detallePedido.deleteMany({ where: { pedido: filtroPedidos } });
+  await prisma.pedido.deleteMany({ where: filtroPedidos });
 
   // Los movimientos de inventario tienen FK a variante y usuario: van primero.
   await prisma.inventarioMovimiento.deleteMany({
@@ -214,6 +274,7 @@ module.exports = {
   crearZona,
   registrarZona,
   crearDireccion,
+  crearPedido,
   sufijo,
   limpiar,
 };

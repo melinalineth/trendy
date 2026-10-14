@@ -29,4 +29,14 @@ router.patch(
   zonaController.cambiarEstado
 );
 
+// Sprint 4 / RF-037 (RN-006): el admin habilita o deshabilita el pago contra
+// entrega por zona. No está en la tabla del DDS: sin este endpoint
+// permiteContraEntrega (default false) no se podía activar.
+router.patch(
+  "/api/v1/zonas-cobertura/:id/contra-entrega",
+  auth,
+  roleGuard(["admin"]),
+  zonaController.cambiarContraEntrega
+);
+
 module.exports = router;

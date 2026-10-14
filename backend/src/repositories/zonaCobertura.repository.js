@@ -82,6 +82,18 @@ const cambiarEstadoZona = async (id, estado, client = prisma) => {
   });
 };
 
+// Habilitar o deshabilitar el pago contra entrega en una zona (RF-037)
+const cambiarContraEntregaZona = async (id, permiteContraEntrega, client = prisma) => {
+  return await client.zonaCobertura.update({
+    where: {
+      id,
+    },
+    data: {
+      permiteContraEntrega,
+    },
+  });
+};
+
 // Crear una tarifa de envío para una zona
 const crearTarifa = async (
   zonaCoberturaId,
@@ -142,6 +154,7 @@ module.exports = {
   obtenerZona,
   bloquearZona,
   cambiarEstadoZona,
+  cambiarContraEntregaZona,
   crearTarifa,
   listarTarifas,
   cambiarEstadoTarifa,

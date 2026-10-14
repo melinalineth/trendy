@@ -23,6 +23,13 @@ async function descontarPorPedido(items, opciones) {
   return inventarioRepository.descontarPorPedido(items, opciones);
 }
 
+// Sprint 4: simétrica de descontarPorPedido (pago rechazado). Sin endpoint
+// HTTP; la invoca pago.service dentro de su transacción. NO es idempotente:
+// ver la nota en el repository. Opciones: usuarioId, pedidoId, motivo, tx.
+async function reponerPorPedido(items, opciones) {
+  return inventarioRepository.reponerPorPedido(items, opciones);
+}
+
 async function listarPorVariante(varianteId) {
   return inventarioRepository.listarPorVariante(Number(varianteId));
 }
@@ -34,6 +41,7 @@ async function listarTodo() {
 module.exports = {
   registrarAjuste,
   descontarPorPedido,
+  reponerPorPedido,
   listarPorVariante,
   listarTodo,
   VarianteNoEncontradaError: inventarioRepository.VarianteNoEncontradaError,
