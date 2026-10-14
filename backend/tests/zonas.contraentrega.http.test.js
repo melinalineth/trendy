@@ -110,6 +110,9 @@ describe("Habilitar pago contra entrega por zona (RF-037)", () => {
       ["string 'true'", { permiteContraEntrega: "true" }],
       ["número 1", { permiteContraEntrega: 1 }],
       ["null", { permiteContraEntrega: null }],
+      // Estricto como pago.dto: un campo de más (p. ej. intentar cambiar el
+      // estado en la misma request) se rechaza en vez de ignorarse.
+      ["clave extra", { permiteContraEntrega: true, estado: "INACTIVO" }],
     ];
 
     for (const [nombre, body] of bodies) {

@@ -133,9 +133,24 @@ function validarCambiarEstado(body) {
 // implícita.
 function validarCambiarContraEntrega(body) {
   const { permiteContraEntrega } = body || {};
+  const errores = [];
 
   if (typeof permiteContraEntrega !== "boolean") {
-    lanzarValidacion(["permiteContraEntrega es obligatorio y debe ser true o false"]);
+    errores.push("permiteContraEntrega es obligatorio y debe ser true o false");
+  }
+
+  // Estricto (como pago.dto.js): un campo de más se rechaza en vez de
+  // ignorarse en silencio.
+  const extras =
+    body && typeof body === "object"
+      ? Object.keys(body).filter((clave) => clave !== "permiteContraEntrega")
+      : [];
+  if (extras.length > 0) {
+    errores.push(`Campos no permitidos: ${extras.join(", ")}`);
+  }
+
+  if (errores.length > 0) {
+    lanzarValidacion(errores);
   }
 
   return { permiteContraEntrega };
