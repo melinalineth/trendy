@@ -52,6 +52,38 @@ function firmar(
   return `ts=${ts},v1=${v1}`;
 }
 
+// Ejecuta `fn` capturando console.error; devuelve { resultado, lineas } con
+// cada llamada unida en una sola línea de texto.
+async function conLogs(fn) {
+  const mockLog = mock.method(console, "error", () => {});
+  try {
+    const resultado = await fn();
+    return { resultado, lineas: mockLog.mock.calls.map((c) => c.arguments.join(" ")) };
+  } finally {
+    mockLog.mock.restore();
+  }
+}
+
+// Ningún log puede contener el secret del webhook, el access token ni el
+// header x-signature (ni su hash).
+function assertLogsSinSecretos(lineas, firma) {
+  const hash = firma.split("v1=")[1];
+  for (const linea of lineas) {
+    assert.ok(!linea.includes(SECRETO_WEBHOOK), "el log incluye el secret");
+    assert.ok(!linea.includes(process.env.MERCADOPAGO_ACCESS_TOKEN), "el log incluye el token");
+    assert.ok(!linea.includes(firma) && !linea.includes(hash), "el log incluye la firma");
+  }
+}
+
+// Busca el log estructurado de `evento`: exige que sea JSON de UNA línea y
+// devuelve el objeto parseado.
+function logDe(lineas, evento) {
+  const linea = lineas.find((l) => l.includes(`"evento":"${evento}"`));
+  assert.ok(linea, `no se logueó ${evento}: ${JSON.stringify(lineas)}`);
+  assert.ok(!linea.includes("\n"), "el log debe ser de una sola línea");
+  return JSON.parse(linea);
+}
+
 describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
   let servidor;
   let api;
@@ -215,15 +247,29 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         }
       }
 
+      const MARGEN_RELOJ_MS = 60 * 1000;
+
+      // Ventana: desde = ahora - 60 s (margen por reloj adelantado respecto de
+      // Mercado Pago), hasta = ahora + N horas, y date_of_expiration = hasta
+      // (un pago en efectivo/ticket no se acredita después del vencimiento).
       function assertVentana({ body, antes, despues }, horas) {
         assert.equal(body.expires, true);
         assert.match(body.expiration_date_from, ISO_8601);
         assert.match(body.expiration_date_to, ISO_8601);
+        assert.match(body.date_of_expiration, ISO_8601);
+        assert.equal(body.date_of_expiration, body.expiration_date_to);
         const desde = Date.parse(body.expiration_date_from);
         const hasta = Date.parse(body.expiration_date_to);
-        // `desde` es "ahora" (tolerancia de 1 s por el redondeo a ms).
-        assert.ok(desde >= antes - 1000 && desde <= despues + 1000, body.expiration_date_from);
-        assert.equal(hasta - desde, horas * HORA_MS);
+        // Tolerancia de 1 s por el redondeo a ms y el tiempo del request.
+        assert.ok(
+          desde >= antes - MARGEN_RELOJ_MS - 1000 && desde <= despues - MARGEN_RELOJ_MS + 1000,
+          body.expiration_date_from
+        );
+        assert.ok(
+          hasta >= antes + horas * HORA_MS - 1000 && hasta <= despues + horas * HORA_MS + 1000,
+          body.expiration_date_to
+        );
+        assert.equal(hasta - desde, horas * HORA_MS + MARGEN_RELOJ_MS);
       }
 
       it("sin la variable: expira a las 24 horas", async () => {
@@ -236,23 +282,29 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assertVentana(await preferenciaCon("168"), 168);
       });
 
-      for (const invalido of ["0", "169", "-5", "2.5", "abc", "", " 12x"]) {
+      it("espacios alrededor se toleran: ' 12 ' -> 12 horas", async () => {
+        assertVentana(await preferenciaCon(" 12 "), 12);
+      });
+
+      for (const invalido of ["0", "169", "-5", "2.5", "abc", "", " 12x", "1e2", "0x10"]) {
         it(`MERCADOPAGO_PREFERENCIA_HORAS=${JSON.stringify(invalido)} inválida -> default 24 horas`, async () => {
           assertVentana(await preferenciaCon(invalido), 24);
         });
       }
     });
 
-    it("pedido en estado legado PAGO_RECHAZADO sigue siendo pagable -> 200", async () => {
-      const pedido = await pedidoDe(cliente, { estado: "PAGO_RECHAZADO" });
-      mockCrearPreferencia.mock.mockImplementation(async () => ({
-        id: "pref-legado",
-        init_point: "https://mp.test/pref-legado",
-      }));
+    it("solo un pedido PENDIENTE es pagable: PAGO_RECHAZADO / PAGO_PENDIENTE -> 409 PEDIDO_NO_PENDIENTE", async () => {
+      for (const estado of ["PAGO_RECHAZADO", "PAGO_PENDIENTE"]) {
+        const pedido = await pedidoDe(cliente, { estado });
 
-      const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+        const r = await api("POST", ruta, {
+          token: cliente.token,
+          body: { pedidoId: pedido.id },
+        });
 
-      assert.equal(r.status, 200, JSON.stringify(r.body));
+        assertErrorEstandar(r, 409, "PEDIDO_NO_PENDIENTE");
+      }
+      assert.equal(mockCrearPreferencia.mock.callCount(), 0);
     });
 
     it("un monto enviado por el cliente se rechaza (400): el body solo acepta pedidoId", async () => {
@@ -549,24 +601,125 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       }
     });
 
-    it("estados legados PAGO_RECHAZADO y PAGO_PENDIENTE siguen siendo pagables (approved -> CONFIRMADO)", async () => {
-      for (const [estado, id] of [
-        ["PAGO_RECHAZADO", 9501],
-        ["PAGO_PENDIENTE", 9502],
-      ]) {
-        const pedido = await pedidoDe(cliente, { estado });
+    // Solo PENDIENTE es pagable (los estados legados PAGO_RECHAZADO /
+    // PAGO_PENDIENTE no: el flujo viejo ya había repuesto su stock y aprobarlos
+    // generaría sobreventa). Un approved que no se puede aplicar es dinero
+    // cobrado sin pedido confirmado: 409 + log PAGO_APROBADO_NO_APLICADO.
+    const NO_PAGABLES = [
+      "PAGO_RECHAZADO",
+      "PAGO_PENDIENTE",
+      "PAGO_APROBADO",
+      "CONFIRMADO",
+      "EN_PREPARACION",
+      "ENVIADO",
+      "EN_TRANSITO",
+      "ENTREGADO",
+    ];
+
+    it("approved sobre un pedido NO pagable sin Pago APROBADO -> 409 PEDIDO_NO_PENDIENTE, el pedido no cambia (no retrocede) y queda log", async () => {
+      let id = 9700;
+      for (const estado of NO_PAGABLES) {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await pedidoDe(cliente, { variante, estado });
         mockObtenerPago.mock.mockImplementation(async ({ id: pid }) =>
           pagoMercadoPago(pedido, { id: pid, status: "approved" })
         );
+        const paymentId = String(++id);
 
-        const r = await webhook(id);
+        const { resultado: r, lineas } = await conLogs(() => webhook(paymentId));
 
-        assert.equal(r.status, 200, JSON.stringify(r.body));
-        assert.equal(r.body.procesado, true);
-        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
-        assert.equal((await pagoEnBase(pedido.id)).estado, "APROBADO");
+        assertErrorEstandar(r, 409, "PEDIDO_NO_PENDIENTE");
+        assert.equal(await estadoPedido(pedido.id), estado, `el pedido ${estado} cambió de estado`);
+        assert.equal(await pagoEnBase(pedido.id), null);
+        assert.equal(await stockDe(variante.id), 3);
+        assert.deepEqual(logDe(lineas, "PAGO_APROBADO_NO_APLICADO"), {
+          evento: "PAGO_APROBADO_NO_APLICADO",
+          motivo: "PEDIDO_NO_PENDIENTE",
+          pedidoId: pedido.id,
+          paymentId,
+          montoMp: Number(pedido.total),
+          totalPedido: Number(pedido.total),
+        });
       }
     });
+
+    it("rejected sobre un pedido NO pagable -> 409 PEDIDO_NO_PENDIENTE, sin Pago ni cambios", async () => {
+      let id = 9750;
+      for (const estado of NO_PAGABLES) {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await pedidoDe(cliente, { variante, estado });
+        mockObtenerPago.mock.mockImplementation(async ({ id: pid }) =>
+          pagoMercadoPago(pedido, { id: pid, status: "rejected" })
+        );
+
+        const r = await webhook(++id);
+
+        assertErrorEstandar(r, 409, "PEDIDO_NO_PENDIENTE");
+        assert.equal(await estadoPedido(pedido.id), estado);
+        assert.equal(await pagoEnBase(pedido.id), null);
+        assert.equal(await stockDe(variante.id), 3);
+        assert.equal((await movimientosDe(variante.id)).length, 0);
+      }
+    });
+
+    // Reembolsos y contracargos sobre un pago ya aprobado: en esta fase NO se
+    // cambia ni el pedido ni el pago (revocar un pedido confirmado requiere una
+    // política nueva), pero quedan visibles en el log para gestionarlos.
+    for (const [estadoMp, paymentId] of [
+      ["refunded", "9801"],
+      ["charged_back", "9802"],
+    ]) {
+      it(`${estadoMp} sobre un pedido CONFIRMADO con Pago APROBADO: 200 revertido, log PAGO_REVERTIDO_MP y nada cambia`, async () => {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await pedidoDe(cliente, { variante });
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+        assert.equal((await webhook(paymentId)).status, 200);
+        const pagoAprobado = await pagoEnBase(pedido.id);
+        assert.equal(pagoAprobado.estado, "APROBADO");
+
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: estadoMp })
+        );
+        const { resultado: r, lineas } = await conLogs(() => webhook(paymentId));
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(r.body, { recibido: true, procesado: false, revertido: true });
+        assert.deepEqual(logDe(lineas, "PAGO_REVERTIDO_MP"), {
+          evento: "PAGO_REVERTIDO_MP",
+          pedidoId: pedido.id,
+          paymentId,
+          estadoMp,
+          monto: Number(pedido.total),
+        });
+        assert.deepEqual(await pagoEnBase(pedido.id), pagoAprobado);
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+        assert.equal(await stockDe(variante.id), 3);
+        assert.equal((await movimientosDe(variante.id)).length, 0);
+      });
+    }
+
+    for (const estadoMp of ["cancelled", "pending", "in_process"]) {
+      it(`${estadoMp} sobre un Pago ya APROBADO: 200 procesado:false, sin cambios`, async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+        assert.equal((await webhook(9850)).status, 200);
+        const pagoAprobado = await pagoEnBase(pedido.id);
+
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: estadoMp })
+        );
+        const r = await webhook(9850);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.procesado, false);
+        assert.deepEqual(await pagoEnBase(pedido.id), pagoAprobado);
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+      });
+    }
 
     it("APROBADO sobre un pedido CANCELADO: 200 requiereReembolso, Pago APROBADO, pedido sigue CANCELADO y log estructurado", async () => {
       const variante = await crearVariante({ stock: 3 });
@@ -662,17 +815,25 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
     });
 
-    it("el monto pagado no coincide con el total -> 409 MONTO_NO_COINCIDE, nada cambia", async () => {
+    it("el monto pagado no coincide con el total -> 409 MONTO_NO_COINCIDE, nada cambia y queda log", async () => {
       const pedido = await pedidoDe(cliente);
       mockObtenerPago.mock.mockImplementation(async ({ id }) =>
         pagoMercadoPago(pedido, { id, status: "approved", monto: 100 })
       );
 
-      const r = await webhook(9007);
+      const { resultado: r, lineas } = await conLogs(() => webhook(9007));
 
       assertErrorEstandar(r, 409, "MONTO_NO_COINCIDE");
       assert.equal(await pagoEnBase(pedido.id), null);
       assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.deepEqual(logDe(lineas, "PAGO_APROBADO_NO_APLICADO"), {
+        evento: "PAGO_APROBADO_NO_APLICADO",
+        motivo: "MONTO_NO_COINCIDE",
+        pedidoId: pedido.id,
+        paymentId: "9007",
+        montoMp: 100,
+        totalPedido: Number(pedido.total),
+      });
     });
 
     it("pago desconocido: su referencia externa no es un pedido nuestro -> 404, nada cambia", async () => {
@@ -721,11 +882,18 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         pagoMercadoPago(pedido, { id, status: "approved" })
       );
 
-      const r = await webhook(9012, { firma: firmar("9012", "otro-request", "secreto-falso") });
+      const firma = firmar("9012", "otro-request", "secreto-falso");
+      const { resultado: r, lineas } = await conLogs(() => webhook(9012, { firma }));
 
       assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
       assert.equal(mockObtenerPago.mock.callCount(), 0);
       assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      // Log con el motivo y NADA sensible (ni el header de firma ni el secret).
+      assert.deepEqual(logDe(lineas, "WEBHOOK_FIRMA_RECHAZADA"), {
+        evento: "WEBHOOK_FIRMA_RECHAZADA",
+        motivo: "SignatureMismatch",
+      });
+      assertLogsSinSecretos(lineas, firma);
     });
 
     it("firma válida para OTRO data.id (replay sobre otro pago) -> 401", async () => {
@@ -797,19 +965,46 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       );
       const requestId = "req-viejo";
       const hace6Minutos = Math.floor(Date.now() / 1000) - 360;
+      const firma = firmar("9015", requestId, SECRETO_WEBHOOK, hace6Minutos);
 
-      const r = await api("POST", "/api/v1/pagos/mercadopago/webhook", {
-        headers: {
-          "x-request-id": requestId,
-          "x-signature": firmar("9015", requestId, SECRETO_WEBHOOK, hace6Minutos),
-        },
-        body: { type: "payment", data: { id: "9015" } },
-      });
+      const { resultado: r, lineas } = await conLogs(() =>
+        api("POST", "/api/v1/pagos/mercadopago/webhook", {
+          headers: { "x-request-id": requestId, "x-signature": firma },
+          body: { type: "payment", data: { id: "9015" } },
+        })
+      );
 
       assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
       assert.equal(mockObtenerPago.mock.callCount(), 0);
       assert.equal(await pagoEnBase(pedido.id), null);
       assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.deepEqual(logDe(lineas, "WEBHOOK_FIRMA_RECHAZADA"), {
+        evento: "WEBHOOK_FIRMA_RECHAZADA",
+        motivo: "TimestampOutOfTolerance",
+      });
+      assertLogsSinSecretos(lineas, firma);
+    });
+
+    it("firma válida pero con ts de dentro de más de 5 minutos (reloj adelantado/forjado) -> 401", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      const requestId = "req-futuro";
+      const dentroDe6Minutos = Math.floor(Date.now() / 1000) + 360;
+      const firma = firmar("9017", requestId, SECRETO_WEBHOOK, dentroDe6Minutos);
+
+      const { resultado: r, lineas } = await conLogs(() =>
+        api("POST", "/api/v1/pagos/mercadopago/webhook", {
+          headers: { "x-request-id": requestId, "x-signature": firma },
+          body: { type: "payment", data: { id: "9017" } },
+        })
+      );
+
+      assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+      assert.equal(mockObtenerPago.mock.callCount(), 0);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+      assert.equal(logDe(lineas, "WEBHOOK_FIRMA_RECHAZADA").motivo, "TimestampOutOfTolerance");
     });
 
     it("ts de hace 4 minutos todavía se acepta (dentro de la tolerancia)", async () => {

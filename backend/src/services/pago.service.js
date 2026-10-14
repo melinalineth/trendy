@@ -9,8 +9,7 @@
 //
 // Flujo de estados vigente (Pedido / Pago). Política de negocio: un rechazo de
 // pago NO es final; el pedido sigue pagable y el cliente puede reintentar.
-//   Pedido "pagable": PENDIENTE (y los legados PAGO_RECHAZADO / PAGO_PENDIENTE,
-//     por compatibilidad con datos que pudieran existir).
+//   Pedido "pagable": SOLO PENDIENTE (preferencia y webhook).
 //   Webhook "approved" sobre un pedido pagable: Pedido -> PAGO_APROBADO ->
 //     CONFIRMADO; Pago APROBADO (aunque antes hubiera un intento RECHAZADO).
 //     El stock ya se descontó al crear el pedido: no se toca.
@@ -20,7 +19,18 @@
 //     sigue CANCELADO, 200 { requiereReembolso: true } + log JSON
 //     PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO (reconciliación: Pedido CANCELADO +
 //     Pago APROBADO). "rejected" sobre CANCELADO: 200 sin cambios.
-//   Otros status (pending, in_process...): no cambian nada.
+//   Webhook sobre cualquier otro estado no pagable sin Pago APROBADO
+//     (PAGO_APROBADO, CONFIRMADO ... ENTREGADO y los legados PAGO_RECHAZADO /
+//     PAGO_PENDIENTE): 409 PEDIDO_NO_PENDIENTE sin cambios; si era "approved",
+//     log PAGO_APROBADO_NO_APLICADO (también con monto distinto al total).
+// Status de Mercado Pago tratados:
+//   approved / rejected: como arriba.
+//   refunded / charged_back: NO cambian pedido ni pago en esta fase (revocar un
+//     pedido confirmado requiere una política nueva): 200 { revertido: true } +
+//     log PAGO_REVERTIDO_MP para gestionarlo a mano.
+//   cancelled, pending, in_process y otros: 200 sin cambios.
+// Firma inválida o vieja (> 300 s): 401 + log WEBHOOK_FIRMA_RECHAZADA con el
+//   motivo del SDK (nunca la firma, el secret ni el payload).
 //   Mismo evento repetido (mismo resultado y paymentId), u otro evento con el
 //     Pago ya APROBADO (un "rejected" tardío, o un segundo "approved", que se
 //     loguea como PAGO_DUPLICADO_APROBADO): 200 sin cambios (RN-009).
@@ -30,6 +40,11 @@
 // que se cancele (Fase B: cancelación + vencidos con reposición bajo el mismo
 // lock, solo si no hubo pago aprobado). inventario.reponerPorPedido queda para
 // eso.
+// DEUDA (requiere cambio de esquema, fuera de esta fase): reutilizar la
+// preferencia vigente en vez de crear una nueva en cada intento (necesita
+// Pago.preferenciaId o similar; hoy dos preferencias vivas permiten pagar dos
+// veces, que solo se detecta por log) y persistir el historial de intentos de
+// pago (hoy el Pago guarda solo el último paymentId).
 
 const prisma = require("../config/prisma");
 const pedidoRepository = require("../repositories/pedido.repository");
@@ -124,9 +139,37 @@ class ConfiguracionPagosError extends Error {
 const ROLES_PERSONAL = ["admin", "vendedor"];
 
 // Estados de Pedido sobre los que se puede (re)intentar pagar con Mercado
-// Pago. PAGO_RECHAZADO y PAGO_PENDIENTE son legados: con la política actual un
-// rechazo deja el pedido PENDIENTE, pero puede haber datos con esos estados.
-const ESTADOS_PEDIDO_PAGABLES = Object.freeze(["PENDIENTE", "PAGO_RECHAZADO", "PAGO_PENDIENTE"]);
+// Pago: SOLO PENDIENTE (un rechazo deja el pedido PENDIENTE). Los legados
+// PAGO_RECHAZADO / PAGO_PENDIENTE NO: el flujo viejo ya había repuesto su
+// stock y aprobarlos generaría sobreventa (y no existen datos con ellos: el
+// código de sprint-4 nunca arrancó).
+const ESTADOS_PEDIDO_PAGABLES = Object.freeze(["PENDIENTE"]);
+
+// status de Mercado Pago que revierten un pago ya cobrado (ver procesarWebhook).
+const STATUS_MP_REVERTIDOS = Object.freeze(["refunded", "charged_back"]);
+
+// Margen restado al inicio de vigencia de la preferencia por si el reloj del
+// servidor está adelantado respecto del de Mercado Pago.
+const MARGEN_RELOJ_PREFERENCIA_MS = 60 * 1000;
+
+// Log estructurado: JSON de UNA línea para poder filtrarlo y reconciliar.
+// Quien llama arma el objeto: nunca tokens, firmas ni payloads completos.
+function logEvento(evento) {
+  console.error(JSON.stringify(evento));
+}
+
+// Un "approved" que no se pudo aplicar = dinero cobrado sin pedido
+// confirmado: necesita reconciliación manual.
+function logPagoAprobadoNoAplicado(motivo, pedido, paymentId, pagoMP) {
+  logEvento({
+    evento: "PAGO_APROBADO_NO_APLICADO",
+    motivo,
+    pedidoId: pedido.id,
+    paymentId,
+    montoMp: Number(pagoMP.transaction_amount),
+    totalPedido: Number(pedido.total),
+  });
+}
 
 // Vigencia de la preferencia de Checkout Pro (MERCADOPAGO_PREFERENCIA_HORAS):
 // entero de 1 a 168 (una semana); cualquier otro valor usa el default.
@@ -289,9 +332,15 @@ async function crearPreferencia(pedidoId, usuarioId) {
 
   // La preferencia vence: un link de pago viejo no debe poder usarse días
   // después (el pedido podría haberse cancelado). ISO 8601, como pide el SDK
-  // (commonTypes.d.ts: expiration_date_from / expiration_date_to).
-  const ahora = new Date();
-  const vence = new Date(ahora.getTime() + horasDeVigenciaPreferencia() * 60 * 60 * 1000);
+  // (commonTypes.d.ts: expiration_date_from / expiration_date_to /
+  // date_of_expiration).
+  //   - desde: ahora menos un margen, por si nuestro reloj va adelantado
+  //     respecto del de Mercado Pago (si no, la preferencia "todavía no rige").
+  //   - date_of_expiration = expiration_date_to: un pago en efectivo/ticket
+  //     generado antes del vencimiento no se acredita después.
+  const ahora = Date.now();
+  const desde = new Date(ahora - MARGEN_RELOJ_PREFERENCIA_MS).toISOString();
+  const vence = new Date(ahora + horasDeVigenciaPreferencia() * 60 * 60 * 1000).toISOString();
 
   let resultado;
   try {
@@ -299,8 +348,9 @@ async function crearPreferencia(pedidoId, usuarioId) {
       body: {
         items,
         expires: true,
-        expiration_date_from: ahora.toISOString(),
-        expiration_date_to: vence.toISOString(),
+        expiration_date_from: desde,
+        expiration_date_to: vence,
+        date_of_expiration: vence,
         external_reference: String(pedido.id),
         metadata: {
           pedido_id: pedido.id,
@@ -359,6 +409,7 @@ async function procesarWebhook(payload, firma) {
   const secreto = exigirVariable("MERCADOPAGO_WEBHOOK_SECRET");
 
   if (!firma?.xSignature || !firma?.dataId) {
+    logEvento({ evento: "WEBHOOK_FIRMA_RECHAZADA", motivo: "MissingSignatureHeader" });
     throw new FirmaWebhookInvalidaError("Faltan datos para validar el webhook");
   }
 
@@ -371,7 +422,14 @@ async function procesarWebhook(payload, firma) {
       // Una firma válida pero vieja (replay) también se rechaza.
       toleranceSeconds: TOLERANCIA_FIRMA_SEGUNDOS,
     });
-  } catch {
+  } catch (error) {
+    // Solo el motivo que informa el SDK (SignatureMismatch,
+    // TimestampOutOfTolerance...): NUNCA el header de firma, el secret ni el
+    // payload.
+    logEvento({
+      evento: "WEBHOOK_FIRMA_RECHAZADA",
+      motivo: typeof error?.reason === "string" ? error.reason : "Desconocido",
+    });
     throw new FirmaWebhookInvalidaError();
   }
 
@@ -386,8 +444,24 @@ async function procesarWebhook(payload, firma) {
   const pagoMP = await obtenerPagoMercadoPago(paymentId);
 
   const pedidoId = Number(pagoMP.external_reference || pagoMP.metadata?.pedido_id);
+  const pedidoIdValido = Number.isInteger(pedidoId) && pedidoId > 0;
 
-  if (!Number.isInteger(pedidoId) || pedidoId <= 0) {
+  // Reembolso o contracargo: en esta fase NO se cambia ni el pedido ni el pago
+  // (revocar un pedido ya confirmado requiere una política de negocio nueva),
+  // pero queda visible en el log para gestionarlo a mano. No toca la base, así
+  // que no interfiere con la idempotencia.
+  if (STATUS_MP_REVERTIDOS.includes(pagoMP.status)) {
+    logEvento({
+      evento: "PAGO_REVERTIDO_MP",
+      ...(pedidoIdValido ? { pedidoId } : {}),
+      paymentId,
+      estadoMp: pagoMP.status,
+      monto: Number(pagoMP.transaction_amount),
+    });
+    return { recibido: true, procesado: false, revertido: true };
+  }
+
+  if (!pedidoIdValido) {
     throw new PagoInvalidoError(
       "El pago no contiene una referencia válida al pedido",
       "REFERENCIA_INVALIDA"
@@ -402,6 +476,9 @@ async function procesarWebhook(payload, firma) {
   }
 
   if (aCentavos(pagoMP.transaction_amount) !== aCentavos(pedido.total)) {
+    if (pagoMP.status === "approved") {
+      logPagoAprobadoNoAplicado("MONTO_NO_COINCIDE", pedido, paymentId, pagoMP);
+    }
     throw new PagoInvalidoError(
       "El importe del pago no coincide con el total del pedido",
       "MONTO_NO_COINCIDE"
@@ -504,7 +581,10 @@ async function procesarWebhook(payload, firma) {
     }
 
     if (estadoPago === "APROBADO") {
-      if (!ESTADOS_PEDIDO_PAGABLES.includes(bloqueado.estado) && bloqueado.estado !== "PAGO_APROBADO") {
+      if (!ESTADOS_PEDIDO_PAGABLES.includes(bloqueado.estado)) {
+        // Dinero cobrado sin pedido confirmado: el pedido NO cambia (un
+        // ENVIADO no retrocede a CONFIRMADO) y queda la señal en el log.
+        logPagoAprobadoNoAplicado("PEDIDO_NO_PENDIENTE", pedido, paymentId, pagoMP);
         throw new PagoInvalidoError(
           "El pedido ya no está en un estado válido para aprobar el pago",
           "PEDIDO_NO_PENDIENTE"
