@@ -6,6 +6,20 @@
 // Los errores de dominio llevan `status` y `codigo`: errorHandler.js los
 // formatea como { error: { codigo, mensaje, detalles } } (DDS §5.3) sin tener
 // que registrarlos, igual que los de inventario y zonas.
+//
+// Flujo de estados vigente (Pedido / Pago):
+//   Mercado Pago, webhook "approved": Pedido PENDIENTE -> PAGO_APROBADO ->
+//     CONFIRMADO; Pago APROBADO (el stock ya se descontó al crear el pedido).
+//   Mercado Pago, webhook "rejected": Pedido PENDIENTE -> PAGO_RECHAZADO; Pago
+//     RECHAZADO; se repone el stock en la misma transacción.
+//   Otros status (pending, in_process...): no cambian nada.
+//   Eventos repetidos o tardíos con el Pago ya APROBADO (mismo paymentId, otro
+//     paymentId aprobado, o un "rejected") -> 200 sin cambios (RN-009).
+//   Contra entrega: Pago PENDIENTE al registrarlo (el Pedido no cambia) ->
+//     APROBADO cuando admin/vendedor confirma la recepción.
+// PENDIENTE DE DECISIÓN DE NEGOCIO: qué hacer si llega un "approved" después
+// de un "rejected" (reintento del cliente en Checkout Pro). Hoy el pedido ya
+// está PAGO_RECHAZADO y el evento responde 409.
 
 const prisma = require("../config/prisma");
 const pedidoRepository = require("../repositories/pedido.repository");
@@ -87,7 +101,23 @@ class PasarelaPagoError extends Error {
   }
 }
 
+// Falta una variable de entorno de Mercado Pago. 503: el servicio no está
+// disponible hasta que se configure (no es un error del cliente).
+class ConfiguracionPagosError extends Error {
+  constructor(message = "El servicio de pagos no está disponible") {
+    super(message);
+    this.name = "ConfiguracionPagosError";
+    this.status = 503;
+    this.codigo = "CONFIGURACION_PAGOS_INCOMPLETA";
+  }
+}
+
 const ROLES_PERSONAL = ["admin", "vendedor"];
+
+// RF-036 anti-replay: diferencia máxima, en SEGUNDOS, entre el `ts` de la
+// firma y el reloj del servidor (WebhookSignatureValidator compara
+// |ahora - ts*1000| / 1000 contra este valor).
+const TOLERANCIA_FIRMA_SEGUNDOS = 300;
 
 // status de un pago de Mercado Pago -> EstadoPago que se registra. Los demás
 // (pending, in_process, authorized...) no cambian nada todavía (RF-035).
@@ -128,12 +158,22 @@ function presentarPago(pago) {
   };
 }
 
-function obtenerClienteMercadoPago() {
-  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+// Lee una variable de entorno obligatoria de pagos. Si falta, el log del
+// servidor dice CUÁL (solo el nombre, nunca valores) y al cliente le llega un
+// 503 genérico: el webhook es público y no debe revelar la configuración.
+function exigirVariable(nombre) {
+  const valor = process.env[nombre];
 
-  if (!accessToken) {
-    throw new Error("Falta configurar MERCADOPAGO_ACCESS_TOKEN");
+  if (!valor) {
+    console.error(`Configuración de pagos incompleta: falta la variable de entorno ${nombre}`);
+    throw new ConfiguracionPagosError();
   }
+
+  return valor;
+}
+
+function obtenerClienteMercadoPago() {
+  const accessToken = exigirVariable("MERCADOPAGO_ACCESS_TOKEN");
 
   return new MercadoPagoConfig({
     accessToken,
@@ -201,6 +241,20 @@ async function crearPreferencia(pedidoId, usuarioId) {
     });
   }
 
+  // Lo que Mercado Pago va a cobrar tiene que ser EXACTAMENTE Pedido.total
+  // (en centavos, sin errores de coma flotante): si no, el webhook rechazaría
+  // el pago por monto distinto después de que el cliente ya pagó.
+  const totalItems = items.reduce(
+    (suma, item) => suma + aCentavos(item.unit_price) * item.quantity,
+    0
+  );
+  if (totalItems !== aCentavos(pedido.total)) {
+    throw new PagoInvalidoError(
+      "Las líneas y el envío del pedido no suman su total",
+      "TOTAL_INCONSISTENTE"
+    );
+  }
+
   const preference = new Preference(obtenerClienteMercadoPago());
 
   let resultado;
@@ -263,11 +317,7 @@ async function obtenerPagoMercadoPago(paymentId) {
  * el Pago ya actualizado y no hace nada (devuelve procesado: false).
  */
 async function procesarWebhook(payload, firma) {
-  const secreto = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-
-  if (!secreto) {
-    throw new Error("Falta configurar MERCADOPAGO_WEBHOOK_SECRET");
-  }
+  const secreto = exigirVariable("MERCADOPAGO_WEBHOOK_SECRET");
 
   if (!firma?.xSignature || !firma?.dataId) {
     throw new FirmaWebhookInvalidaError("Faltan datos para validar el webhook");
@@ -279,6 +329,8 @@ async function procesarWebhook(payload, firma) {
       xRequestId: firma.xRequestId || "",
       dataId: String(firma.dataId),
       secret: secreto,
+      // Una firma válida pero vieja (replay) también se rechaza.
+      toleranceSeconds: TOLERANCIA_FIRMA_SEGUNDOS,
     });
   } catch {
     throw new FirmaWebhookInvalidaError();
@@ -334,16 +386,15 @@ async function procesarWebhook(payload, firma) {
   }
 
   return prisma.$transaction(async (tx) => {
-    // Lock de la fila del pedido: serializa eventos concurrentes (RN-009).
-    await pedidoRepository.bloquearPedido(pedidoId, tx);
+    // Lock de la fila del pedido: serializa eventos concurrentes (RN-009). El
+    // estado que devuelve es el vigente (leído con el lock tomado).
+    const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
-    const pedidoActual = await pedidoRepository.obtenerPorId(pedidoId, tx);
-    const pagoActual = await pagoRepository.buscarPorPedido(pedidoId, tx);
-
-    // Idempotencia: un evento ya aplicado no se procesa nuevamente.
-    if (pagoActual?.estado === estadoPago) {
-      return { recibido: true, procesado: false };
+    if (!bloqueado) {
+      throw new PedidoNoEncontradoError();
     }
+
+    const pagoActual = await pagoRepository.buscarPorPedido(pedidoId, tx);
 
     if (pagoActual && pagoActual.metodo !== "MERCADO_PAGO") {
       throw new PagoInvalidoError(
@@ -352,10 +403,39 @@ async function procesarWebhook(payload, firma) {
       );
     }
 
+    if (pagoActual?.estado === "APROBADO") {
+      // Un pago aprobado es final: cualquier evento posterior se reconoce con
+      // 200 (para que Mercado Pago deje de reintentar) sin tocar nada.
+      if (estadoPago === "APROBADO" && pagoActual.referenciaExterna !== paymentId) {
+        // OTRO pago aprobado para el mismo pedido (el cliente pagó dos
+        // veces). No hay dónde guardar el segundo intento (deuda: persistir
+        // intentos de pago), así que se deja una línea JSON para reconciliar
+        // a mano (y eventualmente devolver el dinero).
+        console.error(
+          JSON.stringify({
+            evento: "PAGO_DUPLICADO_APROBADO",
+            pedidoId,
+            paymentIdRegistrado: pagoActual.referenciaExterna,
+            paymentIdDuplicado: paymentId,
+            monto: Number(pagoMP.transaction_amount),
+          })
+        );
+        return { recibido: true, procesado: false, duplicado: true };
+      }
+
+      // Mismo evento repetido, o un "rejected" tardío: no-op.
+      return { recibido: true, procesado: false };
+    }
+
+    // Idempotencia: el mismo resultado ya aplicado no se procesa de nuevo.
+    if (pagoActual?.estado === estadoPago) {
+      return { recibido: true, procesado: false };
+    }
+
     const monto = Number(pagoMP.transaction_amount);
 
     if (estadoPago === "APROBADO") {
-      if (pedidoActual.estado !== "PENDIENTE" && pedidoActual.estado !== "PAGO_APROBADO") {
+      if (bloqueado.estado !== "PENDIENTE" && bloqueado.estado !== "PAGO_APROBADO") {
         throw new PagoInvalidoError(
           "El pedido ya no está en un estado válido para aprobar el pago",
           "PEDIDO_NO_PENDIENTE"
@@ -385,14 +465,16 @@ async function procesarWebhook(payload, firma) {
 
     // Rechazado: se libera el stock reservado al crear el pedido, en la misma
     // transacción que el cambio de estado (todo o nada).
-    if (pedidoActual.estado !== "PENDIENTE") {
+    if (bloqueado.estado !== "PENDIENTE") {
       throw new PagoInvalidoError("El pedido ya no está pendiente de pago", "PEDIDO_NO_PENDIENTE");
     }
 
+    // Las líneas y el dueño del pedido no cambian después de crearlo: se usan
+    // los leídos antes de la transacción.
     await inventarioRepository.reponerPorPedido(
-      pedidoActual.detalles.map(({ varianteId, cantidad }) => ({ varianteId, cantidad })),
+      pedido.detalles.map(({ varianteId, cantidad }) => ({ varianteId, cantidad })),
       {
-        usuarioId: pedidoActual.usuarioId,
+        usuarioId: pedido.usuarioId,
         pedidoId,
         motivo: "Pedido rechazado",
         tx,
@@ -460,26 +542,47 @@ async function registrarContraEntrega(pedidoId, usuarioId) {
     throw new ContraEntregaNoDisponibleError();
   }
 
-  const pagoExistente = await pagoRepository.buscarPorPedido(id);
+  // Lock del pedido: dos solicitudes simultáneas se serializan y la segunda
+  // ve el Pago que creó la primera (sin esto chocaban con el unique de
+  // Pago.pedidoId y respondían 409).
+  const pago = await prisma.$transaction(async (tx) => {
+    const bloqueado = await pedidoRepository.bloquearPedido(id, tx);
 
-  if (pagoExistente) {
-    if (pagoExistente.metodo === "CONTRA_ENTREGA") {
-      // Evita crear registros duplicados si se repite la solicitud.
-      return presentarPago(pagoExistente);
+    if (!bloqueado) {
+      throw new PedidoNoEncontradoError();
     }
 
-    throw new PagoInvalidoError(
-      "El pedido ya tiene registrado otro método de pago",
-      "METODO_PAGO_NO_COINCIDE"
-    );
-  }
+    const pagoExistente = await pagoRepository.buscarPorPedido(id, tx);
 
-  const pago = await pagoRepository.crear({
-    pedidoId: id,
-    metodo: "CONTRA_ENTREGA",
-    monto: pedido.total,
-    estado: "PENDIENTE",
-    referenciaExterna: null,
+    if (pagoExistente) {
+      if (pagoExistente.metodo === "CONTRA_ENTREGA") {
+        // Evita crear registros duplicados si se repite la solicitud.
+        return pagoExistente;
+      }
+
+      throw new PagoInvalidoError(
+        "El pedido ya tiene registrado otro método de pago",
+        "METODO_PAGO_NO_COINCIDE"
+      );
+    }
+
+    if (bloqueado.estado !== "PENDIENTE") {
+      throw new PagoInvalidoError(
+        "Solo se puede registrar contra entrega para pedidos pendientes",
+        "PEDIDO_NO_PENDIENTE"
+      );
+    }
+
+    return pagoRepository.crear(
+      {
+        pedidoId: id,
+        metodo: "CONTRA_ENTREGA",
+        monto: pedido.total,
+        estado: "PENDIENTE",
+        referenciaExterna: null,
+      },
+      tx
+    );
   });
 
   return presentarPago(pago);
@@ -493,34 +596,41 @@ async function registrarContraEntrega(pedidoId, usuarioId) {
 async function confirmarRecepcionContraEntrega(pedidoId) {
   const id = validarPedidoId(pedidoId);
 
-  const pedido = await pedidoRepository.obtenerPorId(id);
+  // Lock del pedido: confirmaciones simultáneas se serializan y todas ven el
+  // Pago ya APROBADO por la primera (sin lock, algunas respondían el Pago
+  // todavía PENDIENTE).
+  const pago = await prisma.$transaction(async (tx) => {
+    const bloqueado = await pedidoRepository.bloquearPedido(id, tx);
 
-  if (!pedido) {
-    throw new PedidoNoEncontradoError();
-  }
+    if (!bloqueado) {
+      throw new PedidoNoEncontradoError();
+    }
 
-  const pago = pedido.pago;
+    const pagoActual = await pagoRepository.buscarPorPedido(id, tx);
 
-  if (!pago || pago.metodo !== "CONTRA_ENTREGA") {
-    throw new PagoInvalidoError("El pedido no tiene un pago contra entrega registrado");
-  }
+    if (!pagoActual || pagoActual.metodo !== "CONTRA_ENTREGA") {
+      throw new PagoInvalidoError("El pedido no tiene un pago contra entrega registrado");
+    }
 
-  if (pago.estado === "APROBADO") {
-    return presentarPago(pago);
-  }
+    if (pagoActual.estado === "APROBADO") {
+      return pagoActual;
+    }
 
-  if (pago.estado !== "PENDIENTE") {
-    throw new PagoInvalidoError("El pago no se encuentra pendiente de confirmación");
-  }
+    if (pagoActual.estado !== "PENDIENTE") {
+      throw new PagoInvalidoError("El pago no se encuentra pendiente de confirmación");
+    }
 
-  if (pedido.estado === "CANCELADO") {
-    throw new PagoInvalidoError(
-      "No se puede confirmar el pago de un pedido cancelado",
-      "PEDIDO_CANCELADO"
-    );
-  }
+    if (bloqueado.estado === "CANCELADO") {
+      throw new PagoInvalidoError(
+        "No se puede confirmar el pago de un pedido cancelado",
+        "PEDIDO_CANCELADO"
+      );
+    }
 
-  return presentarPago(await pagoRepository.actualizarEstado(id, "APROBADO", pago.referenciaExterna));
+    return pagoRepository.actualizarEstado(id, "APROBADO", pagoActual.referenciaExterna, tx);
+  });
+
+  return presentarPago(pago);
 }
 
 /**
@@ -561,4 +671,5 @@ module.exports = {
   PagoNoEncontradoError,
   FirmaWebhookInvalidaError,
   PasarelaPagoError,
+  ConfiguracionPagosError,
 };

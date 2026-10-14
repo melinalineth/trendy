@@ -20,6 +20,7 @@ process.env.MERCADOPAGO_WEBHOOK_SECRET = SECRETO_WEBHOOK;
 process.env.MERCADOPAGO_WEBHOOK_URL = "https://trendy.test/api/v1/pagos/mercadopago/webhook";
 
 const mercadopago = require("mercadopago");
+const pedidoRepository = require("../src/repositories/pedido.repository");
 const {
   prisma,
   iniciarServidor,
@@ -38,9 +39,14 @@ function assertErrorEstandar(respuesta, status, codigo) {
 }
 
 // x-signature tal como la arma Mercado Pago: "ts=<seg>,v1=<hmac>" con el
-// manifiesto "id:<data.id>;request-id:<x-request-id>;ts:<ts>;".
-function firmar(dataId, requestId, secreto = SECRETO_WEBHOOK) {
-  const ts = Math.floor(Date.now() / 1000);
+// manifiesto "id:<data.id>;request-id:<x-request-id>;ts:<ts>;". `ts` en
+// SEGUNDOS, por defecto el actual (el service tolera 5 minutos de desfase).
+function firmar(
+  dataId,
+  requestId,
+  secreto = SECRETO_WEBHOOK,
+  ts = Math.floor(Date.now() / 1000)
+) {
   const manifiesto = `id:${dataId};request-id:${requestId};ts:${ts};`;
   const v1 = crypto.createHmac("sha256", secreto).update(manifiesto).digest("hex");
   return `ts=${ts},v1=${v1}`;
@@ -234,6 +240,45 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
 
       assertErrorEstandar(r, 502, "PASARELA_NO_DISPONIBLE");
+    });
+
+    it("líneas + envío que no suman Pedido.total -> 409 TOTAL_INCONSISTENTE y NO se llama a Mercado Pago", async () => {
+      const pedido = await pedidoDe(cliente);
+      // Un centavo de diferencia alcanza: se compara en centavos.
+      await prisma.pedido.update({
+        where: { id: pedido.id },
+        data: { total: (Number(pedido.total) + 0.01).toFixed(2) },
+      });
+
+      const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+      assertErrorEstandar(r, 409, "TOTAL_INCONSISTENTE");
+      assert.equal(mockCrearPreferencia.mock.callCount(), 0);
+    });
+
+    it("sin MERCADOPAGO_ACCESS_TOKEN -> 503 CONFIGURACION_PAGOS_INCOMPLETA con mensaje genérico (sin nombrar la variable)", async () => {
+      const pedido = await pedidoDe(cliente);
+      const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
+      const mockLog = mock.method(console, "error", () => {});
+      delete process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+      try {
+        const r = await api("POST", ruta, {
+          token: cliente.token,
+          body: { pedidoId: pedido.id },
+        });
+
+        assertErrorEstandar(r, 503, "CONFIGURACION_PAGOS_INCOMPLETA");
+        assert.equal(r.body.error.mensaje, "El servicio de pagos no está disponible");
+        assert.equal(mockCrearPreferencia.mock.callCount(), 0);
+        // El log del servidor sí dice QUÉ falta (solo el nombre).
+        assert.ok(
+          mockLog.mock.calls.some((c) => c.arguments.join(" ").includes("MERCADOPAGO_ACCESS_TOKEN"))
+        );
+      } finally {
+        process.env.MERCADOPAGO_ACCESS_TOKEN = token;
+        mockLog.mock.restore();
+      }
     });
 
     describe("body inválido -> 400 VALIDACION_FALLIDA con detalles", () => {
@@ -473,14 +518,149 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       }
     });
 
-    it("sin MERCADOPAGO_WEBHOOK_SECRET configurado -> 500 (error de configuración, no 200)", async () => {
+    it("sin MERCADOPAGO_WEBHOOK_SECRET -> 503 genérico (no filtra el nombre de la variable) y no procesa", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      const mockLog = mock.method(console, "error", () => {});
       delete process.env.MERCADOPAGO_WEBHOOK_SECRET;
+
       try {
         const r = await webhook(9014);
-        assertErrorEstandar(r, 500, "ERROR_INTERNO");
+
+        assertErrorEstandar(r, 503, "CONFIGURACION_PAGOS_INCOMPLETA");
+        assert.equal(r.body.error.mensaje, "El servicio de pagos no está disponible");
+        assert.ok(!JSON.stringify(r.body).includes("MERCADOPAGO"));
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+        assert.equal(await pagoEnBase(pedido.id), null);
+        assert.ok(
+          mockLog.mock.calls.some((c) =>
+            c.arguments.join(" ").includes("MERCADOPAGO_WEBHOOK_SECRET")
+          )
+        );
       } finally {
         process.env.MERCADOPAGO_WEBHOOK_SECRET = SECRETO_WEBHOOK;
+        mockLog.mock.restore();
       }
+    });
+
+    it("firma válida pero con ts de hace más de 5 minutos (replay) -> 401 y sin efectos", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      const requestId = "req-viejo";
+      const hace6Minutos = Math.floor(Date.now() / 1000) - 360;
+
+      const r = await api("POST", "/api/v1/pagos/mercadopago/webhook", {
+        headers: {
+          "x-request-id": requestId,
+          "x-signature": firmar("9015", requestId, SECRETO_WEBHOOK, hace6Minutos),
+        },
+        body: { type: "payment", data: { id: "9015" } },
+      });
+
+      assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+      assert.equal(mockObtenerPago.mock.callCount(), 0);
+      assert.equal(await pagoEnBase(pedido.id), null);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
+    });
+
+    it("ts de hace 4 minutos todavía se acepta (dentro de la tolerancia)", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      const requestId = "req-reciente";
+      const hace4Minutos = Math.floor(Date.now() / 1000) - 240;
+
+      const r = await api("POST", "/api/v1/pagos/mercadopago/webhook", {
+        headers: {
+          "x-request-id": requestId,
+          "x-signature": firmar("9016", requestId, SECRETO_WEBHOOK, hace4Minutos),
+        },
+        body: { type: "payment", data: { id: "9016" } },
+      });
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+    });
+
+    it("SEGUNDO pago aprobado (otro paymentId) para un pedido ya pagado: 200 duplicado, no pisa el primero y loguea para reconciliar", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      assert.equal((await webhook(9101)).status, 200);
+      const pagoOriginal = await pagoEnBase(pedido.id);
+
+      const mockLog = mock.method(console, "error", () => {});
+      let r;
+      try {
+        r = await webhook(9102);
+      } finally {
+        mockLog.mock.restore();
+      }
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(r.body, { recibido: true, procesado: false, duplicado: true });
+      assert.deepEqual(await pagoEnBase(pedido.id), pagoOriginal);
+      assert.equal(pagoOriginal.referenciaExterna, "9101");
+      assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+
+      // Log estructurado: JSON de una línea, sin token ni payload completo.
+      const lineas = mockLog.mock.calls.map((c) => c.arguments.join(" "));
+      const linea = lineas.find((l) => l.includes("PAGO_DUPLICADO_APROBADO"));
+      assert.ok(linea, `no se logueó el duplicado: ${JSON.stringify(lineas)}`);
+      assert.ok(!linea.includes("\n"));
+      const evento = JSON.parse(linea);
+      assert.equal(evento.evento, "PAGO_DUPLICADO_APROBADO");
+      assert.equal(evento.pedidoId, pedido.id);
+      assert.equal(evento.paymentIdRegistrado, "9101");
+      assert.equal(evento.paymentIdDuplicado, "9102");
+      assert.equal(evento.monto, Number(pedido.total));
+      assert.ok(!linea.includes(process.env.MERCADOPAGO_ACCESS_TOKEN));
+    });
+
+    it("evento RECHAZADO para un pedido ya APROBADO: 200 no-op (sin 409 que provoque reintentos)", async () => {
+      const variante = await crearVariante({ stock: 3 });
+      const pedido = await pedidoDe(cliente, { variante });
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      assert.equal((await webhook(9201)).status, 200);
+      const pagoAprobado = await pagoEnBase(pedido.id);
+
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "rejected" })
+      );
+      const r = await webhook(9202);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.procesado, false);
+      assert.deepEqual(await pagoEnBase(pedido.id), pagoAprobado);
+      assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 0);
+    });
+
+    it("si el pedido desaparece antes de tomar el lock -> 404 PEDIDO_NO_ENCONTRADO (no 500)", async () => {
+      const pedido = await pedidoDe(cliente);
+      mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+        pagoMercadoPago(pedido, { id, status: "approved" })
+      );
+      const mockLock = mock.method(pedidoRepository, "bloquearPedido", async () => null);
+
+      try {
+        const r = await webhook(9301);
+        assertErrorEstandar(r, 404, "PEDIDO_NO_ENCONTRADO");
+      } finally {
+        mockLock.mock.restore();
+      }
+
+      assert.equal(await pagoEnBase(pedido.id), null);
+      assert.equal(await estadoPedido(pedido.id), "PENDIENTE");
     });
   });
 });

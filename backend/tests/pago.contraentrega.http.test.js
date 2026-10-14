@@ -130,6 +130,24 @@ describe("Pago contra entrega y consulta de estado (RF-037, RF-038)", () => {
       assert.equal((await pagosDe(pedido.id)).length, 1);
     });
 
+    it("6 solicitudes SIMULTÁNEAS del mismo pedido: todas 201 con el mismo Pago y uno solo en la base", async () => {
+      const pedido = await pedidoDe(cliente);
+
+      const respuestas = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } })
+        )
+      );
+
+      assert.deepEqual(
+        respuestas.map((r) => r.status),
+        Array(6).fill(201),
+        JSON.stringify(respuestas.map((r) => r.body))
+      );
+      assert.equal(new Set(respuestas.map((r) => r.body.id)).size, 1);
+      assert.equal((await pagosDe(pedido.id)).length, 1);
+    });
+
     it("zona SIN contra entrega habilitada -> 409 CONTRA_ENTREGA_NO_DISPONIBLE (RN-006), sin Pago", async () => {
       const pedido = await pedidoDe(cliente, { zona: zonaSinContraEntrega });
 
@@ -353,6 +371,25 @@ describe("Pago contra entrega y consulta de estado (RF-037, RF-038)", () => {
       assert.equal(r2.status, 200, JSON.stringify(r2.body));
       assert.equal(r2.body.estado, "APROBADO");
       assert.equal((await pagosDe(pedido.id)).length, 1);
+    });
+
+    it("confirmaciones SIMULTÁNEAS (admin y vendedor): todas 200 APROBADO, un solo Pago", async () => {
+      const pedido = await pedidoConContraEntrega();
+
+      const respuestas = await Promise.all(
+        Array.from({ length: 4 }, (_, i) =>
+          api("PATCH", ruta(pedido.id), { token: (i % 2 ? vendedor : admin).token })
+        )
+      );
+
+      assert.deepEqual(
+        respuestas.map((r) => [r.status, r.body.estado]),
+        Array(4).fill([200, "APROBADO"]),
+        JSON.stringify(respuestas.map((r) => r.body))
+      );
+      const pagos = await pagosDe(pedido.id);
+      assert.equal(pagos.length, 1);
+      assert.equal(pagos[0].estado, "APROBADO");
     });
 
     it("pedido sin pago registrado -> 409 PAGO_INVALIDO", async () => {
