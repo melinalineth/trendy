@@ -1,7 +1,11 @@
-// Seed de roles base del sistema (DDS §3, matriz de roles y permisos de la
-// ERS §4.1: administrador, vendedor, cliente). Sin esto, RF-001 (registro)
-// falla por la FK de Usuario.rolId — ver comentario en
-// src/repositories/rol.repository.js.
+// Seed de Trendy: roles base del sistema, categorías y catálogo de ejemplo.
+//
+// Roles (DDS §3, matriz de roles y permisos de la ERS §4.1: administrador,
+// vendedor, cliente). Sin ellos, RF-001 (registro) falla por la FK de
+// Usuario.rolId — ver comentario en src/repositories/rol.repository.js.
+//
+// Todo se siembra con upsert / búsqueda previa, así que se puede correr
+// varias veces sin duplicar datos.
 //
 // Uso: npx prisma db seed (requiere DATABASE_URL apuntando a una base viva).
 
@@ -12,9 +16,333 @@ const ROLES = ["cliente", "vendedor", "admin"];
 // Sprint 2 / MOD-02 (RF-008 a RF-011): ERS §2.8.3 deja la gestión dinámica
 // de categorías para v2.0 — en el MVP las categorías son una semilla fija,
 // no hay CRUD de categorías expuesto por la API.
-const CATEGORIAS = ["Remeras", "Pantalones", "Camperas", "Calzado", "Accesorios"];
+// Son las 6 que usan los productos de ejemplo de abajo y que coinciden con los
+// mapas de pantalla (docs/Mapa_de_pantallas_usuario_cliente.png: Mujer, Hombre,
+// Jeans, Camisetas, Vestidos) más Chaquetas. Se descartaron Remeras, Pantalones,
+// Camperas, Calzado y Accesorios: ningún producto las usa y se solapaban con
+// Camisetas/Chaquetas. Un producto tiene una sola categoría, así que "Mujer" y
+// "Hombre" (público) conviven con Jeans/Camisetas (tipo de prenda), igual que
+// en el mapa; separar el género como atributo propio queda para v2.
+const CATEGORIAS = [
+  "Mujer",
+  "Hombre",
+  "Jeans",
+  "Camisetas",
+  "Vestidos",
+  "Chaquetas",
+];
+
+// Normaliza texto para armar SKUs: sin tildes ni símbolos, en mayúsculas.
+function normalizarParaSku(texto) {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+}
+
+const productos = [
+  {
+    nombre: "Chaqueta Denim",
+    descripcion:
+      "Chaqueta de mezclilla clásica, versátil y cómoda para diferentes ocasiones.",
+    precio: 89900,
+    categoria: "Chaquetas",
+    imagen:
+      "https://images.unsplash.com/photo-1543076447-215ad9ba6923?w=800",
+    variantes: [
+      { talla: "S", color: "Azul", stock: 10 },
+      { talla: "M", color: "Azul", stock: 8 },
+      { talla: "L", color: "Azul", stock: 7 },
+    ],
+  },
+  {
+    nombre: "Jean Clásico",
+    descripcion:
+      "Jean clásico de corte cómodo, ideal para combinar con diferentes prendas.",
+    precio: 79900,
+    categoria: "Jeans",
+    imagen:
+      "https://images.unsplash.com/photo-1542272604-787c3835535d?w=800",
+    variantes: [
+      { talla: "30", color: "Azul", stock: 8 },
+      { talla: "32", color: "Azul", stock: 12 },
+      { talla: "34", color: "Azul", stock: 10 },
+    ],
+  },
+  {
+    nombre: "Camiseta Básica",
+    descripcion:
+      "Camiseta básica de diseño sencillo para uso diario.",
+    precio: 39900,
+    categoria: "Camisetas",
+    imagen:
+      "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800",
+    variantes: [
+      { talla: "S", color: "Negro", stock: 20 },
+      { talla: "M", color: "Negro", stock: 18 },
+      { talla: "L", color: "Negro", stock: 12 },
+    ],
+  },
+  {
+    nombre: "Vestido Rosa",
+    descripcion:
+      "Vestido femenino en tono rosa, diseñado para un estilo moderno y casual.",
+    precio: 69900,
+    categoria: "Vestidos",
+    imagen:
+      "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800",
+    variantes: [
+      { talla: "S", color: "Rosa", stock: 5 },
+      { talla: "M", color: "Rosa", stock: 7 },
+      { talla: "L", color: "Rosa", stock: 3 },
+    ],
+  },
+  {
+    nombre: "Blusa Casual",
+    descripcion:
+      "Blusa ligera para complementar diferentes estilos de vestuario.",
+    precio: 54900,
+    categoria: "Mujer",
+    imagen:
+      "https://images.unsplash.com/photo-1564257577054-5e6e8c2b5e4f?w=800",
+    variantes: [
+      { talla: "S", color: "Blanco", stock: 8 },
+      { talla: "M", color: "Blanco", stock: 10 },
+      { talla: "L", color: "Blanco", stock: 6 },
+    ],
+  },
+  {
+    nombre: "Camisa Oxford",
+    descripcion:
+      "Camisa de estilo clásico para ocasiones casuales y formales.",
+    precio: 74900,
+    categoria: "Hombre",
+    imagen:
+      "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=800",
+    variantes: [
+      { talla: "M", color: "Blanco", stock: 8 },
+      { talla: "L", color: "Blanco", stock: 7 },
+      { talla: "XL", color: "Blanco", stock: 5 },
+    ],
+  },
+  {
+    nombre: "Jean Skinny",
+    descripcion:
+      "Jean de corte ajustado con diseño moderno y cómodo.",
+    precio: 84900,
+    categoria: "Jeans",
+    imagen:
+      "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800",
+    variantes: [
+      { talla: "28", color: "Azul", stock: 6 },
+      { talla: "30", color: "Azul", stock: 8 },
+      { talla: "32", color: "Azul", stock: 9 },
+    ],
+  },
+  {
+    nombre: "Camiseta Polo",
+    descripcion:
+      "Camiseta tipo polo de estilo clásico para uso diario.",
+    precio: 59900,
+    categoria: "Camisetas",
+    imagen:
+      "https://images.unsplash.com/photo-1625910513413-5fc45c5d8d3d?w=800",
+    variantes: [
+      { talla: "M", color: "Azul", stock: 10 },
+      { talla: "L", color: "Azul", stock: 8 },
+      { talla: "XL", color: "Azul", stock: 5 },
+    ],
+  },
+  {
+    nombre: "Vestido Floral",
+    descripcion:
+      "Vestido con estampado floral y diseño fresco para diferentes ocasiones.",
+    precio: 79900,
+    categoria: "Vestidos",
+    imagen:
+      "https://images.unsplash.com/photo-1591369822096-ffd140ec948f?w=800",
+    variantes: [
+      { talla: "S", color: "Floral", stock: 5 },
+      { talla: "M", color: "Floral", stock: 8 },
+      { talla: "L", color: "Floral", stock: 4 },
+    ],
+  },
+  {
+    nombre: "Chaqueta Bomber",
+    descripcion:
+      "Chaqueta bomber de estilo urbano y moderno.",
+    precio: 109900,
+    categoria: "Chaquetas",
+    imagen:
+      "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800",
+    variantes: [
+      { talla: "M", color: "Negro", stock: 6 },
+      { talla: "L", color: "Negro", stock: 7 },
+      { talla: "XL", color: "Negro", stock: 4 },
+    ],
+  },
+  {
+    nombre: "Camiseta Oversize",
+    descripcion:
+      "Camiseta de corte amplio para un estilo urbano y cómodo.",
+    precio: 49900,
+    categoria: "Camisetas",
+    imagen:
+      "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800",
+    variantes: [
+      { talla: "M", color: "Blanco", stock: 12 },
+      { talla: "L", color: "Blanco", stock: 10 },
+      { talla: "XL", color: "Blanco", stock: 8 },
+    ],
+  },
+  {
+    nombre: "Pantalón Cargo",
+    descripcion:
+      "Pantalón cargo con bolsillos laterales y diseño urbano.",
+    precio: 89900,
+    categoria: "Hombre",
+    imagen:
+      "https://images.unsplash.com/photo-1517445312882-4c4a2d5d1c2b?w=800",
+    variantes: [
+      { talla: "30", color: "Verde", stock: 6 },
+      { talla: "32", color: "Verde", stock: 8 },
+      { talla: "34", color: "Verde", stock: 5 },
+    ],
+  },
+  {
+    nombre: "Blazer Casual",
+    descripcion:
+      "Blazer moderno para complementar outfits casuales o elegantes.",
+    precio: 129900,
+    categoria: "Mujer",
+    imagen:
+      "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?w=800",
+    variantes: [
+      { talla: "S", color: "Negro", stock: 4 },
+      { talla: "M", color: "Negro", stock: 6 },
+      { talla: "L", color: "Negro", stock: 4 },
+    ],
+  },
+  {
+    nombre: "Jean Mom",
+    descripcion:
+      "Jean de corte mom con diseño clásico y cómodo.",
+    precio: 82900,
+    categoria: "Jeans",
+    imagen:
+      "https://images.unsplash.com/photo-1582418702059-97ebafb35d09?w=800",
+    variantes: [
+      { talla: "28", color: "Azul claro", stock: 5 },
+      { talla: "30", color: "Azul claro", stock: 8 },
+      { talla: "32", color: "Azul claro", stock: 6 },
+    ],
+  },
+  {
+    nombre: "Camiseta Estampada",
+    descripcion:
+      "Camiseta con estampado moderno para complementar looks casuales.",
+    precio: 45900,
+    categoria: "Camisetas",
+    imagen:
+      "https://images.unsplash.com/photo-1503341504253-dff4815485f1?w=800",
+    variantes: [
+      { talla: "S", color: "Blanco", stock: 9 },
+      { talla: "M", color: "Blanco", stock: 11 },
+      { talla: "L", color: "Blanco", stock: 7 },
+    ],
+  },
+  {
+    nombre: "Vestido Negro",
+    descripcion:
+      "Vestido negro de diseño sencillo y elegante.",
+    precio: 89900,
+    categoria: "Vestidos",
+    imagen:
+      "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=800",
+    variantes: [
+      { talla: "S", color: "Negro", stock: 6 },
+      { talla: "M", color: "Negro", stock: 8 },
+      { talla: "L", color: "Negro", stock: 5 },
+    ],
+  },
+  {
+    nombre: "Chaqueta de Cuero",
+    descripcion:
+      "Chaqueta de estilo urbano para complementar diferentes atuendos.",
+    precio: 149900,
+    categoria: "Chaquetas",
+    imagen:
+      "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800",
+    variantes: [
+      { talla: "S", color: "Negro", stock: 3 },
+      { talla: "M", color: "Negro", stock: 5 },
+      { talla: "L", color: "Negro", stock: 4 },
+    ],
+  },
+  {
+    nombre: "Camisa de Lino",
+    descripcion:
+      "Camisa ligera de estilo fresco para días cálidos.",
+    precio: 79900,
+    categoria: "Hombre",
+    imagen:
+      "https://images.unsplash.com/photo-1603252110481-7ba873bf42ab?w=800",
+    variantes: [
+      { talla: "M", color: "Beige", stock: 6 },
+      { talla: "L", color: "Beige", stock: 8 },
+      { talla: "XL", color: "Beige", stock: 5 },
+    ],
+  },
+  {
+    nombre: "Falda Denim",
+    descripcion:
+      "Falda de mezclilla versátil para diferentes combinaciones.",
+    precio: 64900,
+    categoria: "Mujer",
+    imagen:
+      "https://images.unsplash.com/photo-1583496661160-fb5886a13d27?w=800",
+    variantes: [
+      { talla: "S", color: "Azul", stock: 5 },
+      { talla: "M", color: "Azul", stock: 7 },
+      { talla: "L", color: "Azul", stock: 4 },
+    ],
+  },
+  {
+    nombre: "Pantalón Chino",
+    descripcion:
+      "Pantalón chino de corte clásico para un estilo casual.",
+    precio: 84900,
+    categoria: "Hombre",
+    imagen:
+      "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=800",
+    variantes: [
+      { talla: "30", color: "Beige", stock: 6 },
+      { talla: "32", color: "Beige", stock: 8 },
+      { talla: "34", color: "Beige", stock: 5 },
+    ],
+  },
+];
+
+// Sprint 3 / MOD-05 (RF-025, RF-026): zonas de cobertura de ejemplo con su
+// tarifa inicial, para que en desarrollo el cálculo de envío
+// (GET /api/v1/envios/tarifa y /carrito/resumen) responda sin cargar zonas a
+// mano. El admin las gestiona luego por /api/v1/zonas-cobertura. La cobertura
+// se resuelve por coincidencia exacta de departamento y ciudad (sin distinguir
+// mayúsculas ni tildes, por la collation de MySQL).
+const ZONAS = [
+  { nombre: "Bogotá", departamento: "Cundinamarca", ciudad: "Bogotá", costo: 8000 },
+  { nombre: "Medellín", departamento: "Antioquia", ciudad: "Medellín", costo: 10000 },
+  { nombre: "Cali", departamento: "Valle del Cauca", ciudad: "Cali", costo: 12000 },
+  { nombre: "Barranquilla", departamento: "Atlántico", ciudad: "Barranquilla", costo: 15000 },
+];
 
 async function main() {
+  console.log("🌱 Iniciando seed de Trendy...");
+
+  // --------------------------------------------------
+  // 1. Roles base
+  // --------------------------------------------------
   for (const nombre of ROLES) {
     const rol = await prisma.rol.upsert({
       where: { nombre },
@@ -24,19 +352,169 @@ async function main() {
     console.log(`Rol listo: ${rol.nombre} (id=${rol.id})`);
   }
 
+  // --------------------------------------------------
+  // 2. Categorías activas (Categoria.estado es el enum EstadoProducto)
+  // --------------------------------------------------
+  const categoriasDB = {};
+
   for (const nombre of CATEGORIAS) {
     const categoria = await prisma.categoria.upsert({
       where: { nombre },
+      // update vacío: el seed solo crea lo que falta, nunca pisa datos que
+      // alguien ya editó (ej. una categoría desactivada a propósito).
       update: {},
-      create: { nombre },
+      create: {
+        nombre,
+        estado: "ACTIVO",
+      },
     });
-    console.log(`Categoria lista: ${categoria.nombre} (id=${categoria.id})`);
+
+    categoriasDB[nombre] = categoria;
   }
+
+  console.log(`✅ ${CATEGORIAS.length} categorías creadas/actualizadas.`);
+
+  // --------------------------------------------------
+  // 3. Productos de ejemplo
+  // --------------------------------------------------
+  for (const productoData of productos) {
+    const categoria = categoriasDB[productoData.categoria];
+
+    if (!categoria) {
+      throw new Error(
+        `La categoría "${productoData.categoria}" no existe.`
+      );
+    }
+
+    let producto = await prisma.producto.findFirst({
+      where: {
+        nombre: productoData.nombre,
+      },
+    });
+
+    if (!producto) {
+      producto = await prisma.producto.create({
+        data: {
+          nombre: productoData.nombre,
+          descripcion: productoData.descripcion,
+          precio: productoData.precio,
+          categoriaId: categoria.id,
+          estado: "ACTIVO",
+        },
+      });
+    }
+    // Si el producto ya existe NO se actualiza: precio, descripción o estado
+    // pudieron cambiarse desde el panel (un producto INACTIVO volvería a
+    // quedar ACTIVO en cada corrida del seed).
+
+    // ------------------------------------------------
+    // Imagen principal: Imagen no tiene flag esPrincipal, la principal es
+    // la de orden 0.
+    // ------------------------------------------------
+    const imagenExistente = await prisma.imagen.findFirst({
+      where: {
+        productoId: producto.id,
+        orden: 0,
+      },
+    });
+
+    if (imagenExistente) {
+      await prisma.imagen.update({
+        where: {
+          id: imagenExistente.id,
+        },
+        data: {
+          url: productoData.imagen,
+        },
+      });
+    } else {
+      await prisma.imagen.create({
+        data: {
+          productoId: producto.id,
+          url: productoData.imagen,
+          orden: 0,
+        },
+      });
+    }
+
+    // ------------------------------------------------
+    // Variantes / tallas / stock (sku único por variante)
+    // ------------------------------------------------
+    for (const varianteData of productoData.variantes) {
+      const sku = `${normalizarParaSku(productoData.nombre)}-${varianteData.talla}-${normalizarParaSku(varianteData.color)}`;
+
+      await prisma.variante.upsert({
+        where: {
+          sku,
+        },
+        // update vacío: el stock real lo manejan los movimientos de
+        // inventario (RF-017); re-sembrar no debe resetearlo al valor de
+        // ejemplo.
+        update: {},
+        create: {
+          productoId: producto.id,
+          sku,
+          talla: varianteData.talla,
+          color: varianteData.color,
+          stock: varianteData.stock,
+        },
+      });
+    }
+
+    console.log(`   ✔ ${productoData.nombre}`);
+  }
+
+  // --------------------------------------------------
+  // 4. Zonas de cobertura y tarifa inicial
+  // --------------------------------------------------
+  for (const zonaData of ZONAS) {
+    const zona = await prisma.zonaCobertura.upsert({
+      where: {
+        departamento_ciudad: {
+          departamento: zonaData.departamento,
+          ciudad: zonaData.ciudad,
+        },
+      },
+      // update vacío: si el admin ya la desactivó o la renombró, el seed no
+      // la pisa.
+      update: {},
+      create: {
+        nombre: zonaData.nombre,
+        departamento: zonaData.departamento,
+        ciudad: zonaData.ciudad,
+        estado: "ACTIVO",
+      },
+    });
+
+    // La tarifa inicial se crea solo si la zona no tiene NINGUNA (ni siquiera
+    // inactiva): así no se duplica al re-correr el seed ni se pisa una tarifa
+    // que el admin ya cambió (cambiar la tarifa deja la anterior INACTIVO).
+    const tarifas = await prisma.tarifaEnvio.count({
+      where: { zonaCoberturaId: zona.id },
+    });
+
+    if (tarifas === 0) {
+      await prisma.tarifaEnvio.create({
+        data: {
+          zonaCoberturaId: zona.id,
+          costo: zonaData.costo,
+          estado: "ACTIVO",
+        },
+      });
+    }
+  }
+
+  console.log(`✅ ${ZONAS.length} zonas de cobertura listas.`);
+
+  console.log(
+    `\n🎉 Seed completado: ${productos.length} prendas disponibles.`
+  );
 }
 
 main()
   .catch((error) => {
-    console.error("Error al correr el seed de roles:", error);
+    console.error("❌ Error ejecutando el seed:");
+    console.error(error);
     process.exitCode = 1;
   })
   .finally(async () => {
