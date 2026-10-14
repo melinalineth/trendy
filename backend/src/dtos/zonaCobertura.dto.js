@@ -127,6 +127,20 @@ function validarCambiarEstado(body) {
   return { estado };
 }
 
+// Body de PATCH /zonas-cobertura/:id/contra-entrega (RF-037, RN-006):
+// { permiteContraEntrega: true | false }. Boolean JSON estricto: "true" o 1
+// no se aceptan, para no habilitar un método de pago por una conversión
+// implícita.
+function validarCambiarContraEntrega(body) {
+  const { permiteContraEntrega } = body || {};
+
+  if (typeof permiteContraEntrega !== "boolean") {
+    lanzarValidacion(["permiteContraEntrega es obligatorio y debe ser true o false"]);
+  }
+
+  return { permiteContraEntrega };
+}
+
 // Param :id de las rutas /zonas-cobertura/:id/...; devuelve un Number.
 function validarZonaId(valor) {
   const texto = typeof valor === "string" ? valor.trim() : "";
@@ -142,5 +156,6 @@ module.exports = {
   validarCrearZonaCobertura,
   validarCambiarTarifa,
   validarCambiarEstado,
+  validarCambiarContraEntrega,
   validarZonaId,
 };
