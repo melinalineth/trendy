@@ -54,6 +54,7 @@ class DescuentoInvalidoError extends Error {
 }
 
 const MOTIVO_PEDIDO_CONFIRMADO = "Pedido confirmado";
+const MOTIVO_PEDIDO_REPUESTO = "Reposición de pedido";
 
 // Las columnas Int de MySQL son de 32 bits con signo: pasado ese tope Prisma
 // tira un error genérico de la base en vez de uno de dominio.
@@ -245,6 +246,81 @@ const inventarioRepository = {
         movimientos.push(
           await cliente.inventarioMovimiento.create({
             data: { varianteId, cantidad: -cantidad, tipoAjuste: "SALIDA", motivo, usuarioId },
+          })
+        );
+      }
+
+      return { movimientos };
+    };
+
+    return tx ? ejecutar(tx) : prisma.$transaction(ejecutar);
+  },
+
+  // Sprint 4 (pago rechazado): operación SIMÉTRICA de descontarPorPedido.
+  // Devuelve al stock las líneas de un pedido en UNA transacción (todo o nada)
+  // y registra un InventarioMovimiento ENTRADA (delta positivo) por variante.
+  //   - Mismas validaciones (agruparItems: líneas enteras > 0 dentro de Int32,
+  //     repetidas sumadas, orden por varianteId para tomar los locks siempre en
+  //     el mismo orden y evitar deadlocks con descuentos concurrentes) y mismo
+  //     DescuentoInvalidoError (400). Una cantidad negativa acá RESTARÍA stock
+  //     sin la guarda `stock >= cantidad`: por eso se rechaza.
+  //   - UPDATE atómico relativo (`increment`) con la guarda
+  //     `stock <= INT32_MAX - cantidad`: la columna es INT de 32 bits y pasarse
+  //     daría un error genérico de MySQL. Si `count` es 0, o la variante no
+  //     existe (VarianteNoEncontradaError) o la suma desbordaría
+  //     (DescuentoInvalidoError); en ambos casos se revierte todo.
+  //
+  // opciones: usuarioId (obligatorio), pedidoId (opcional, solo para el
+  // motivo), motivo (opcional, default "Reposición de pedido") y tx (opcional,
+  // cliente de la transacción del llamador; mismas reglas que en
+  // descontarPorPedido: NUNCA el `prisma` raíz).
+  //
+  // IMPORTANTE — NO es idempotente: llamarla dos veces con el mismo pedido
+  // repone dos veces. La idempotencia es responsabilidad del llamador
+  // (pago.service la garantiza bloqueando el pedido y mirando Pago.estado,
+  // RN-009); una idempotencia propia por pedido (p. ej. para la cancelación)
+  // queda para Sprint 4 / Fase B.
+  async reponerPorPedido(items, { usuarioId, pedidoId, motivo, tx } = {}) {
+    const lineas = agruparItems(items);
+
+    if (!esEnteroPositivo(usuarioId)) {
+      throw new DescuentoInvalidoError(
+        `La reposición requiere el usuarioId (entero entre 1 y ${INT32_MAX}) que origina el pedido`
+      );
+    }
+    if (pedidoId != null && !esEnteroPositivo(pedidoId)) {
+      throw new DescuentoInvalidoError(`El pedidoId debe ser un entero entre 1 y ${INT32_MAX}`);
+    }
+
+    const motivoBase = motivo ?? MOTIVO_PEDIDO_REPUESTO;
+    const motivoFinal = pedidoId != null ? `${motivoBase} (pedido #${pedidoId})` : motivoBase;
+
+    const ejecutar = async (cliente) => {
+      const movimientos = [];
+
+      for (const { varianteId, cantidad } of lineas) {
+        const { count } = await cliente.variante.updateMany({
+          where: { id: varianteId, stock: { lte: INT32_MAX - cantidad } },
+          data: { stock: { increment: cantidad } },
+        });
+
+        if (count === 0) {
+          const variante = await cliente.variante.findUnique({
+            where: { id: varianteId },
+            select: { stock: true },
+          });
+
+          if (!variante) {
+            throw new VarianteNoEncontradaError(`La variante ${varianteId} no existe`);
+          }
+          throw new DescuentoInvalidoError(
+            `Reponer ${cantidad} unidades de la variante ${varianteId} superaría el stock máximo (${INT32_MAX})`
+          );
+        }
+
+        movimientos.push(
+          await cliente.inventarioMovimiento.create({
+            data: { varianteId, cantidad, tipoAjuste: "ENTRADA", motivo: motivoFinal, usuarioId },
           })
         );
       }
