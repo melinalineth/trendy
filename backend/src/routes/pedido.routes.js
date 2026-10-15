@@ -13,7 +13,7 @@ const roleGuard = require("../middlewares/roleGuard");
 //   POST  /api/v1/pedidos/vencidos/cancelar  admin (scheduler externo)
 //   GET   /api/v1/pedidos/:id                cliente dueño, admin, vendedor (RF-031)
 //   PATCH /api/v1/pedidos/:id/estado         admin, vendedor (RF-032)
-//   PATCH /api/v1/pedidos/:id/cancelar       cliente dueño, admin, vendedor
+//   PATCH /api/v1/pedidos/:id/cancelar       admin, vendedor
 //   PUT   /api/v1/pedidos/:id/estado-envio   admin, vendedor (RF-029, MOD-05)
 //   GET   /api/v1/pedidos/:id/seguimiento    cliente dueño, admin, vendedor (RF-028)
 // (GET /api/v1/pedidos/:id/pago vive en pago.routes.js.)
@@ -48,10 +48,12 @@ router.patch(
   pedidoController.actualizarEstado
 );
 
+// ERS v1.2 §2.8.3 y matriz §4.1: en el MVP cancela el personal (a pedido del
+// cliente); la cancelación por el propio cliente (RF-033) es v2.0.
 router.patch(
   "/api/v1/pedidos/:id/cancelar",
   auth,
-  roleGuard(["cliente", "admin", "vendedor"]),
+  roleGuard(["admin", "vendedor"]),
   pedidoController.cancelar
 );
 

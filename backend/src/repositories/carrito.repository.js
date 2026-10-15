@@ -126,8 +126,15 @@ const carritoRepository = {
    * y devuelve { id } o null si el usuario nunca tuvo carrito. Dos
    * creaciones de pedido simultáneas desde el mismo carrito se serializan: la
    * segunda espera a que la primera confirme y recién entonces lee los items
-   * (ya vacíos). Agregar o editar items también espera: la FK de ItemCarrito
-   * pide un lock compartido sobre esta fila.
+   * (ya vacíos).
+   *
+   * Ojo, el lock NO frena todas las escrituras del carrito: INSERTAR un item
+   * nuevo sí espera (la FK de ItemCarrito pide un lock compartido sobre esta
+   * fila), pero EDITAR la cantidad o BORRAR un item existente no tocan esta
+   * fila ni chequean la FK, así que no esperan. Si eso ocurre en plena
+   * creación del pedido, el pedido usa las líneas que leyó y el vaciado las
+   * borra igual (el cambio de cantidad se pierde; el stock siempre lo
+   * protege el descuento atómico).
    */
   async bloquearPorUsuario(usuarioId, client) {
     const filas =

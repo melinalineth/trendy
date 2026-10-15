@@ -3,7 +3,7 @@
 // cancelación de pedidos vencidos.
 //
 // Endpoints:
-//   PATCH /api/v1/pedidos/:id/cancelar        cliente dueño; admin y vendedor
+//   PATCH /api/v1/pedidos/:id/cancelar        admin y vendedor (el cliente: 403)
 //   POST  /api/v1/pedidos/vencidos/cancelar   admin
 //
 // Invariantes que se prueban (también con concurrencia real):
@@ -37,6 +37,7 @@ const {
   agregarAlCarrito,
   limpiar,
 } = require("./helpers/entorno");
+const { MARGEN_VENCIMIENTO_MS } = require("../src/services/pedido.service");
 
 const HORA_MS = 60 * 60 * 1000;
 
@@ -136,11 +137,12 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
     }));
   }
 
-  const atrasar = (pedidoId, horas) =>
+  const atrasarMs = (pedidoId, ms) =>
     prisma.pedido.update({
       where: { id: pedidoId },
-      data: { creadoEn: new Date(Date.now() - horas * HORA_MS) },
+      data: { creadoEn: new Date(Date.now() - ms) },
     });
+  const atrasar = (pedidoId, horas) => atrasarMs(pedidoId, horas * HORA_MS);
 
   before(async () => {
     mockObtenerPago = mock.method(mercadopago.Payment.prototype, "get", async () => {
@@ -169,13 +171,26 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
     });
 
     it("id inválido -> 400 VALIDACION_FALLIDA", async () => {
-      const cliente = await crearUsuario("cliente");
       for (const id of ["abc", "0", "-1", "1.5"]) {
-        assertErrorEstandar(await cancelar(id, cliente), 400, "VALIDACION_FALLIDA");
+        assertErrorEstandar(await cancelar(id, admin), 400, "VALIDACION_FALLIDA");
       }
     });
 
-    it("el cliente cancela su pedido PENDIENTE: 200 CANCELADO y repone el stock exacto (un movimiento ENTRADA por línea)", async () => {
+    // ERS v1.2 §2.8.3 y matriz §4.1: en el MVP la cancelación la gestiona el
+    // personal (RF-033, cancelación por el propio cliente, es v2.0).
+    it("el cliente NO puede cancelar, ni su propio pedido -> 403 ACCESO_DENEGADO y nada cambia", async () => {
+      const { pedido, variantes, cliente } = await pedidoReal();
+      const otro = await crearUsuario("cliente");
+
+      for (const usuario of [cliente, otro]) {
+        assertErrorEstandar(await cancelar(pedido.id, usuario), 403, "ACCESO_DENEGADO");
+      }
+      assert.equal(await estadoDe(pedido.id), "PENDIENTE");
+      assert.equal(await stockDe(variantes[0].id), 8);
+      assert.deepEqual(await entradasDe(variantes[0].id), []);
+    });
+
+    it("el personal cancela un pedido PENDIENTE: 200 CANCELADO y repone el stock exacto (un movimiento ENTRADA por línea)", async () => {
       const { pedido, variantes, cliente } = await pedidoReal({
         lineas: [
           { stock: 10, cantidad: 2 },
@@ -185,7 +200,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       assert.equal(await stockDe(variantes[0].id), 8);
       assert.equal(await stockDe(variantes[1].id), 1);
 
-      const r = await cancelar(pedido.id, cliente);
+      const r = await cancelar(pedido.id, admin);
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(r.body.pedido.estado, "CANCELADO");
@@ -219,25 +234,15 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       }
     });
 
-    it("pedido de OTRO cliente -> 404 PEDIDO_NO_ENCONTRADO (RN-003), igual que uno inexistente, y nada cambia", async () => {
-      const { pedido, variantes } = await pedidoReal();
-      const intruso = await crearUsuario("cliente");
-
-      const ajeno = await cancelar(pedido.id, intruso);
-      const inexistente = await cancelar(2147483000, intruso);
-
-      assertErrorEstandar(ajeno, 404, "PEDIDO_NO_ENCONTRADO");
-      assertErrorEstandar(inexistente, 404, "PEDIDO_NO_ENCONTRADO");
-      assert.equal(ajeno.body.error.mensaje, inexistente.body.error.mensaje);
-      assert.equal(await estadoDe(pedido.id), "PENDIENTE");
-      assert.equal(await stockDe(variantes[0].id), 8);
+    it("pedido inexistente -> 404 PEDIDO_NO_ENCONTRADO", async () => {
+      assertErrorEstandar(await cancelar(2147483000, vendedor), 404, "PEDIDO_NO_ENCONTRADO");
     });
 
     it("cancelar dos veces es idempotente: 200 yaCancelado y NO repone de nuevo", async () => {
       const { pedido, variantes, cliente } = await pedidoReal();
-      assert.equal((await cancelar(pedido.id, cliente)).status, 200);
+      assert.equal((await cancelar(pedido.id, admin)).status, 200);
 
-      const r = await cancelar(pedido.id, cliente);
+      const r = await cancelar(pedido.id, admin);
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(r.body.yaCancelado, true);
@@ -250,11 +255,11 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       const { pedido, variantes, cliente } = await pedidoReal();
 
       const respuestas = await Promise.all([
-        cancelar(pedido.id, cliente),
         cancelar(pedido.id, admin),
-        cancelar(pedido.id, cliente),
+        cancelar(pedido.id, admin),
+        cancelar(pedido.id, admin),
         cancelar(pedido.id, vendedor),
-        cancelar(pedido.id, cliente),
+        cancelar(pedido.id, admin),
       ]);
 
       assert.deepEqual(
@@ -279,7 +284,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
         },
       });
 
-      const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, cliente));
+      const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, admin));
 
       assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
       assert.equal(await estadoDe(pedido.id), "PENDIENTE");
@@ -332,7 +337,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
           estado,
         });
 
-        const r = await cancelar(pedido.id, cliente);
+        const r = await cancelar(pedido.id, admin);
 
         assert.equal(r.status, 200, JSON.stringify(r.body));
         assert.equal(await estadoDe(pedido.id), "CANCELADO");
@@ -352,7 +357,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
         },
       });
 
-      const r = await cancelar(pedido.id, cliente);
+      const r = await cancelar(pedido.id, admin);
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(await stockDe(variantes[0].id), 10);
@@ -367,7 +372,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       });
       assert.equal(registro.status, 201, JSON.stringify(registro.body));
 
-      const r = await cancelar(pedido.id, cliente);
+      const r = await cancelar(pedido.id, admin);
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(await stockDe(variantes[0].id), 10);
@@ -386,7 +391,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       const { pedido, variantes, cliente } = await pedidoReal();
       aprobarEnMercadoPago(pedido);
 
-      assert.equal((await cancelar(pedido.id, cliente)).status, 200);
+      assert.equal((await cancelar(pedido.id, admin)).status, 200);
       const { resultado: r } = await conLogs(() => webhook(70001));
 
       assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -402,7 +407,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       aprobarEnMercadoPago(pedido);
 
       assert.equal((await webhook(70002)).status, 200);
-      const { resultado: r } = await conLogs(() => cancelar(pedido.id, cliente));
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id, admin));
 
       assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
       assert.equal(await estadoDe(pedido.id), "CONFIRMADO");
@@ -424,7 +429,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
         const desfaseMs = ronda % 2 === 0 ? 0 : 5 + ronda * 3;
         const { resultado: [rc, rw] } = await conLogs(() =>
           Promise.all([
-            new Promise((r) => setTimeout(r, desfaseMs)).then(() => cancelar(pedido.id, cliente)),
+            new Promise((r) => setTimeout(r, desfaseMs)).then(() => cancelar(pedido.id, admin)),
             webhook(70100 + ronda),
           ])
         );
@@ -587,12 +592,60 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       }
     });
 
+    // La preferencia de pago de un pedido vive hasta creadoEn + horas
+    // (pago.service). Vencidos corta en horas + MARGEN_VENCIMIENTO_MS para no
+    // cancelar un pedido cuya preferencia todavía se puede pagar.
+    it("respeta el margen: con 2 h configuradas no cancela un pedido de 2 h + margen - 5 min y sí uno de 2 h + margen + 5 min", async () => {
+      const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+      process.env.MERCADOPAGO_PREFERENCIA_HORAS = "2";
+      try {
+        const dentro = await pedidoReal();
+        const fuera = await pedidoReal();
+        await atrasarMs(dentro.pedido.id, 2 * HORA_MS + MARGEN_VENCIMIENTO_MS - 5 * 60 * 1000);
+        await atrasarMs(fuera.pedido.id, 2 * HORA_MS + MARGEN_VENCIMIENTO_MS + 5 * 60 * 1000);
+
+        const r = await vencidos(undefined);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.ok(!r.body.cancelados.includes(dentro.pedido.id));
+        assert.ok(r.body.cancelados.includes(fuera.pedido.id));
+        assert.equal(await estadoDe(dentro.pedido.id), "PENDIENTE");
+        assert.equal(await estadoDe(fuera.pedido.id), "CANCELADO");
+      } finally {
+        if (anterior === undefined) delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        else process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
+      }
+    });
+
+    it("`horas` del body es un PISO: horas 1 no cancela un pedido de 2 h si la vigencia configurada es 24 h", async () => {
+      const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+      delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+      try {
+        const { pedido, variantes } = await pedidoReal();
+        await atrasar(pedido.id, 2);
+
+        const r = await vencidos({ horas: 1 });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.horas, 24);
+        assert.ok(!r.body.cancelados.includes(pedido.id));
+        assert.equal(await estadoDe(pedido.id), "PENDIENTE");
+        assert.equal(await stockDe(variantes[0].id), 8);
+
+        // Un valor MAYOR que la vigencia sí se respeta (es más conservador).
+        const mayor = await vencidos({ horas: 48 });
+        assert.equal(mayor.body.horas, 48);
+      } finally {
+        if (anterior !== undefined) process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
+      }
+    });
+
     it("vencidos y una cancelación SIMULTÁNEOS sobre el mismo pedido: se repone una sola vez", async () => {
       for (let ronda = 0; ronda < 4; ronda++) {
         const { pedido, variantes, cliente } = await pedidoReal();
         await atrasar(pedido.id, 48);
 
-        const [rv, rc] = await Promise.all([vencidos({ horas: 24 }), cancelar(pedido.id, cliente)]);
+        const [rv, rc] = await Promise.all([vencidos({ horas: 24 }), cancelar(pedido.id, admin)]);
 
         assert.equal(rv.status, 200, JSON.stringify(rv.body));
         assert.equal(rc.status, 200, JSON.stringify(rc.body));

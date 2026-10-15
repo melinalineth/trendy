@@ -1,5 +1,6 @@
 const { z } = require("zod");
 const { ESTADOS_ENVIO } = require("../services/envio.service");
+const { HORAS_PREFERENCIA_MAXIMO } = require("../services/pago.service");
 
 // Sprint 4 / MOD-06 (DDS §3): validación de entrada de los endpoints de
 // pedidos. Los validadores lanzan un Error con status 400 / codigo
@@ -37,8 +38,11 @@ const crearPedidoSchema = z.strictObject(
 );
 
 // Body opcional de POST /api/v1/pedidos/vencidos/cancelar: { horas? }. Mismo
-// rango que MERCADOPAGO_PREFERENCIA_HORAS (1 a 168, una semana).
-const HORAS_MAXIMO = 168;
+// rango que MERCADOPAGO_PREFERENCIA_HORAS (1 a HORAS_PREFERENCIA_MAXIMO, una
+// semana). `horas` es un PISO: el service usa max(horas, vigencia
+// configurada), así que un valor menor que la vigencia de las preferencias de
+// pago no tiene efecto (no se cancela un pedido que todavía se puede pagar).
+const HORAS_MAXIMO = HORAS_PREFERENCIA_MAXIMO;
 const cancelarVencidosSchema = z.strictObject(
   {
     horas: z

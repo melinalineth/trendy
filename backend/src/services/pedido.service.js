@@ -218,25 +218,83 @@ function presentarPedido(pedido) {
 const OPCIONES_TRANSACCION = Object.freeze({ maxWait: 10000, timeout: 15000 });
 
 // Reintentos de una transacción completa (máximo INTENTOS_TRANSACCION):
-//   - P2034 (deadlock / conflicto de escritura): MySQL ya revirtió TODO lo de
-//     la víctima, así que repetirla es seguro; la idempotencia sale de los
-//     locks y del estado leído bajo ellos. Es lo que recomienda Prisma. Pasa
-//     con cualquier carga concurrente (en los tests, con la limpieza de otro
-//     archivo que borra usuarios en paralelo).
-//   - P2002 solo al crear: Pedido.numero es @unique y generarNumero puede
-//     repetirse (mismo ms y mismo aleatorio); es el único unique que puede
-//     chocar en esa transacción.
+//   - Deadlock / conflicto de escritura (P2034, o P2010 con MySQL 1213 en SQL
+//     crudo) y lock wait timeout (MySQL 1205): la transacción completa se
+//     revierte (MySQL a la víctima del deadlock; Prisma hace ROLLBACK porque
+//     el callback lanzó), así que repetirla es seguro; la idempotencia sale
+//     de los locks y del estado leído bajo ellos. Es lo que recomienda
+//     Prisma. Pasa con cualquier carga concurrente.
+//   - P2002 solo al crear y solo si es el unique de Pedido.numero
+//     (generarNumero puede repetirse: mismo ms y mismo aleatorio).
+// Ver esErrorReintentable.
 // Cada reintento deja una línea JSON (TRANSACCION_REINTENTADA): si aparecen
 // seguido, hay un problema de orden de locks que mirar.
 const INTENTOS_TRANSACCION = 3;
+
+// Códigos de MySQL que abortan la transacción por concurrencia: 1213
+// (deadlock) y 1205 (lock wait timeout). Dentro de un $queryRaw (los SELECT
+// ... FOR UPDATE de bloquearPedido / bloquearPorUsuario) Prisma NO los
+// traduce a P2034: llegan como P2010 con el código en
+// meta.driverAdapterError.cause.originalCode y en el mensaje
+// ("Raw query failed. Code: `1213`").
+const CODIGOS_MYSQL_REINTENTABLES = Object.freeze(["1213", "1205"]);
+
+// Índice único de Pedido.numero (generarNumero puede repetirse).
+const INDICE_NUMERO_PEDIDO = "Pedido_numero_key";
+
+function codigoMysqlDeSqlCrudo(error) {
+  const codigo = error?.meta?.driverAdapterError?.cause?.originalCode;
+  if (codigo !== undefined && codigo !== null) return String(codigo);
+
+  const coincidencia = /Code: `(\d+)`/.exec(String(error?.message ?? ""));
+  return coincidencia ? coincidencia[1] : null;
+}
+
+// ¿El P2002 es el unique de Pedido.numero? Con el adapter de MariaDB el
+// índice viene en meta.driverAdapterError.cause.constraint (sin
+// meta.target); sin adapter, en meta.target (campos o nombre del índice).
+function esUniqueDeNumero(error) {
+  const meta = error?.meta ?? {};
+  const restriccion = meta.driverAdapterError?.cause?.constraint ?? {};
+  const candidatos = [
+    ...[meta.target].flat(),
+    restriccion.index,
+    ...[restriccion.fields].flat(),
+  ].filter((valor) => typeof valor === "string");
+
+  return candidatos.some((valor) => valor === "numero" || valor === INDICE_NUMERO_PEDIDO);
+}
+
+/**
+ * ¿Se puede repetir la transacción completa? Función pura (exportada para
+ * testearla con errores simulados):
+ *   - P2034: deadlock / conflicto de escritura de una query de Prisma.
+ *   - P2010 con código MySQL 1213 o 1205: lo mismo dentro de SQL crudo.
+ *   - P2002 del unique de Pedido.numero, solo si `reintentarUnique` (al
+ *     crear); cualquier otro unique es un error real.
+ */
+function esErrorReintentable(error, { reintentarUnique = false } = {}) {
+  if (!error) return false;
+
+  if (error.code === "P2034") return true;
+
+  if (error.code === "P2010") {
+    return CODIGOS_MYSQL_REINTENTABLES.includes(codigoMysqlDeSqlCrudo(error));
+  }
+
+  if (error.code === "P2002") {
+    return reintentarUnique && esUniqueDeNumero(error);
+  }
+
+  return false;
+}
 
 async function enTransaccion(operacion, fn, { reintentarUnique = false } = {}) {
   for (let intento = 1; ; intento++) {
     try {
       return await prisma.$transaction(fn, OPCIONES_TRANSACCION);
     } catch (error) {
-      const reintentable =
-        error?.code === "P2034" || (reintentarUnique && error?.code === "P2002");
+      const reintentable = esErrorReintentable(error, { reintentarUnique });
 
       if (!reintentable || intento >= INTENTOS_TRANSACCION) {
         throw error;
@@ -410,22 +468,17 @@ function logEvento(evento) {
 // pedido ya CANCELADO no se repone de nuevo), porque reponerPorPedido NO es
 // idempotente. Lo comparten la cancelación manual y la de vencidos, así que
 // una cancelación, un vencimiento y un webhook "approved" simultáneos sobre
-// el mismo pedido se serializan en la misma fila.
-//   - usuario: quien cancela; un cliente solo puede cancelar los suyos (uno
-//     ajeno responde 404 como uno inexistente, RN-003). null = proceso interno.
+// el mismo pedido se serializan en la misma fila. Solo la usa el personal
+// (PATCH /cancelar es admin/vendedor) y el proceso de vencidos.
 //   - vencimiento: { corte } para la cancelación de vencidos. Si al tomar el
 //     lock el pedido ya no cumple las condiciones (lo pagaron, lo cancelaron,
 //     cambió de estado) se OMITE en vez de fallar.
 // Devuelve { yaCancelado } o { omitido: true }.
-async function cancelarBajoLock(tx, pedidoId, { usuario = null, motivo, vencimiento = null }) {
+async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null }) {
   const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
   if (!bloqueado) {
     if (vencimiento) return { omitido: true };
-    throw new PedidoNoEncontradoError();
-  }
-
-  if (usuario && !esPersonal(usuario) && Number(bloqueado.usuarioId) !== Number(usuario.id)) {
     throw new PedidoNoEncontradoError();
   }
 
@@ -484,13 +537,15 @@ async function cancelarBajoLock(tx, pedidoId, { usuario = null, motivo, vencimie
 }
 
 /**
- * PATCH /api/v1/pedidos/:id/cancelar: el cliente cancela su pedido; admin y
- * vendedor, cualquiera. Solo pedidos pendientes de pago y sin Pago APROBADO.
+ * PATCH /api/v1/pedidos/:id/cancelar: SOLO admin y vendedor (ERS v1.2 §2.8.3
+ * y matriz §4.1: en el MVP la cancelación la gestiona el personal a pedido
+ * del cliente; RF-033, cancelación por el propio cliente, es v2.0). El rol lo
+ * restringe roleGuard. Solo pedidos pendientes de pago y sin Pago APROBADO.
  * Repetirlo responde 200 { yaCancelado: true } sin reponer otra vez.
  */
-async function cancelarPedido(pedidoId, usuario) {
+async function cancelarPedido(pedidoId) {
   const { yaCancelado } = await enTransaccion("CANCELAR_PEDIDO", (tx) =>
-    cancelarBajoLock(tx, pedidoId, { usuario, motivo: MOTIVO_CANCELACION })
+    cancelarBajoLock(tx, pedidoId, { motivo: MOTIVO_CANCELACION })
   );
 
   return {
@@ -499,18 +554,30 @@ async function cancelarPedido(pedidoId, usuario) {
   };
 }
 
+// Margen sobre la vigencia de pago antes de cancelar un pedido por vencido.
+// pago.service no emite preferencias que vivan más allá de creadoEn + horas;
+// el margen cubre el desfase de reloj con Mercado Pago y un pago que se
+// acredita justo al límite.
+const MARGEN_VENCIMIENTO_MS = 15 * 60 * 1000;
+
 /**
  * Cancela (con reposición) los pedidos MERCADO_PAGO en PENDIENTE creados hace
- * más de `horas` horas y sin Pago APROBADO. Los CONTRA_ENTREGA no vencen (se
- * pagan al recibir). Cada pedido va en su propia transacción y bajo su lock,
- * donde se vuelve a validar todo. `horas` por defecto: la vigencia de la
- * preferencia de pago (MERCADOPAGO_PREFERENCIA_HORAS, mismo parseo que
- * pago.service; 24 si falta o es inválida). No hay cron: lo invoca un
- * scheduler externo vía POST /api/v1/pedidos/vencidos/cancelar.
+ * más de `horas` horas + MARGEN_VENCIMIENTO_MS y sin Pago APROBADO. Los
+ * CONTRA_ENTREGA no vencen (se pagan al recibir). Cada pedido va en su propia
+ * transacción y bajo su lock, donde se vuelve a validar todo.
+ *
+ * `horas` es un PISO, no un reemplazo: la vigencia efectiva es
+ * max(horas, vigencia configurada), con la vigencia configurada =
+ * MERCADOPAGO_PREFERENCIA_HORAS (mismo parseo que pago.service; 24 si falta o
+ * es inválida). Así un `horas` menor nunca cancela un pedido cuya preferencia
+ * de pago todavía está viva (pago.service la limita a creadoEn + vigencia).
+ * No hay cron: lo invoca un scheduler externo vía
+ * POST /api/v1/pedidos/vencidos/cancelar.
  */
 async function cancelarPedidosVencidos({ horas } = {}) {
-  const horasEfectivas = horas ?? horasDeVigenciaPreferencia();
-  const corte = new Date(Date.now() - horasEfectivas * HORA_MS);
+  const vigencia = horasDeVigenciaPreferencia();
+  const horasEfectivas = Math.max(horas ?? vigencia, vigencia);
+  const corte = new Date(Date.now() - horasEfectivas * HORA_MS - MARGEN_VENCIMIENTO_MS);
   const candidatos = await pedidoRepository.listarIdsVencidos(corte);
 
   const cancelados = [];
@@ -826,6 +893,8 @@ module.exports = {
   TRANSICIONES_PEDIDO,
   cancelarPedido,
   cancelarPedidosVencidos,
+  MARGEN_VENCIMIENTO_MS,
+  esErrorReintentable,
   presentarPedido,
   aCentavos,
   deCentavos,
