@@ -81,6 +81,19 @@ class PagoInvalidoError extends Error {
   }
 }
 
+// El pedido de Mercado Pago ya superó su vigencia de pago (creadoEn + horas
+// de MERCADOPAGO_PREFERENCIA_HORAS): pedido.service lo va a cancelar como
+// vencido y reponer su stock, así que no se emite una preferencia nueva que
+// permitiría cobrarlo después (dinero sobre un pedido cancelado).
+class PedidoVencidoError extends Error {
+  constructor(message = "El plazo para pagar este pedido venció") {
+    super(message);
+    this.name = "PedidoVencidoError";
+    this.status = 409;
+    this.codigo = "PEDIDO_VENCIDO";
+  }
+}
+
 // RN-006: la zona de la dirección del pedido no habilita contra entrega.
 class ContraEntregaNoDisponibleError extends Error {
   constructor(message = "El pago contra entrega no está disponible para este pedido") {
@@ -278,6 +291,16 @@ async function crearPreferencia(pedidoId, usuarioId) {
     );
   }
 
+  // Vigencia del pedido para pagar: creadoEn + horas (la misma que usa la
+  // cancelación de vencidos, que corta en horas + margen). Pasado ese límite
+  // no se llama a Mercado Pago. `creadoEn` viene en el pedido que ya se leyó
+  // (obtenerDeUsuario trae todas sus columnas).
+  const horasVigencia = horasDeVigenciaPreferencia();
+  const limitePedido = new Date(pedido.creadoEn).getTime() + horasVigencia * 60 * 60 * 1000;
+  if (Date.now() >= limitePedido) {
+    throw new PedidoVencidoError();
+  }
+
   if (!pedido.detalles || pedido.detalles.length === 0) {
     throw new PagoInvalidoError("El pedido no contiene productos");
   }
@@ -338,9 +361,15 @@ async function crearPreferencia(pedidoId, usuarioId) {
   //     respecto del de Mercado Pago (si no, la preferencia "todavía no rige").
   //   - date_of_expiration = expiration_date_to: un pago en efectivo/ticket
   //     generado antes del vencimiento no se acredita después.
+  //   - hasta: el MENOR entre ahora + horas y creadoEn + horas. Una
+  //     preferencia creada a la hora 23 de un pedido no puede vivir hasta la
+  //     hora 47: el pedido se cancela por vencido a las 24 h (+ margen) y un
+  //     pago posterior caería sobre un pedido CANCELADO (reembolso manual).
   const ahora = Date.now();
   const desde = new Date(ahora - MARGEN_RELOJ_PREFERENCIA_MS).toISOString();
-  const vence = new Date(ahora + horasDeVigenciaPreferencia() * 60 * 60 * 1000).toISOString();
+  const vence = new Date(
+    Math.min(ahora + horasVigencia * 60 * 60 * 1000, limitePedido)
+  ).toISOString();
 
   let resultado;
   try {
@@ -791,6 +820,7 @@ module.exports = {
   HORAS_PREFERENCIA_MAXIMO,
   PedidoNoEncontradoError,
   PagoInvalidoError,
+  PedidoVencidoError,
   ContraEntregaNoDisponibleError,
   PagoNoEncontradoError,
   FirmaWebhookInvalidaError,

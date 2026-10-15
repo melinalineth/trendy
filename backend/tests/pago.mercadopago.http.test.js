@@ -240,7 +240,13 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
           });
           const despues = Date.now();
           assert.equal(r.status, 200, JSON.stringify(r.body));
-          return { body: mockCrearPreferencia.mock.calls[0].arguments[0].body, antes, despues };
+          const { creadoEn } = await prisma.pedido.findUnique({ where: { id: pedido.id } });
+          return {
+            body: mockCrearPreferencia.mock.calls[0].arguments[0].body,
+            antes,
+            despues,
+            creadoEn,
+          };
         } finally {
           if (anterior === undefined) delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
           else process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
@@ -250,9 +256,12 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       const MARGEN_RELOJ_MS = 60 * 1000;
 
       // Ventana: desde = ahora - 60 s (margen por reloj adelantado respecto de
-      // Mercado Pago), hasta = ahora + N horas, y date_of_expiration = hasta
-      // (un pago en efectivo/ticket no se acredita después del vencimiento).
-      function assertVentana({ body, antes, despues }, horas) {
+      // Mercado Pago), hasta = el menor entre ahora + N horas y
+      // Pedido.creadoEn + N horas (la preferencia nunca sobrevive al
+      // vencimiento del pedido), y date_of_expiration = hasta (un pago en
+      // efectivo/ticket no se acredita después del vencimiento). Para un
+      // pedido recién creado, creadoEn <= ahora: hasta = creadoEn + N horas.
+      function assertVentana({ body, antes, despues, creadoEn }, horas) {
         assert.equal(body.expires, true);
         assert.match(body.expiration_date_from, ISO_8601);
         assert.match(body.expiration_date_to, ISO_8601);
@@ -265,12 +274,49 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
           desde >= antes - MARGEN_RELOJ_MS - 1000 && desde <= despues - MARGEN_RELOJ_MS + 1000,
           body.expiration_date_from
         );
-        assert.ok(
-          hasta >= antes + horas * HORA_MS - 1000 && hasta <= despues + horas * HORA_MS + 1000,
-          body.expiration_date_to
-        );
-        assert.equal(hasta - desde, horas * HORA_MS + MARGEN_RELOJ_MS);
+        assert.ok(hasta <= despues + horas * HORA_MS, body.expiration_date_to);
+        assert.equal(hasta, creadoEn.getTime() + horas * HORA_MS);
       }
+
+      it("pedido casi vencido: la preferencia vence con el pedido (creadoEn + horas), no a las 24 h de ahora", async () => {
+        const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        try {
+          const creadoEn = new Date(Date.now() - 23 * HORA_MS);
+          const pedido = await pedidoDe(cliente, { creadoEn });
+          mockCrearPreferencia.mock.mockImplementation(async () => ({
+            id: "pref-casi",
+            init_point: "https://mp.test/pref-casi",
+          }));
+
+          const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+          assert.equal(r.status, 200, JSON.stringify(r.body));
+          const { body } = mockCrearPreferencia.mock.calls.at(-1).arguments[0];
+          const limite = new Date(pedido.creadoEn).getTime() + 24 * HORA_MS;
+          assert.ok(Date.parse(body.expiration_date_to) <= limite, body.expiration_date_to);
+          assert.equal(Date.parse(body.expiration_date_to), limite);
+          assert.equal(body.date_of_expiration, body.expiration_date_to);
+        } finally {
+          if (anterior !== undefined) process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
+        }
+      });
+
+      it("pedido ya vencido (creadoEn + horas <= ahora) -> 409 PEDIDO_VENCIDO y NO se llama a Mercado Pago", async () => {
+        const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+        process.env.MERCADOPAGO_PREFERENCIA_HORAS = "2";
+        try {
+          const pedido = await pedidoDe(cliente, { creadoEn: new Date(Date.now() - 2 * HORA_MS - 1000) });
+
+          const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+          assertErrorEstandar(r, 409, "PEDIDO_VENCIDO");
+          assert.equal(mockCrearPreferencia.mock.callCount(), 0);
+        } finally {
+          if (anterior === undefined) delete process.env.MERCADOPAGO_PREFERENCIA_HORAS;
+          else process.env.MERCADOPAGO_PREFERENCIA_HORAS = anterior;
+        }
+      });
 
       it("sin la variable: expira a las 24 horas", async () => {
         assertVentana(await preferenciaCon(undefined), 24);
