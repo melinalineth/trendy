@@ -67,16 +67,22 @@ const esEnteroPositivo = (valor) => Number.isInteger(valor) && valor > 0 && valo
 // exactamente los mismos errores.
 // Los mensajes los pasa cada operación porque el controller de RF-017 los
 // devuelve tal cual en su respuesta HTTP y no deben cambiar.
+//
+// El stock se lee con una lectura CON LOCK (LOCK IN SHARE MODE), no con un
+// findUnique: cuando el llamador pasa su propia transacción (p. ej. la que
+// crea el Pedido, que ya leyó el carrito) un SELECT común devuelve la foto
+// REPEATABLE READ tomada ANTES de que otro pedido concurrente confirmara su
+// descuento, y `disponible` saldría desactualizado (el UPDATE falló porque
+// el stock vigente ya no alcanzaba, pero la foto vieja decía que sí).
 async function lanzarPorFilaNoActualizada(cliente, varianteId, mensajeNoExiste, mensajeSinStock) {
-  const variante = await cliente.variante.findUnique({
-    where: { id: varianteId },
-    select: { stock: true },
-  });
+  const filas =
+    await cliente.$queryRaw`SELECT stock FROM Variante WHERE id = ${varianteId} LOCK IN SHARE MODE`;
+  const variante = filas[0];
 
   if (!variante) {
     throw new VarianteNoEncontradaError(mensajeNoExiste);
   }
-  throw new StockInsuficienteError(mensajeSinStock, varianteId, variante.stock);
+  throw new StockInsuficienteError(mensajeSinStock, varianteId, Number(variante.stock));
 }
 
 // Valida las líneas y suma las repetidas de la misma variante. Devuelve
