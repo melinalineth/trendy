@@ -785,6 +785,10 @@ module.exports = {
   registrarContraEntrega,
   confirmarRecepcionContraEntrega,
   consultarEstadoPago,
+  // Fase B: pedido.service usa la misma vigencia (y el mismo parseo) para
+  // decidir cuándo un pedido de Mercado Pago sin pagar está vencido.
+  horasDeVigenciaPreferencia,
+  HORAS_PREFERENCIA_MAXIMO,
   PedidoNoEncontradoError,
   PagoInvalidoError,
   ContraEntregaNoDisponibleError,

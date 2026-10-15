@@ -179,13 +179,43 @@ const obtenerDeUsuario = async (id, usuarioId) => {
 };
 
 // Toma el lock de la fila del pedido (SELECT ... FOR UPDATE) dentro de una
-// transacción y devuelve { id, estado, usuarioId } o null. Serializa los
-// eventos de pago concurrentes sobre un mismo pedido (RN-009): el segundo
-// espera al primero y ya ve el Pago actualizado.
+// transacción y devuelve { id, estado, usuarioId, metodoPago, creadoEn } o
+// null. Serializa los eventos concurrentes sobre un mismo pedido (pagos
+// RN-009, cancelación, cambios de estado y de envío): el segundo espera al
+// primero y ya ve lo que éste confirmó. Es una lectura con lock, así que
+// devuelve siempre el valor vigente (no el de una foto vieja).
 const bloquearPedido = async (id, client) => {
-  const filas = await client.$queryRaw`SELECT id, estado, usuarioId FROM Pedido WHERE id = ${id} FOR UPDATE`;
+  const filas =
+    await client.$queryRaw`SELECT id, estado, usuarioId, metodoPago, creadoEn FROM Pedido WHERE id = ${id} FOR UPDATE`;
 
   return filas[0] ?? null;
+};
+
+// Líneas de un pedido ({ varianteId, cantidad }), para reponer el stock al
+// cancelarlo. Con `client` se leen bajo el lock del pedido.
+const obtenerLineas = async (pedidoId, client = prisma) => {
+  return await client.detallePedido.findMany({
+    where: { pedidoId },
+    select: { varianteId: true, cantidad: true },
+    orderBy: { varianteId: "asc" },
+  });
+};
+
+// Candidatos a vencidos (MERCADO_PAGO, PENDIENTE, creados antes de `corte`,
+// sin Pago APROBADO). Solo ids: cada uno se vuelve a validar bajo su lock.
+const listarIdsVencidos = async (corte) => {
+  const filas = await prisma.pedido.findMany({
+    where: {
+      metodoPago: "MERCADO_PAGO",
+      estado: "PENDIENTE",
+      creadoEn: { lt: corte },
+      NOT: { pago: { is: { estado: "APROBADO" } } },
+    },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+
+  return filas.map((fila) => fila.id);
 };
 
 // Actualizar únicamente el estado del pedido
@@ -209,5 +239,7 @@ module.exports = {
   obtenerPorId,
   obtenerDeUsuario,
   bloquearPedido,
+  obtenerLineas,
+  listarIdsVencidos,
   actualizarEstado,
 };

@@ -355,6 +355,80 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
     });
   });
 
+  describe("reintento ante deadlock (P2034)", () => {
+    // Error con la forma que lanza Prisma cuando MySQL elige la transacción
+    // como víctima de un deadlock (MySQL ya revirtió todo lo de esa víctima).
+    function errorDeadlock() {
+      const error = new Error("Transaction failed due to a write conflict or a deadlock");
+      error.code = "P2034";
+      return error;
+    }
+
+    it("un deadlock transitorio se reintenta: 201, un solo pedido, stock descontado una vez y queda log", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      await agregarAlCarrito(cliente.id, variante, 2);
+      const original = carritoRepository.vaciar;
+      let llamadas = 0;
+      const mockVaciar = mock.method(carritoRepository, "vaciar", async (...args) => {
+        llamadas++;
+        if (llamadas === 1) throw errorDeadlock();
+        return original.apply(carritoRepository, args);
+      });
+      const mockLog = mock.method(console, "error", () => {});
+
+      let r;
+      try {
+        r = await crear(cliente);
+      } finally {
+        mockVaciar.mock.restore();
+        mockLog.mock.restore();
+      }
+
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.equal(llamadas, 2);
+      assert.equal((await pedidosDe(cliente.id)).length, 1);
+      assert.equal(await stockDe(variante.id), 3);
+      assert.equal((await movimientosDe(variante.id)).length, 1);
+      assert.deepEqual(await itemsDelCarrito(cliente.id), []);
+      const linea = mockLog.mock.calls
+        .map((c) => c.arguments.join(" "))
+        .find((l) => l.includes("TRANSACCION_REINTENTADA"));
+      assert.ok(linea);
+      assert.deepEqual(JSON.parse(linea), {
+        evento: "TRANSACCION_REINTENTADA",
+        operacion: "CREAR_PEDIDO",
+        intento: 1,
+        codigo: "P2034",
+      });
+    });
+
+    it("si el deadlock persiste, se rinde a los 3 intentos y no queda nada a medias", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      await agregarAlCarrito(cliente.id, variante, 2);
+      const mockVaciar = mock.method(carritoRepository, "vaciar", async () => {
+        throw errorDeadlock();
+      });
+      const mockLog = mock.method(console, "error", () => {});
+
+      let r;
+      try {
+        r = await crear(cliente);
+      } finally {
+        mockVaciar.mock.restore();
+        mockLog.mock.restore();
+      }
+
+      assert.equal(r.status, 500, JSON.stringify(r.body));
+      assert.equal(mockVaciar.mock.callCount(), 3);
+      assert.deepEqual(await pedidosDe(cliente.id), []);
+      assert.equal(await stockDe(variante.id), 5);
+      assert.deepEqual(await movimientosDe(variante.id), []);
+      assert.equal((await itemsDelCarrito(cliente.id)).length, 1);
+    });
+  });
+
   describe("concurrencia", () => {
     for (const simultaneos of [2, 6]) {
       it(`${simultaneos} POST simultáneos desde el MISMO carrito -> exactamente 1 pedido y stock descontado una vez`, async () => {

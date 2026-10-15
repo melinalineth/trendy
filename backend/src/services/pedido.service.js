@@ -19,12 +19,17 @@
 
 const prisma = require("../config/prisma");
 const pedidoRepository = require("../repositories/pedido.repository");
+const pagoRepository = require("../repositories/pago.repository");
 const carritoRepository = require("../repositories/carrito.repository");
 const direccionRepository = require("../repositories/direccion.repository");
 const zonaCoberturaRepository = require("../repositories/zonaCobertura.repository");
 const envioService = require("./envio.service");
 const inventarioService = require("./inventario.service");
-const { PedidoNoEncontradoError, ContraEntregaNoDisponibleError } = require("./pago.service");
+const {
+  PedidoNoEncontradoError,
+  ContraEntregaNoDisponibleError,
+  horasDeVigenciaPreferencia,
+} = require("./pago.service");
 
 const { CoberturaNoDisponibleError, DireccionNoAutorizadaError } = envioService;
 const { StockInsuficienteError } = inventarioService;
@@ -49,6 +54,17 @@ class ProductoNoDisponibleError extends Error {
     this.status = 409;
     this.codigo = "PRODUCTO_NO_DISPONIBLE";
     this.detalles = { varianteId };
+  }
+}
+
+// Cancelación rechazada: el pedido ya avanzó (confirmado, en envío...) o
+// tiene un Pago APROBADO (el reembolso es manual, fuera del sistema).
+class PedidoNoCancelableError extends Error {
+  constructor(message = "El pedido no se puede cancelar en su estado actual") {
+    super(message);
+    this.name = "PedidoNoCancelableError";
+    this.status = 409;
+    this.codigo = "PEDIDO_NO_CANCELABLE";
   }
 }
 
@@ -166,9 +182,37 @@ function presentarPedido(pedido) {
 // defecto de Prisma (5 s).
 const OPCIONES_TRANSACCION = Object.freeze({ maxWait: 10000, timeout: 15000 });
 
-// Pedido.numero es @unique y generarNumero puede repetirse (mismo ms y mismo
-// aleatorio): ante P2002 se reintenta la transacción completa.
-const INTENTOS_NUMERO = 3;
+// Reintentos de una transacción completa (máximo INTENTOS_TRANSACCION):
+//   - P2034 (deadlock / conflicto de escritura): MySQL ya revirtió TODO lo de
+//     la víctima, así que repetirla es seguro; la idempotencia sale de los
+//     locks y del estado leído bajo ellos. Es lo que recomienda Prisma. Pasa
+//     con cualquier carga concurrente (en los tests, con la limpieza de otro
+//     archivo que borra usuarios en paralelo).
+//   - P2002 solo al crear: Pedido.numero es @unique y generarNumero puede
+//     repetirse (mismo ms y mismo aleatorio); es el único unique que puede
+//     chocar en esa transacción.
+// Cada reintento deja una línea JSON (TRANSACCION_REINTENTADA): si aparecen
+// seguido, hay un problema de orden de locks que mirar.
+const INTENTOS_TRANSACCION = 3;
+
+async function enTransaccion(operacion, fn, { reintentarUnique = false } = {}) {
+  for (let intento = 1; ; intento++) {
+    try {
+      return await prisma.$transaction(fn, OPCIONES_TRANSACCION);
+    } catch (error) {
+      const reintentable =
+        error?.code === "P2034" || (reintentarUnique && error?.code === "P2002");
+
+      if (!reintentable || intento >= INTENTOS_TRANSACCION) {
+        throw error;
+      }
+
+      logEvento({ evento: "TRANSACCION_REINTENTADA", operacion, intento, codigo: error.code });
+      // Espera corta y aleatoria para que los dos lados no choquen de nuevo.
+      await new Promise((resolver) => setTimeout(resolver, 10 * intento + Math.random() * 20));
+    }
+  }
+}
 
 // Todo lo que pasa con el lock del carrito tomado. Devuelve el id del pedido.
 // Orden de escritura pensado para no provocar deadlocks entre pedidos
@@ -296,33 +340,176 @@ async function crearPedido(usuarioId, { direccionId, metodoPago }) {
     costoEnvioCentavos: aCentavos(envio.costo),
   };
 
-  let pedidoId;
-  for (let intento = 1; ; intento++) {
-    try {
-      pedidoId = await prisma.$transaction(
-        (tx) => crearEnTransaccion(tx, datos),
-        OPCIONES_TRANSACCION
-      );
-      break;
-    } catch (error) {
-      // El único unique que puede chocar acá es Pedido.numero.
-      if (error?.code === "P2002" && intento < INTENTOS_NUMERO) {
-        continue;
-      }
-      throw error;
-    }
-  }
+  const pedidoId = await enTransaccion("CREAR_PEDIDO", (tx) => crearEnTransaccion(tx, datos), {
+    reintentarUnique: true,
+  });
 
   return presentarPedido(await pedidoRepository.obtenerPorId(pedidoId));
 }
 
+// ---------------------------------------------------------------------------
+// Cancelación y pedidos vencidos (ERS RF-019 "un pedido cancelado liberará el
+// stock", RF-033)
+// ---------------------------------------------------------------------------
+
+const ROLES_PERSONAL = Object.freeze(["admin", "vendedor"]);
+const esPersonal = (usuario) => ROLES_PERSONAL.includes(usuario?.rol);
+
+// Estados desde los que se puede cancelar (el stock sigue reservado y no hubo
+// pago aprobado). PAGO_PENDIENTE / PAGO_RECHAZADO son legados del enum: el
+// flujo vigente no los produce, pero si existieran se cancelan igual.
+const ESTADOS_CANCELABLES = Object.freeze(["PENDIENTE", "PAGO_PENDIENTE", "PAGO_RECHAZADO"]);
+
+const MOTIVO_CANCELACION = "Pedido cancelado";
+const MOTIVO_VENCIMIENTO = "Pedido cancelado por vencimiento del pago";
+const HORA_MS = 60 * 60 * 1000;
+
+// Log estructurado: JSON de UNA línea (mismo formato que pago.service) para
+// poder filtrarlo y reconciliar a mano.
+function logEvento(evento) {
+  console.error(JSON.stringify(evento));
+}
+
+// Núcleo de la cancelación, dentro de una transacción y con el lock del
+// pedido tomado. La idempotencia sale del ESTADO leído bajo el lock (un
+// pedido ya CANCELADO no se repone de nuevo), porque reponerPorPedido NO es
+// idempotente. Lo comparten la cancelación manual y la de vencidos, así que
+// una cancelación, un vencimiento y un webhook "approved" simultáneos sobre
+// el mismo pedido se serializan en la misma fila.
+//   - usuario: quien cancela; un cliente solo puede cancelar los suyos (uno
+//     ajeno responde 404 como uno inexistente, RN-003). null = proceso interno.
+//   - vencimiento: { corte } para la cancelación de vencidos. Si al tomar el
+//     lock el pedido ya no cumple las condiciones (lo pagaron, lo cancelaron,
+//     cambió de estado) se OMITE en vez de fallar.
+// Devuelve { yaCancelado } o { omitido: true }.
+async function cancelarBajoLock(tx, pedidoId, { usuario = null, motivo, vencimiento = null }) {
+  const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
+
+  if (!bloqueado) {
+    if (vencimiento) return { omitido: true };
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (usuario && !esPersonal(usuario) && Number(bloqueado.usuarioId) !== Number(usuario.id)) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  if (bloqueado.estado === "CANCELADO") {
+    return vencimiento ? { omitido: true } : { yaCancelado: true };
+  }
+
+  const pago = await pagoRepository.buscarPorPedido(pedidoId, tx);
+
+  if (vencimiento) {
+    const sigueVencido =
+      bloqueado.estado === "PENDIENTE" &&
+      bloqueado.metodoPago === "MERCADO_PAGO" &&
+      new Date(bloqueado.creadoEn) < vencimiento.corte &&
+      pago?.estado !== "APROBADO";
+
+    if (!sigueVencido) return { omitido: true };
+  }
+
+  if (pago?.estado === "APROBADO") {
+    // Dinero cobrado: no se cancela acá; el reembolso es manual.
+    logEvento({ evento: "CANCELACION_RECHAZADA_CON_PAGO_APROBADO", pedidoId });
+    throw new PedidoNoCancelableError(
+      "El pedido tiene un pago aprobado: no se puede cancelar desde el sistema (el reembolso se gestiona manualmente)"
+    );
+  }
+
+  if (!ESTADOS_CANCELABLES.includes(bloqueado.estado)) {
+    throw new PedidoNoCancelableError(
+      `No se puede cancelar un pedido en estado ${bloqueado.estado}; solo se cancelan pedidos pendientes de pago`
+    );
+  }
+
+  const lineas = await pedidoRepository.obtenerLineas(pedidoId, tx);
+
+  await pedidoRepository.actualizarEstado(pedidoId, "CANCELADO", tx);
+
+  // Un pago contra entrega registrado (PENDIENTE) ya no se va a cobrar. Un
+  // intento RECHAZADO de Mercado Pago queda como está (es historia del pago).
+  if (pago?.estado === "PENDIENTE") {
+    await pagoRepository.actualizarEstado(pedidoId, "CANCELADO", undefined, tx);
+  }
+
+  // El stock estaba reservado desde la creación: se libera con el usuario
+  // DUEÑO del pedido (InventarioMovimiento.usuarioId), quien sea que cancele.
+  if (lineas.length > 0) {
+    await inventarioService.reponerPorPedido(lineas, {
+      usuarioId: Number(bloqueado.usuarioId),
+      pedidoId,
+      motivo,
+      tx,
+    });
+  }
+
+  return { yaCancelado: false };
+}
+
+/**
+ * PATCH /api/v1/pedidos/:id/cancelar: el cliente cancela su pedido; admin y
+ * vendedor, cualquiera. Solo pedidos pendientes de pago y sin Pago APROBADO.
+ * Repetirlo responde 200 { yaCancelado: true } sin reponer otra vez.
+ */
+async function cancelarPedido(pedidoId, usuario) {
+  const { yaCancelado } = await enTransaccion("CANCELAR_PEDIDO", (tx) =>
+    cancelarBajoLock(tx, pedidoId, { usuario, motivo: MOTIVO_CANCELACION })
+  );
+
+  return {
+    yaCancelado,
+    pedido: presentarPedido(await pedidoRepository.obtenerPorId(pedidoId)),
+  };
+}
+
+/**
+ * Cancela (con reposición) los pedidos MERCADO_PAGO en PENDIENTE creados hace
+ * más de `horas` horas y sin Pago APROBADO. Los CONTRA_ENTREGA no vencen (se
+ * pagan al recibir). Cada pedido va en su propia transacción y bajo su lock,
+ * donde se vuelve a validar todo. `horas` por defecto: la vigencia de la
+ * preferencia de pago (MERCADOPAGO_PREFERENCIA_HORAS, mismo parseo que
+ * pago.service; 24 si falta o es inválida). No hay cron: lo invoca un
+ * scheduler externo vía POST /api/v1/pedidos/vencidos/cancelar.
+ */
+async function cancelarPedidosVencidos({ horas } = {}) {
+  const horasEfectivas = horas ?? horasDeVigenciaPreferencia();
+  const corte = new Date(Date.now() - horasEfectivas * HORA_MS);
+  const candidatos = await pedidoRepository.listarIdsVencidos(corte);
+
+  const cancelados = [];
+  const omitidos = [];
+
+  for (const pedidoId of candidatos) {
+    try {
+      const resultado = await enTransaccion("CANCELAR_VENCIDO", (tx) =>
+        cancelarBajoLock(tx, pedidoId, {
+          motivo: MOTIVO_VENCIMIENTO,
+          vencimiento: { corte },
+        })
+      );
+      (resultado.omitido ? omitidos : cancelados).push(pedidoId);
+    } catch (error) {
+      // Un pedido que falla no frena al resto; queda en el log para revisarlo.
+      logEvento({ evento: "CANCELACION_VENCIDO_FALLIDA", pedidoId, mensaje: error.message });
+      omitidos.push(pedidoId);
+    }
+  }
+
+  return { horas: horasEfectivas, corte, cancelados, omitidos };
+}
+
 module.exports = {
   crearPedido,
+  cancelarPedido,
+  cancelarPedidosVencidos,
   presentarPedido,
   aCentavos,
   deCentavos,
   CarritoVacioError,
   ProductoNoDisponibleError,
+  PedidoNoCancelableError,
   MontoFueraDeRangoError,
   // Reexportadas para que el controller y los tests no dependan de dónde
   // nació cada error.

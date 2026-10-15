@@ -1,5 +1,6 @@
 const pedidoService = require("../services/pedido.service");
-const { validarCrearPedido } = require("../dtos/pedido.dto");
+const { validarCrearPedido, validarCancelarVencidos } = require("../dtos/pedido.dto");
+const { validarPedidoIdParam } = require("../dtos/pago.dto");
 
 // Sprint 4 / MOD-06 (DDS §3): pedidos. Los roles se restringen en
 // pedido.routes.js (roleGuard). Sin try/catch: Express 5 reenvía las
@@ -24,6 +25,39 @@ async function crear(req, res) {
   });
 }
 
+/**
+ * PATCH /api/v1/pedidos/:id/cancelar
+ * Cliente: solo sus pedidos (uno ajeno responde 404). Admin/vendedor:
+ * cualquiera. Repone el stock una sola vez; repetirlo responde 200 con
+ * `yaCancelado: true`.
+ */
+async function cancelar(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
+
+  const { pedido, yaCancelado } = await pedidoService.cancelarPedido(id, req.usuario);
+
+  return res.status(200).json({
+    mensaje: yaCancelado ? "El pedido ya estaba cancelado" : "Pedido cancelado correctamente",
+    yaCancelado,
+    pedido,
+  });
+}
+
+/**
+ * POST /api/v1/pedidos/vencidos/cancelar (admin)
+ * Cancela los pedidos de Mercado Pago sin pagar más viejos que `horas`.
+ * Pensado para que lo invoque un scheduler externo.
+ */
+async function cancelarVencidos(req, res) {
+  const { horas } = validarCancelarVencidos(req.body);
+
+  const resultado = await pedidoService.cancelarPedidosVencidos({ horas });
+
+  return res.status(200).json(resultado);
+}
+
 module.exports = {
   crear,
+  cancelar,
+  cancelarVencidos,
 };

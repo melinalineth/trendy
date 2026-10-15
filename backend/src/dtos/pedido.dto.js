@@ -35,6 +35,21 @@ const crearPedidoSchema = z.strictObject(
   { error: errorDeObjeto }
 );
 
+// Body opcional de POST /api/v1/pedidos/vencidos/cancelar: { horas? }. Mismo
+// rango que MERCADOPAGO_PREFERENCIA_HORAS (1 a 168, una semana).
+const HORAS_MAXIMO = 168;
+const cancelarVencidosSchema = z.strictObject(
+  {
+    horas: z
+      .number({ error: "horas debe ser un número entero" })
+      .int("horas debe ser un número entero")
+      .min(1, "horas debe ser al menos 1")
+      .max(HORAS_MAXIMO, `horas no puede superar ${HORAS_MAXIMO}`)
+      .optional(),
+  },
+  { error: errorDeObjeto }
+);
+
 function lanzarValidacion(errores) {
   const error = new Error("Datos inválidos");
   error.status = 400;
@@ -61,8 +76,15 @@ function validarCrearPedido(body) {
   return validar(crearPedidoSchema, body ?? {});
 }
 
+// Body de POST /api/v1/pedidos/vencidos/cancelar (puede venir vacío).
+function validarCancelarVencidos(body) {
+  return validar(cancelarVencidosSchema, body ?? {});
+}
+
 module.exports = {
   METODOS_PAGO,
   crearPedidoSchema,
+  cancelarVencidosSchema,
   validarCrearPedido,
+  validarCancelarVencidos,
 };
