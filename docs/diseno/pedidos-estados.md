@@ -83,18 +83,30 @@ Errores: estado fuera del enum -> 400 `VALIDACION_FALLIDA`; transición no permi
 `estadoPedido`, `estadoEnvio`, `actualizadoEn` (fecha y hora del último cambio de envío),
 `costoEnvio` y la dirección de entrega (destinatario, teléfono, calle, ciudad...).
 
-## 5. Quién puede qué (ERS §4.1)
+## 5. Quién puede qué (ERS §4.1 y §2.8.3)
+
+La matriz de roles del ERS (§4.1) le da al cliente "Crear pedidos" y "Consultar propios pedidos";
+"Gestionar pedidos" (que incluye cancelar) es solo de vendedor y administrador.
 
 | Operación | cliente | vendedor | admin |
 | --- | :---: | :---: | :---: |
 | Crear pedido (`POST /pedidos`) | ✓ | — | — |
 | Listar / ver pedidos | solo los propios | todos | todos |
 | Cambiar estado / estado de envío | — | ✓ | ✓ |
-| Cancelar (`PATCH /:id/cancelar`) | solo los propios | ✓ | ✓ |
+| Cancelar (`PATCH /:id/cancelar`) | — (403) | ✓ | ✓ |
 | Cancelar vencidos (`POST /pedidos/vencidos/cancelar`) | — | — | ✓ |
 | Ver seguimiento | solo los propios | ✓ | ✓ |
 
-Un pedido ajeno responde 404 (no 403) para no revelar que existe (RN-003, DDS §5.2).
+Un pedido ajeno responde 404 (no 403) para no revelar que existe (RN-003, DDS §5.2). Una operación
+que el rol no tiene responde 403 `ACCESO_DENEGADO` (roleGuard).
+
+### Cancelación por el cliente (RF-033): diferida a v2.0
+
+El ERS v1.2 §2.8.3 difiere RF-033 a la Versión 2.0: en el MVP la cancelación la gestiona
+manualmente administración o vendedor a solicitud del cliente (también DDS §3, MOD-06). Por eso
+`PATCH /api/v1/pedidos/:id/cancelar` es solo `admin` y `vendedor`. Antes de habilitarla para el
+cliente, **RN-010 exige que el negocio defina la política de cancelaciones** (en qué estados, con
+qué plazo, qué pasa con el pago) antes de la puesta en producción.
 
 ## 6. Invariantes de stock (RN-002, RN-007, RF-019)
 
@@ -122,11 +134,26 @@ Un pedido ajeno responde 404 (no 403) para no revelar que existe (RN-003, DDS §
 
 ## 8. Pedidos vencidos
 
-`POST /api/v1/pedidos/vencidos/cancelar` (admin), body opcional `{ "horas": 1..168 }`; por defecto
-`MERCADOPAGO_PREFERENCIA_HORAS` (mismo parseo que la vigencia de la preferencia; 24 si falta o es
-inválida). Cancela, con reposición y cada uno en su propia transacción bajo su lock, los pedidos
-`MERCADO_PAGO` en `PENDIENTE` creados hace más de N horas **sin** `Pago` `APROBADO`. Nunca toca
-contra entrega (se paga al recibir). Responde `{ horas, corte, cancelados: [ids], omitidos: [ids] }`.
+**Vigencia de pago de un pedido de Mercado Pago:** `creadoEn + V`, con `V` =
+`MERCADOPAGO_PREFERENCIA_HORAS` (1..168; 24 si falta o es inválida). La usan los dos lados:
+
+- `pago.service.crearPreferencia`: la preferencia vence en el **menor** entre `ahora + V` y
+  `creadoEn + V` (`expiration_date_to` y `date_of_expiration`). Si ya pasó `creadoEn + V` responde
+  409 `PEDIDO_VENCIDO` sin llamar a Mercado Pago. Así una preferencia creada a la hora 23 no se
+  puede pagar a la hora 25, cuando el pedido ya se canceló y su stock se repuso.
+- `pedido.service.cancelarPedidosVencidos`: corta en `creadoEn < ahora - (V' + 15 min)`, con
+  `MARGEN_VENCIMIENTO_MS` = 15 minutos (desfase de reloj con Mercado Pago, pago acreditado justo al
+  límite).
+
+`POST /api/v1/pedidos/vencidos/cancelar` (admin), body opcional `{ "horas": 1..168 }`. **`horas` es
+un piso, no un reemplazo:** `V' = max(horas, V)`. Un valor menor que la vigencia configurada no
+tiene efecto (no se cancela un pedido cuya preferencia sigue viva); uno mayor es más conservador y
+se respeta. Cancela, con reposición y cada uno en su propia transacción bajo su lock, los pedidos
+`MERCADO_PAGO` en `PENDIENTE` vencidos **sin** `Pago` `APROBADO`. Nunca toca contra entrega (se paga
+al recibir). Responde `{ horas: V', corte, cancelados: [ids], omitidos: [ids] }`.
+
+Si se **baja** `MERCADOPAGO_PREFERENCIA_HORAS` con preferencias ya emitidas, éstas conservan su
+vencimiento original: conviene esperar la vigencia anterior antes de bajarla.
 
 **No hay cron**: un scheduler externo (cron del servidor, tarea programada) debe invocar el
 endpoint periódicamente con un token de admin.
@@ -139,3 +166,27 @@ endpoint periódicamente con un token de admin.
 - **Reembolsos** y **auditoría** (DDS §6.5) se gestionan a mano a partir de los logs JSON.
 - **Vendedor por asignaciones** (DDS §6.2, ERS §4.1 "✓\*"): no existe un modelo de asignación;
   hoy un vendedor ve y gestiona todos los pedidos.
+- **Retención indefinida de stock** (pendiente de decisión de negocio). Hoy el stock reservado de
+  un pedido puede quedar retenido sin límite:
+  - los pedidos `CONTRA_ENTREGA` nunca vencen;
+  - un contra entrega sin `Pago` registrado no se puede confirmar a mano (queda `PENDIENTE` hasta
+    que el personal lo cancele);
+  - un contra entrega `CONFIRMADO` que el cliente rechaza en la entrega no se puede cancelar (solo
+    se cancelan pedidos pendientes de pago);
+  - no hay tope de pedidos `PENDIENTE` por cliente;
+  - no hay scheduler: si nadie invoca `/vencidos/cancelar`, tampoco vencen los de Mercado Pago.
+
+  Propuestas: tope de pedidos pendientes por cliente; vencimiento para contra entrega sin
+  confirmar; cancelación por el personal de un contra entrega `CONFIRMADO` (rechazado en la
+  entrega) con reposición de stock.
+- **Momento del descuento de stock**: se descuenta al **crear** el pedido, lo que se desvía del
+  DDS §7.2 (descuento al aprobar el pago, paso 13). Es coherente con `pago.service` (el webhook no
+  descuenta) y con la política vigente "un rechazo de pago no repone stock": el stock queda
+  reservado mientras el pedido siga pagable y se libera al cancelarlo o vencer. Corresponde
+  actualizar el DDS.
+- **Cobertura y contra entrega fuera de la transacción**: `calcularCosto` y la verificación de
+  `permiteContraEntrega` de la zona se evalúan antes de abrir la transacción de creación (para no
+  pedir una segunda conexión del pool con el lock del carrito tomado). Si un admin desactiva la
+  zona o la contra entrega en esa ventana de milisegundos, el pedido se crea igual. Está mitigado
+  porque `registrarContraEntrega` revalida la zona; se podría cerrar del todo leyendo la zona con
+  lock dentro de la transacción (un `bloquearZona` con `SELECT ... FOR SHARE`).
