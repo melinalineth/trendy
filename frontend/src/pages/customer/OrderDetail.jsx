@@ -1,237 +1,402 @@
-
 import { useEffect, useState } from "react";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+
+import Alert from "../../components/common/Alert";
+import Badge from "../../components/common/Badge";
+import Button from "../../components/common/Button";
+import Loading from "../../components/common/Loading";
+import { usePedidoDetalle } from "../../hooks/usePedidos";
 import {
-  obtenerPorId,
-  obtenerSeguimiento,
-} from "../../services/pedido.service";
+  ESTADOS_ENVIO,
+  PASOS_ENVIO,
+  badgeEstadoPago,
+  badgeEstadoPedido,
+  describirVariante,
+  descripcionEstadoPedido,
+  etiquetaEstadoPago,
+  etiquetaEstadoPedido,
+  etiquetaMetodoPago,
+  formatearFecha,
+  formatearPrecio,
+  mensajeErrorContraEntrega,
+  mensajeErrorPreferencia,
+} from "../../components/orders/pedidoEstados";
 import "./OrderDetail.css";
 
+// Mientras el pedido espera el pago de Mercado Pago se refresca solo cada
+// INTERVALO_REFRESCO_MS, como máximo REFRESCOS_AUTOMATICOS veces (2 minutos):
+// la preferencia no tiene back_urls, así que al volver de Mercado Pago la
+// persona abre esta página a mano y el webhook puede tardar unos segundos.
+const INTERVALO_REFRESCO_MS = 15000;
+const REFRESCOS_AUTOMATICOS = 8;
 
+// Seguimiento del envío (RF-028): los 4 pasos de InfoEnvio. No hay historial
+// guardado todavía, así que solo el paso actual muestra su fecha.
+function SeguimientoEnvio({ pedido, seguimiento }) {
+  if (pedido.estado === "CANCELADO") {
+    return (
+      <p className="order-detail__nota">
+        Este pedido fue cancelado: no tiene envío.
+      </p>
+    );
+  }
 
-function formatoFecha(fecha) {
-  if (!fecha) return "No disponible";
+  // Antes de EN_PREPARACION el estadoEnvio vale el de alta y no significa
+  // nada: manda el estado del pedido (docs/diseno/pedidos-estados.md §1).
+  const enEnvio = ESTADOS_ENVIO.includes(pedido.estado);
+  const estadoEnvio = enEnvio
+    ? (seguimiento?.estadoEnvio ?? pedido.infoEnvio?.estadoEnvio ?? pedido.estado)
+    : null;
+  const indiceActual = PASOS_ENVIO.findIndex((paso) => paso.estado === estadoEnvio);
+  const actualizadoEn =
+    seguimiento?.actualizadoEn ?? pedido.infoEnvio?.actualizadoEn ?? null;
 
-  const valor = new Date(fecha);
-  if (Number.isNaN(valor.getTime())) return fecha;
+  return (
+    <>
+      <ol className="order-detail__pasos">
+        {PASOS_ENVIO.map((paso, indice) => {
+          let estadoPaso = "pendiente";
+          if (indiceActual >= 0 && indice < indiceActual) estadoPaso = "hecho";
+          if (indice === indiceActual) estadoPaso = "actual";
 
-  return valor.toLocaleString("es-CO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+          return (
+            <li
+              key={paso.estado}
+              className={`order-detail__paso order-detail__paso--${estadoPaso}`}
+              aria-current={estadoPaso === "actual" ? "step" : undefined}
+            >
+              <span className="order-detail__paso-marca" aria-hidden="true">
+                {estadoPaso === "hecho" ? "✓" : indice + 1}
+              </span>
+              <span className="order-detail__paso-texto">
+                {paso.etiqueta}
+                <span className="order-detail__sr-only">
+                  {estadoPaso === "hecho" && " (completado)"}
+                  {estadoPaso === "actual" && " (estado actual)"}
+                  {estadoPaso === "pendiente" && " (pendiente)"}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {enEnvio ? (
+        <p className="order-detail__nota">
+          Última actualización del envío: {formatearFecha(actualizadoEn)}
+        </p>
+      ) : (
+        <p className="order-detail__nota">
+          El envío empieza cuando tu pedido esté confirmado y en preparación.
+        </p>
+      )}
+    </>
+  );
 }
 
-function formatoPrecio(valor) {
-  return Number(valor ?? 0).toLocaleString("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  });
+function DireccionEntrega({ direccion }) {
+  if (!direccion) {
+    return <p className="order-detail__nota">Dirección no disponible.</p>;
+  }
+
+  return (
+    <address className="order-detail__direccion">
+      <strong>{direccion.destinatario}</strong>
+      <span>{direccion.calle}</span>
+      <span>
+        {[direccion.ciudad, direccion.departamento].filter(Boolean).join(", ")}
+      </span>
+      {direccion.referencia && <span>{direccion.referencia}</span>}
+      {direccion.telefono && <span>Tel. {direccion.telefono}</span>}
+    </address>
+  );
 }
 
-function obtenerDatos(respuesta) {
-  return respuesta?.datos ?? respuesta?.data ?? respuesta;
-}
-
-function obtenerLineas(pedido) {
-  return pedido?.detalles ?? pedido?.items ?? pedido?.lineas ?? [];
-}
-
+// Detalle de un pedido del cliente (RF-031) con su pago (RF-038) y el
+// seguimiento del envío (RF-028). También es la pantalla de "vuelta" del
+// checkout y de Mercado Pago. El cliente NO puede cancelar (el backend lo
+// reserva al personal: 403), así que no hay botón de cancelar.
 export default function OrderDetail() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [pedido, setPedido] = useState(null);
-  const [seguimiento, setSeguimiento] = useState(null);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState("");
-  
-const location = useLocation();
-const mensajeRetorno = location.state?.mensaje;
+  const {
+    pedido,
+    seguimiento,
+    loading,
+    error,
+    actualizando,
+    recargar,
+    procesando,
+    iniciarPagoMercadoPago,
+    registrarContraEntrega,
+  } = usePedidoDetalle(id);
 
+  // Aviso que deja el checkout ("¡Gracias por tu compra!", "no pudimos
+  // iniciar el pago..."). Se copia una vez y se borra del historial para que
+  // no reaparezca al recargar la página.
+  const [aviso, setAviso] = useState(() => location.state?.aviso ?? null);
+  const [avisoAccion, setAvisoAccion] = useState(null);
+  const [vencido, setVencido] = useState(false);
 
   useEffect(() => {
-    let activo = true;
+    if (location.state?.aviso) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
 
-    async function cargarPedido() {
-      setCargando(true);
-      setError("");
+  const esperandoPagoMercadoPago =
+    pedido?.estado === "PENDIENTE" &&
+    pedido?.metodoPago === "MERCADO_PAGO" &&
+    pedido?.pago?.estado !== "APROBADO" &&
+    !vencido;
 
-      try {
-        const respuestaPedido = await obtenerPorId(id);
-        const pedidoEncontrado = obtenerDatos(respuestaPedido);
+  // Refresco automático acotado mientras se espera la confirmación del pago.
+  useEffect(() => {
+    if (!esperandoPagoMercadoPago) return undefined;
 
-        if (!activo) return;
-        setPedido(pedidoEncontrado);
+    let restantes = REFRESCOS_AUTOMATICOS;
+    const intervalo = window.setInterval(() => {
+      restantes -= 1;
+      recargar();
+      if (restantes <= 0) window.clearInterval(intervalo);
+    }, INTERVALO_REFRESCO_MS);
 
-        try {
-          const respuestaSeguimiento = await obtenerSeguimiento(id);
-          if (activo) {
-            setSeguimiento(obtenerDatos(respuestaSeguimiento));
-          }
-        } catch {
-          // Si el seguimiento no está disponible, se muestra el estado actual del pedido.
-          if (activo) setSeguimiento(null);
-        }
-      } catch (err) {
-        if (!activo) return;
+    return () => window.clearInterval(intervalo);
+  }, [esperandoPagoMercadoPago, recargar]);
 
-        const estadoHttp = err?.response?.status;
+  async function pagar() {
+    setAvisoAccion(null);
+    const resultado = await iniciarPagoMercadoPago();
 
-        if (estadoHttp === 403 || estadoHttp === 404) {
-          setError(
-            "No se encontró este pedido o no tienes permiso para consultarlo."
-          );
-        } else {
-          setError(
-            "No fue posible cargar el pedido. Comprueba tu conexión e inténtalo de nuevo."
-          );
-        }
-      } finally {
-        if (activo) setCargando(false);
-      }
+    if (resultado.ignorado) return;
+
+    if (resultado.ok) {
+      window.location.assign(resultado.checkoutUrl);
+      return;
     }
 
-    cargarPedido();
+    if (resultado.error?.codigo === "PEDIDO_VENCIDO") setVencido(true);
+    setAvisoAccion({ tipo: "error", mensaje: mensajeErrorPreferencia(resultado.error) });
+  }
 
-    return () => {
-      activo = false;
-    };
-  }, [id]);
+  async function registrarPagoContraEntrega() {
+    setAvisoAccion(null);
+    const resultado = await registrarContraEntrega();
 
-  if (cargando) {
+    if (resultado.ignorado) return;
+
+    setAvisoAccion(
+      resultado.ok
+        ? { tipo: "success", mensaje: "Listo: registramos tu pago contra entrega. Pagás al recibir el pedido." }
+        : { tipo: "error", mensaje: mensajeErrorContraEntrega(resultado.error) },
+    );
+  }
+
+  if (loading) {
     return (
       <main className="order-detail">
-        <p className="order-detail__message">Cargando pedido...</p>
+        <Loading text="Cargando pedido..." />
       </main>
     );
   }
 
-  if (error || !pedido) {
+  if (!pedido) {
+    // 404 = no existe o es de otra persona (RN-003); 400 = id inválido.
+    const noEncontrado = error?.status === 404 || error?.status === 400;
+
     return (
       <main className="order-detail">
-        <section className="order-detail__message order-detail__error">
-          <h2>No se puede mostrar el pedido</h2>
-          <p>{error || "La información del pedido no está disponible."}</p>
-          <Link to="/pedidos" className="order-detail__back">
-            Volver a mis pedidos
-          </Link>
+        <section className="order-detail__card order-detail__mensaje" role="alert">
+          <h1>No se puede mostrar el pedido</h1>
+          <p>
+            {noEncontrado
+              ? "No encontramos este pedido o no tenés permiso para consultarlo."
+              : (error?.mensaje ?? "La información del pedido no está disponible.")}
+          </p>
+          <div className="order-detail__acciones">
+            {!noEncontrado && (
+              <Button
+                text={actualizando ? "Reintentando..." : "Reintentar"}
+                onClick={recargar}
+                disabled={actualizando}
+              />
+            )}
+            <Link to="/pedidos" className="order-detail__link">
+              Volver a mis pedidos
+            </Link>
+          </div>
         </section>
       </main>
     );
   }
 
-  const lineas = obtenerLineas(pedido);
-  const envio =
-    pedido.infoEnvio ?? pedido.envio ?? pedido.informacionEnvio ?? null;
+  const lineas = pedido.detalles ?? [];
+  const esMercadoPago = pedido.metodoPago === "MERCADO_PAGO";
+  const pago = pedido.pago ?? null;
+  const puedePagar = esperandoPagoMercadoPago;
+  const puedeRegistrarContraEntrega =
+    pedido.estado === "PENDIENTE" && !esMercadoPago && !pago;
+  const direccion = seguimiento?.direccion ?? pedido.direccion ?? null;
 
-  const historial =
-    seguimiento?.historial ??
-    seguimiento?.estados ??
-    seguimiento?.seguimientos ??
-    (Array.isArray(seguimiento) ? seguimiento : []);
-
-  const estadoEnvio =
-    envio?.estadoEnvio ??
-    envio?.estado ??
-    seguimiento?.estadoEnvio ??
-    seguimiento?.estado ??
-    "Sin información";
-
-  const fechaActualizacionEnvio =
-    envio?.actualizadoEn ??
-    envio?.fechaActualizacion ??
-    seguimiento?.actualizadoEn ??
-    seguimiento?.fechaActualizacion ??
-    null;
+  let textoPago = "";
+  if (pago?.estado === "APROBADO") {
+    textoPago = "Tu pago está aprobado.";
+  } else if (esMercadoPago && pedido.estado === "PENDIENTE") {
+    textoPago =
+      pago?.estado === "RECHAZADO"
+        ? "Tu último intento de pago fue rechazado. Podés intentar de nuevo."
+        : "Todavía no registramos tu pago. Si ya pagaste en Mercado Pago, la confirmación puede tardar unos minutos: tocá «Actualizar».";
+  } else if (!esMercadoPago && pago?.estado === "PENDIENTE") {
+    textoPago = `Pagás ${formatearPrecio(pedido.total)} al recibir tu pedido.`;
+  } else if (puedeRegistrarContraEntrega) {
+    textoPago =
+      "Falta registrar tu pago contra entrega para que la tienda pueda confirmar el pedido.";
+  }
 
   return (
     <main className="order-detail">
       <header className="order-detail__header">
         <div>
-          <Link to="/pedidos" className="order-detail__back">
+          <Link to="/pedidos" className="order-detail__link">
             ← Volver a mis pedidos
           </Link>
-          
-{mensajeRetorno && (
-  <p role="status" className="order-detail__notice">
-    {mensajeRetorno}
-  </p>
-)}
-
           <h1>Detalle del pedido</h1>
           <p>
-            Pedido{" "}
-            <strong>
-              {pedido.numero ?? `#${pedido.id}`}
-            </strong>
+            Pedido <strong>{pedido.numero ?? `#${pedido.id}`}</strong>
           </p>
         </div>
 
-        <span className="order-detail__badge">
-          {pedido.estado ?? "Estado no disponible"}
-        </span>
+        <div className="order-detail__header-acciones">
+          <Badge
+            text={etiquetaEstadoPedido(pedido.estado)}
+            type={badgeEstadoPedido(pedido.estado)}
+          />
+          <Button
+            className="order-detail__btn--secundario"
+            text={actualizando ? "Actualizando..." : "Actualizar"}
+            onClick={recargar}
+            disabled={actualizando}
+          />
+        </div>
       </header>
 
-      <section className="order-detail__card">
-        <h2>Información del pedido</h2>
-        <p>
-          <strong>Fecha:</strong>{" "}
-          {formatoFecha(pedido.creadoEn ?? pedido.fecha ?? pedido.createdAt)}
-        </p>
-        <p>
-          <strong>Estado del pedido:</strong>{" "}
-          {pedido.estado ?? "No disponible"}
-        </p>
-      </section>
+      <div className="order-detail__avisos" aria-live="polite">
+        {aviso && (
+          <Alert type={aviso.tipo} message={aviso.mensaje} onClose={() => setAviso(null)} />
+        )}
+        {avisoAccion && (
+          <Alert
+            type={avisoAccion.tipo}
+            message={avisoAccion.mensaje}
+            onClose={() => setAvisoAccion(null)}
+          />
+        )}
+        {error && (
+          <Alert
+            type="warning"
+            message="No pudimos actualizar el pedido: lo que ves puede no estar al día."
+          />
+        )}
+      </div>
 
-      <section className="order-detail__card">
-        <h2>Productos</h2>
+      <div className="order-detail__grid">
+        <section className="order-detail__card" aria-labelledby="pedido-estado">
+          <h2 id="pedido-estado">Estado del pedido</h2>
+          <p>{descripcionEstadoPedido(pedido.estado, pedido.metodoPago)}</p>
+          <dl className="order-detail__datos">
+            <div>
+              <dt>Fecha</dt>
+              <dd>{formatearFecha(pedido.creadoEn)}</dd>
+            </div>
+            <div>
+              <dt>Método de pago</dt>
+              <dd>{etiquetaMetodoPago(pedido.metodoPago)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="order-detail__card" aria-labelledby="pedido-pago">
+          <h2 id="pedido-pago">Pago</h2>
+          <div className="order-detail__fila-badge">
+            <span>Estado del pago</span>
+            {pago ? (
+              <Badge text={etiquetaEstadoPago(pago.estado)} type={badgeEstadoPago(pago.estado)} />
+            ) : (
+              <span className="order-detail__nota">Sin pago registrado</span>
+            )}
+          </div>
+          {textoPago && <p>{textoPago}</p>}
+
+          {vencido && (
+            <p className="order-detail__nota">
+              El plazo para pagar este pedido venció.{" "}
+              <Link to="/catalogo" className="order-detail__link">
+                Hacer una compra nueva
+              </Link>
+            </p>
+          )}
+
+          {puedePagar && (
+            <Button
+              text={
+                procesando
+                  ? "Redirigiendo a Mercado Pago..."
+                  : pago
+                    ? "Reintentar pago"
+                    : "Pagar con Mercado Pago"
+              }
+              onClick={pagar}
+              disabled={procesando}
+            />
+          )}
+
+          {puedeRegistrarContraEntrega && (
+            <Button
+              text={procesando ? "Registrando..." : "Registrar pago contra entrega"}
+              onClick={registrarPagoContraEntrega}
+              disabled={procesando}
+            />
+          )}
+        </section>
+      </div>
+
+      <section className="order-detail__card" aria-labelledby="pedido-productos">
+        <h2 id="pedido-productos">Productos</h2>
 
         {lineas.length === 0 ? (
           <p>No hay productos registrados en este pedido.</p>
         ) : (
           <div className="order-detail__table-wrapper">
             <table className="order-detail__table">
+              <caption className="order-detail__sr-only">
+                Productos del pedido con el precio pagado por unidad
+              </caption>
               <thead>
                 <tr>
-                  <th>Producto</th>
-                  <th>Variante</th>
-                  <th>Cantidad</th>
-                  <th>Precio unitario</th>
-                  <th>Subtotal</th>
+                  <th scope="col">Producto</th>
+                  <th scope="col">Variante</th>
+                  <th scope="col">Cantidad</th>
+                  <th scope="col">Precio unitario</th>
+                  <th scope="col">Subtotal</th>
                 </tr>
               </thead>
               <tbody>
-                {lineas.map((linea, indice) => {
-                  const variante = linea.variante ?? {};
-                  const producto =
-                    variante.producto ?? linea.producto ?? {};
-
+                {lineas.map((linea) => {
+                  const variante = linea.variante ?? null;
                   const cantidad = Number(linea.cantidad ?? 0);
-                  const precio = Number(
-                    linea.precioUnitario ??
-                      linea.precio ??
-                      linea.precioCongelado ??
-                      0
-                  );
-
-                  const nombreVariante =
-                    variante.nombre ??
-                    [
-                      variante.talla && `Talla ${variante.talla}`,
-                      variante.color && `Color ${variante.color}`,
-                    ]
-                      .filter(Boolean)
-                      .join(" / ") ??
-                    "No especificada";
+                  // RN-008: precio HISTÓRICO congelado al crear el pedido.
+                  const precio = Number(linea.precioUnitario ?? 0);
+                  const subtotal = linea.subtotal ?? precio * cantidad;
 
                   return (
-                    <tr key={linea.id ?? `${producto.nombre}-${indice}`}>
-                      <td>{producto.nombre ?? linea.nombreProducto ?? "Producto"}</td>
-                      <td>{nombreVariante || "No especificada"}</td>
+                    <tr key={linea.id}>
+                      <td>{variante?.producto?.nombre ?? "Producto"}</td>
+                      <td>{describirVariante(variante)}</td>
                       <td>{cantidad}</td>
-                      <td>{formatoPrecio(precio)}</td>
-                      <td>{formatoPrecio(precio * cantidad)}</td>
+                      <td>{formatearPrecio(precio)}</td>
+                      <td>{formatearPrecio(subtotal)}</td>
                     </tr>
                   );
                 })}
@@ -239,62 +404,34 @@ const mensajeRetorno = location.state?.mensaje;
             </table>
           </div>
         )}
+
+        <dl className="order-detail__totales">
+          <div>
+            <dt>Subtotal</dt>
+            <dd>{formatearPrecio(pedido.subtotal)}</dd>
+          </div>
+          <div>
+            <dt>Costo de envío</dt>
+            <dd>{formatearPrecio(pedido.costoEnvio)}</dd>
+          </div>
+          <div className="order-detail__total">
+            <dt>Total</dt>
+            <dd>{formatearPrecio(pedido.total)}</dd>
+          </div>
+        </dl>
       </section>
 
-      <section className="order-detail__card">
-        <h2>Resumen de pago</h2>
-        <div className="order-detail__totals">
-          <p>
-            <span>Subtotal</span>
-            <strong>{formatoPrecio(pedido.subtotal)}</strong>
-          </p>
-          <p>
-            <span>Costo de envío</span>
-            <strong>{formatoPrecio(pedido.costoEnvio)}</strong>
-          </p>
-          <p className="order-detail__total">
-            <span>Total</span>
-            <strong>{formatoPrecio(pedido.total)}</strong>
-          </p>
-        </div>
-      </section>
+      <div className="order-detail__grid">
+        <section className="order-detail__card" aria-labelledby="pedido-envio">
+          <h2 id="pedido-envio">Seguimiento del envío</h2>
+          <SeguimientoEnvio pedido={pedido} seguimiento={seguimiento} />
+        </section>
 
-      <section className="order-detail__card">
-        <h2>Seguimiento del envío</h2>
-        <p>
-          <strong>Estado actual:</strong> {estadoEnvio}
-        </p>
-        <p>
-          <strong>Última actualización:</strong>{" "}
-          {formatoFecha(fechaActualizacionEnvio)}
-        </p>
-
-        {historial.length > 0 && (
-          <>
-            <h3>Historial de estados</h3>
-            <ol className="order-detail__timeline">
-              {historial.map((evento, indice) => (
-                <li key={evento.id ?? `${evento.estado}-${indice}`}>
-                  <strong>
-                    {evento.estadoEnvio ??
-                      evento.estado ??
-                      evento.nombreEstado ??
-                      "Actualización"}
-                  </strong>
-                  <span>
-                    {formatoFecha(
-                      evento.actualizadoEn ??
-                        evento.fecha ??
-                        evento.creadoEn
-                    )}
-                  </span>
-                  {evento.descripcion && <p>{evento.descripcion}</p>}
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
-      </section>
+        <section className="order-detail__card" aria-labelledby="pedido-direccion">
+          <h2 id="pedido-direccion">Dirección de entrega</h2>
+          <DireccionEntrega direccion={direccion} />
+        </section>
+      </div>
     </main>
   );
 }
