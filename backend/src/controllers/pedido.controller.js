@@ -4,6 +4,7 @@ const {
   validarCancelarVencidos,
   validarListarPedidos,
   validarActualizarEstado,
+  validarActualizarEstadoEnvio,
 } = require("../dtos/pedido.dto");
 const { validarPedidoIdParam } = require("../dtos/pago.dto");
 
@@ -105,8 +106,36 @@ async function cancelarVencidos(req, res) {
   return res.status(200).json(resultado);
 }
 
+/**
+ * PUT /api/v1/pedidos/:id/estado-envio (admin/vendedor, RF-029)
+ * Avanza el envío un paso y sincroniza el estado del pedido. Responde el
+ * seguimiento actualizado.
+ */
+async function actualizarEstadoEnvio(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
+  const { estadoEnvio } = validarActualizarEstadoEnvio(req.body);
+
+  const seguimiento = await pedidoService.actualizarEstadoEnvio(id, estadoEnvio);
+
+  return res.status(200).json(seguimiento);
+}
+
+/**
+ * GET /api/v1/pedidos/:id/seguimiento (RF-028)
+ * Dueño, admin y vendedor; un pedido ajeno responde 404.
+ */
+async function seguimiento(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
+
+  const resultado = await pedidoService.obtenerSeguimiento(id, req.usuario);
+
+  return res.status(200).json(resultado);
+}
+
 module.exports = {
   crear,
+  actualizarEstadoEnvio,
+  seguimiento,
   listar,
   obtenerPorId,
   actualizarEstado,

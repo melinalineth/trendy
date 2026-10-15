@@ -1,7 +1,11 @@
 // backend/src/services/pedido.service.js
 //
-// Sprint 4 / MOD-06 (DDS §3): pedidos. Creación a partir del carrito
-// (RF-030) con el alta de InfoEnvio (RF-027).
+// Sprint 4 / MOD-06 y MOD-05 (DDS §3): pedidos.
+//   - Creación a partir del carrito con el alta de InfoEnvio (RF-030, RF-027).
+//   - Cancelación con reposición de stock y cancelación de vencidos.
+//   - Consulta y gestión del estado (RF-031, RF-032).
+//   - Estado de envío y seguimiento (RF-028, RF-029).
+// Reglas de estados e invariantes: docs/diseno/pedidos-estados.md.
 //
 // Los errores de dominio llevan `status` y `codigo` en la propia clase:
 // errorHandler.js los formatea como { error: { codigo, mensaje, detalles } }
@@ -723,8 +727,98 @@ async function actualizarEstado(pedidoId, estadoNuevo) {
   return presentarPedido(await pedidoRepository.obtenerPorId(pedidoId));
 }
 
+// ---------------------------------------------------------------------------
+// Envío y seguimiento (RF-027, RF-028, RF-029)
+// ---------------------------------------------------------------------------
+
+// Estados del pedido en los que el envío ya arrancó (InfoEnvio vale lo mismo).
+const ESTADOS_PEDIDO_EN_ENVIO = ESTADOS_ENVIO;
+
+// Forma de la respuesta de seguimiento. `estadoEnvio` solo describe la
+// logística cuando el pedido está en un estado de envío; antes de eso (o si
+// se canceló) vale el EN_PREPARACION del alta y manda `estadoPedido`.
+// Historial de cambios: NO existe todavía (requiere la tabla
+// HistorialEstadoEnvio, ver docs/diseno/info-envio.md §5).
+function presentarSeguimiento(pedido) {
+  const direccion = pedido.direccion;
+
+  return {
+    pedidoId: pedido.id,
+    numero: pedido.numero,
+    estadoPedido: pedido.estado,
+    estadoEnvio: pedido.infoEnvio.estadoEnvio,
+    actualizadoEn: pedido.infoEnvio.actualizadoEn,
+    costoEnvio: aNumero(pedido.infoEnvio.costoEnvio),
+    direccion: direccion
+      ? {
+          id: direccion.id,
+          destinatario: direccion.destinatario,
+          telefono: direccion.telefono,
+          calle: direccion.calle,
+          ciudad: direccion.ciudad,
+          departamento: direccion.departamento,
+          codigoPostal: direccion.codigoPostal,
+          referencia: direccion.referencia,
+        }
+      : null,
+  };
+}
+
+/**
+ * PUT /api/v1/pedidos/:id/estado-envio (admin y vendedor, RF-029). Avanza el
+ * envío un paso (validarTransicionEstado: sin saltos ni retrocesos) y
+ * sincroniza Pedido.estado en la misma transacción, bajo el lock del pedido.
+ * Solo si el pedido ya está en preparación o en camino; entrar en
+ * preparación es PATCH /estado (CONFIRMADO -> EN_PREPARACION).
+ */
+async function actualizarEstadoEnvio(pedidoId, estadoEnvio) {
+  await enTransaccion("ACTUALIZAR_ESTADO_ENVIO", async (tx) => {
+    const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
+
+    if (!bloqueado) {
+      throw new PedidoNoEncontradoError();
+    }
+
+    if (!ESTADOS_PEDIDO_EN_ENVIO.includes(bloqueado.estado)) {
+      throw new TransicionEnvioInvalidaError(
+        `El envío no se puede mover con el pedido en ${bloqueado.estado}: ` +
+          "primero el pedido tiene que pasar a EN_PREPARACION"
+      );
+    }
+
+    const info = await envioRepository.obtenerInfoEnvio(pedidoId, tx);
+    if (!info) {
+      throw new EnvioNoRegistradoError();
+    }
+
+    validarTransicionEstado(info.estadoEnvio, estadoEnvio);
+
+    await envioRepository.actualizarEstadoEnvio(pedidoId, estadoEnvio, tx);
+    await pedidoRepository.actualizarEstado(pedidoId, estadoEnvio, tx);
+  });
+
+  return presentarSeguimiento(await pedidoRepository.obtenerPorId(pedidoId));
+}
+
+/**
+ * GET /api/v1/pedidos/:id/seguimiento (RF-028): dueño, admin y vendedor; un
+ * pedido ajeno responde 404 como uno inexistente. Estado actual de envío y
+ * del pedido, fecha y hora del último cambio y dirección de entrega.
+ */
+async function obtenerSeguimiento(pedidoId, usuario) {
+  const pedido = await obtenerVisible(pedidoId, usuario);
+
+  if (!pedido.infoEnvio) {
+    throw new EnvioNoRegistradoError(404);
+  }
+
+  return presentarSeguimiento(pedido);
+}
+
 module.exports = {
   crearPedido,
+  actualizarEstadoEnvio,
+  obtenerSeguimiento,
   listarPedidos,
   obtenerPedidoPorId,
   actualizarEstado,

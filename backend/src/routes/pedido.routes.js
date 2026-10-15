@@ -14,6 +14,8 @@ const roleGuard = require("../middlewares/roleGuard");
 //   GET   /api/v1/pedidos/:id                cliente dueño, admin, vendedor (RF-031)
 //   PATCH /api/v1/pedidos/:id/estado         admin, vendedor (RF-032)
 //   PATCH /api/v1/pedidos/:id/cancelar       cliente dueño, admin, vendedor
+//   PUT   /api/v1/pedidos/:id/estado-envio   admin, vendedor (RF-029, MOD-05)
+//   GET   /api/v1/pedidos/:id/seguimiento    cliente dueño, admin, vendedor (RF-028)
 // (GET /api/v1/pedidos/:id/pago vive en pago.routes.js.)
 
 router.post("/api/v1/pedidos", auth, roleGuard(["cliente"]), pedidoController.crear);
@@ -51,6 +53,20 @@ router.patch(
   auth,
   roleGuard(["cliente", "admin", "vendedor"]),
   pedidoController.cancelar
+);
+
+router.put(
+  "/api/v1/pedidos/:id/estado-envio",
+  auth,
+  roleGuard(["admin", "vendedor"]),
+  pedidoController.actualizarEstadoEnvio
+);
+
+router.get(
+  "/api/v1/pedidos/:id/seguimiento",
+  auth,
+  roleGuard(["cliente", "admin", "vendedor"]),
+  pedidoController.seguimiento
 );
 
 module.exports = router;
