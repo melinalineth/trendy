@@ -150,6 +150,76 @@ export function badgeEstadoPago(estado) {
   return ESTADOS_PAGO_INFO[estado]?.badge ?? "default";
 }
 
+// Dominios a los que se permite redirigir para pagar (checkout hospedado de
+// Mercado Pago, incluido el sandbox, y el dominio de Mercado Libre que
+// Mercado Pago usa en algunos flujos).
+const DOMINIOS_CHECKOUT = Object.freeze([
+  "mercadopago.com",
+  "mercadopago.com.co",
+  "mercadolibre.com",
+]);
+
+// ¿Es seguro mandar el navegador a esta URL de pago? Exige https y un host
+// que sea uno de DOMINIOS_CHECKOUT o un subdominio suyo. Una URL que no pasa
+// se trata igual que una URL ausente (no se redirige).
+// Casos pensados:
+//   "https://www.mercadopago.com.co/checkout/v1/redirect?pref_id=1" -> true
+//   "https://sandbox.mercadopago.com.co/checkout/v1/redirect"        -> true
+//   "https://mercadopago.com/..."                                    -> true
+//   "http://www.mercadopago.com.co/..."   (sin TLS)                  -> false
+//   "https://evilmercadopago.com/..."     (no es subdominio)         -> false
+//   "https://mercadopago.com.evil.io/..." (el host termina en otro)  -> false
+//   "https://user@evil.io/?x=mercadopago.com" (host = evil.io)       -> false
+//   "javascript:alert(1)", "/pedidos/1", "", null, 42                -> false
+export function esUrlDeCheckoutValida(url) {
+  if (typeof url !== "string" || url === "") return false;
+
+  let destino;
+  try {
+    destino = new URL(url);
+  } catch {
+    return false;
+  }
+
+  if (destino.protocol !== "https:") return false;
+
+  const host = destino.hostname.toLowerCase();
+
+  return DOMINIOS_CHECKOUT.some(
+    (dominio) => host === dominio || host.endsWith(`.${dominio}`),
+  );
+}
+
+// Errores de la preferencia que no se arreglan reintentando el pago del mismo
+// pedido (venció, ya no está pendiente, se creó con otro método o su total no
+// cierra). El resto (pasarela caída, pagos sin configurar, red) sí.
+const ERRORES_PAGO_DEFINITIVOS = Object.freeze([
+  "PEDIDO_VENCIDO",
+  "PEDIDO_NO_PENDIENTE",
+  "METODO_PAGO_NO_COINCIDE",
+  "TOTAL_INCONSISTENTE",
+]);
+
+export function sePuedeReintentarPago(error) {
+  return !ERRORES_PAGO_DEFINITIVOS.includes(error?.codigo);
+}
+
+// Igual para el registro del pago contra entrega.
+const ERRORES_CONTRA_ENTREGA_DEFINITIVOS = Object.freeze([
+  "CONTRA_ENTREGA_NO_DISPONIBLE",
+  "METODO_PAGO_NO_COINCIDE",
+  "PEDIDO_NO_PENDIENTE",
+]);
+
+export function sePuedeReintentarContraEntrega(error) {
+  return !ERRORES_CONTRA_ENTREGA_DEFINITIVOS.includes(error?.codigo);
+}
+
+// "1 unidad" / "3 unidades".
+export function textoUnidades(cantidad) {
+  return `${cantidad} ${cantidad === 1 ? "unidad" : "unidades"}`;
+}
+
 // Mensaje para el cliente cuando falla POST /pagos/mercadopago/preferencia.
 export function mensajeErrorPreferencia(error) {
   switch (error?.codigo) {

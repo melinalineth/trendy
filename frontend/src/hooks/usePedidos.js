@@ -3,6 +3,7 @@ import pedidoService from "../services/pedido.service";
 import pagoService from "../services/pago.service";
 import { obtenerErrorApi } from "../services/apiError";
 import { CARRITO_ACTUALIZADO_EVENT } from "../services/carrito.service";
+import { esUrlDeCheckoutValida } from "../components/orders/pedidoEstados";
 
 const MENSAJE_ERROR_LISTAR =
   "No pudimos cargar tus pedidos. Intentá de nuevo más tarde.";
@@ -16,6 +17,10 @@ const MENSAJE_ERROR_CONTRA_ENTREGA =
 
 // Pedidos por página en "Mis pedidos" (el backend acepta hasta 100).
 const PEDIDOS_POR_PAGINA = 10;
+
+// Tiempo tras el que se considera que la redirección a Mercado Pago no
+// ocurrió (la página sigue viva) y se libera el botón de pago.
+export const ESPERA_REDIRECCION_MS = 8000;
 
 // El pedido vacía el carrito en el backend: avisamos al contador del Header
 // (mismo evento que usa useCarrito) con la cantidad ya calculada.
@@ -175,6 +180,11 @@ export function usePedidoDetalle(id) {
 
   const solicitudRef = useRef(0);
   const procesandoRef = useRef(false);
+  // Temporizador que libera el bloqueo si la redirección a Mercado Pago no
+  // llegó a ocurrir.
+  const temporizadorRef = useRef(null);
+
+  useEffect(() => () => window.clearTimeout(temporizadorRef.current), []);
 
   const cargar = useCallback((idPedido) => {
     const solicitud = ++solicitudRef.current;
@@ -227,6 +237,7 @@ export function usePedidoDetalle(id) {
     function alVolver(event) {
       if (!event.persisted) return;
 
+      window.clearTimeout(temporizadorRef.current);
       procesandoRef.current = false;
       setProcesando(false);
       cargar(id);
@@ -282,9 +293,15 @@ export function usePedidoDetalle(id) {
 
     const checkoutUrl = resultado.datos?.checkoutUrl;
 
-    if (resultado.ok && typeof checkoutUrl === "string" && checkoutUrl) {
-      // Se mantiene el bloqueo: la página navega a Mercado Pago y un segundo
-      // clic no debe pedir otra preferencia.
+    // Una URL que no es de Mercado Pago (o no es https) se trata igual que
+    // una URL ausente: no se redirige.
+    if (resultado.ok && esUrlDeCheckoutValida(checkoutUrl)) {
+      // Se mantiene el bloqueo mientras la página navega a Mercado Pago, así
+      // un segundo clic no pide otra preferencia. Si a los
+      // ESPERA_REDIRECCION_MS la página sigue viva (la navegación no ocurrió)
+      // se libera para que el botón vuelva a estar disponible.
+      window.clearTimeout(temporizadorRef.current);
+      temporizadorRef.current = window.setTimeout(liberar, ESPERA_REDIRECCION_MS);
       return { ok: true, checkoutUrl, error: null };
     }
 

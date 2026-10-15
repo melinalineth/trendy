@@ -7,14 +7,18 @@ import Loading from "../../components/common/Loading";
 import Select from "../../components/common/Select";
 import { useCarrito } from "../../hooks/useCarrito";
 import { useDirecciones } from "../../hooks/useDirecciones";
-import { usePedidos } from "../../hooks/usePedidos";
+import { ESPERA_REDIRECCION_MS, usePedidos } from "../../hooks/usePedidos";
 import pagoService from "../../services/pago.service";
 import { obtenerErrorApi } from "../../services/apiError";
 import {
   describirVariante,
+  esUrlDeCheckoutValida,
   formatearPrecio,
   mensajeErrorContraEntrega,
   mensajeErrorPreferencia,
+  sePuedeReintentarContraEntrega,
+  sePuedeReintentarPago,
+  textoUnidades,
 } from "../../components/orders/pedidoEstados";
 import "./Checkout.css";
 
@@ -62,7 +66,7 @@ function describirErrorCreacion(error, items) {
       const disponible = Number(error.contexto?.disponible);
       const quedan =
         Number.isFinite(disponible) && disponible > 0
-          ? `Quedan ${disponible} unidad(es).`
+          ? `${disponible === 1 ? "Queda" : "Quedan"} ${textoUnidades(disponible)}.`
           : "Se agotó.";
 
       return {
@@ -109,8 +113,25 @@ function describirErrorCreacion(error, items) {
         accion: null,
       };
     default:
+      // Sin respuesta (red) o 5xx: el backend pudo haber creado el pedido
+      // antes de fallar la respuesta. Antes de reintentar hay que mirar Mis
+      // pedidos para no comprar dos veces.
+      if (esErrorIncierto(error)) {
+        return {
+          mensaje:
+            "No pudimos confirmar si tu pedido se registró: puede que sí. Revisá «Mis pedidos» antes de volver a intentar.",
+          accion: { to: "/pedidos", texto: "Ver mis pedidos" },
+        };
+      }
+
       return { mensaje: error?.mensaje ?? "No pudimos registrar tu pedido.", accion: null };
   }
+}
+
+// Error de red (sin respuesta) o del servidor (5xx): no sabemos si la
+// operación llegó a aplicarse.
+function esErrorIncierto(error) {
+  return !error || error.status === null || error.status >= 500;
 }
 
 // Checkout (RF-030, RF-034, RF-037): resumen del carrito, dirección de
@@ -164,12 +185,15 @@ export default function Checkout() {
   // Pedido ya creado en esta visita (para no volver a mostrar el checkout si
   // la persona vuelve con "Atrás" desde Mercado Pago).
   const pedidoCreadoRef = useRef(null);
+  // Temporizador de "la redirección a Mercado Pago no ocurrió".
+  const temporizadorRef = useRef(null);
 
   // Vuelta desde Mercado Pago con "Atrás" (página restaurada desde la caché
   // del navegador): el pedido ya existe, así que llevamos a su detalle.
   useEffect(() => {
     function alVolver(event) {
       if (event.persisted && pedidoCreadoRef.current) {
+        window.clearTimeout(temporizadorRef.current);
         navigate(`/pedidos/${pedidoCreadoRef.current}`, { replace: true });
       }
     }
@@ -177,6 +201,8 @@ export default function Checkout() {
     window.addEventListener("pageshow", alVolver);
     return () => window.removeEventListener("pageshow", alVolver);
   }, [navigate]);
+
+  useEffect(() => () => window.clearTimeout(temporizadorRef.current), []);
 
   function irAlDetalle(pedido, aviso) {
     navigate(`/pedidos/${pedido.id}`, { replace: true, state: { aviso } });
@@ -191,19 +217,35 @@ export default function Checkout() {
       try {
         const datos = await pagoService.crearPreferencia(pedido.id);
 
-        if (typeof datos?.checkoutUrl === "string" && datos.checkoutUrl) {
-          // Checkout hospedado de Mercado Pago. El bloqueo queda tomado: la
-          // página se va.
+        // Una URL que no es de Mercado Pago (o no es https) se trata igual
+        // que una URL ausente: no se redirige y se va al detalle.
+        if (esUrlDeCheckoutValida(datos?.checkoutUrl)) {
+          // Checkout hospedado de Mercado Pago. El bloqueo de creación queda
+          // tomado para siempre (el pedido ya existe). Si a los
+          // ESPERA_REDIRECCION_MS la página sigue acá, la navegación no
+          // ocurrió: llevamos al detalle para reintentar el pago desde ahí.
           window.location.assign(datos.checkoutUrl);
+          temporizadorRef.current = window.setTimeout(() => {
+            irAlDetalle(pedido, {
+              tipo: "warning",
+              mensaje: `Tu pedido ${numero} quedó registrado y reservado, pero no pudimos abrir Mercado Pago. Podés reintentar el pago desde acá.`,
+            });
+          }, ESPERA_REDIRECCION_MS);
           return;
         }
       } catch (err) {
         error = obtenerErrorApi(err, "No pudimos iniciar el pago.");
       }
 
+      // Reintentar solo tiene sentido si el problema fue de la pasarela o de
+      // la red, no si el pedido venció o ya no está pendiente.
+      const reintento = sePuedeReintentarPago(error)
+        ? " Podés reintentarlo desde acá."
+        : "";
+
       irAlDetalle(pedido, {
         tipo: "warning",
-        mensaje: `Tu pedido ${numero} quedó registrado y reservado, pero no pudimos iniciar el pago. ${mensajeErrorPreferencia(error)} Podés reintentarlo desde acá.`,
+        mensaje: `Tu pedido ${numero} quedó registrado, pero no pudimos iniciar el pago. ${mensajeErrorPreferencia(error)}${reintento}`,
       });
       return;
     }
@@ -216,9 +258,13 @@ export default function Checkout() {
       });
     } catch (err) {
       const error = obtenerErrorApi(err, "No pudimos registrar el pago.");
+      const reintento = sePuedeReintentarContraEntrega(error)
+        ? " Reintentalo desde acá."
+        : " Comunicate con la tienda.";
+
       irAlDetalle(pedido, {
         tipo: "warning",
-        mensaje: `Tu pedido ${numero} quedó registrado, pero no pudimos registrar el pago contra entrega: ${mensajeErrorContraEntrega(error)} Reintentalo desde acá.`,
+        mensaje: `Tu pedido ${numero} quedó registrado, pero no pudimos registrar el pago contra entrega: ${mensajeErrorContraEntrega(error)}${reintento}`,
       });
     }
   }
@@ -253,8 +299,11 @@ export default function Checkout() {
 
       // El carrito o las direcciones cambiaron en el backend: refrescamos lo
       // que se ve para que coincida (stock real, carrito vacío, etc.).
+      // Con un error incierto también: si el pedido sí se creó, el carrito
+      // quedó vacío y la página pasa a "Tu carrito está vacío".
       if (
-        ["STOCK_INSUFICIENTE", "PRODUCTO_NO_DISPONIBLE", "CARRITO_VACIO", "SIN_COBERTURA"].includes(codigo)
+        ["STOCK_INSUFICIENTE", "PRODUCTO_NO_DISPONIBLE", "CARRITO_VACIO", "SIN_COBERTURA"].includes(codigo) ||
+        esErrorIncierto(resultado.error)
       ) {
         recargarCarrito();
       }
@@ -337,9 +386,11 @@ export default function Checkout() {
     <main className="checkout">
       <h1 className="checkout__titulo">Finalizar compra</h1>
 
-      <div className="checkout__avisos" aria-live="polite">
+      {/* Una sola región viva para los errores de la compra (antes había una
+          región dentro de otra y el mensaje se anunciaba dos veces). */}
+      <div className="checkout__avisos" role="alert">
         {errorCompra && (
-          <div role="alert" className="checkout__error">
+          <div className="checkout__error">
             <Alert type="error" message={errorCompra.mensaje} />
             {errorCompra.accion && (
               <Link to={errorCompra.accion.to} className="checkout__link">

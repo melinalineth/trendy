@@ -112,12 +112,22 @@ function DireccionEntrega({ direccion }) {
   );
 }
 
+// Ruta /pedidos/:id. El detalle se monta con `key={id}`: al pasar de
+// /pedidos/1 a /pedidos/2 (Atrás/Adelante, enlaces) React desmonta el de 1 y
+// monta uno nuevo, así no se arrastran el bloqueo de pago, los avisos ni el
+// "vencido" del pedido anterior, y una respuesta tardía del id viejo no
+// puede tocar el estado del nuevo (su componente ya no existe).
+export default function OrderDetail() {
+  const { id } = useParams();
+
+  return <DetallePedidoCliente key={id} id={id} />;
+}
+
 // Detalle de un pedido del cliente (RF-031) con su pago (RF-038) y el
 // seguimiento del envío (RF-028). También es la pantalla de "vuelta" del
 // checkout y de Mercado Pago. El cliente NO puede cancelar (el backend lo
 // reserva al personal: 403), así que no hay botón de cancelar.
-export default function OrderDetail() {
-  const { id } = useParams();
+function DetallePedidoCliente({ id }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -167,11 +177,17 @@ export default function OrderDetail() {
   }, [esperandoPagoMercadoPago, recargar]);
 
   async function pagar() {
+    // Un solo aviso a la vez: el del checkout (o el de un intento anterior)
+    // se reemplaza por el resultado de este intento.
+    setAviso(null);
     setAvisoAccion(null);
     const resultado = await iniciarPagoMercadoPago();
 
     if (resultado.ignorado) return;
 
+    // El hook solo devuelve ok con una URL de Mercado Pago validada
+    // (esUrlDeCheckoutValida); si la navegación no ocurre, libera el botón
+    // a los pocos segundos.
     if (resultado.ok) {
       window.location.assign(resultado.checkoutUrl);
       return;
@@ -182,6 +198,7 @@ export default function OrderDetail() {
   }
 
   async function registrarPagoContraEntrega() {
+    setAviso(null);
     setAvisoAccion(null);
     const resultado = await registrarContraEntrega();
 

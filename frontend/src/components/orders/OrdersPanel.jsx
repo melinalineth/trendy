@@ -23,6 +23,7 @@ import {
   formatearFecha,
   formatearPrecio,
   sePuedeCancelar,
+  textoUnidades,
 } from "./pedidoEstados";
 import "./OrdersPanel.css";
 
@@ -119,7 +120,12 @@ function textoConfirmacion(confirmacion) {
           ? " El pago contra entrega registrado también se cancela."
           : "";
 
-      return `¿Cancelar el pedido ${numero}? Las ${unidades} unidad(es) reservadas vuelven al stock y quedan disponibles para la venta.${pagoContraEntrega} Esta acción no se puede deshacer.`;
+      const reposicion =
+        unidades === 1
+          ? "La unidad reservada vuelve al stock y queda disponible para la venta."
+          : `Las ${textoUnidades(unidades)} reservadas vuelven al stock y quedan disponibles para la venta.`;
+
+      return `¿Cancelar el pedido ${numero}? ${reposicion}${pagoContraEntrega} Esta acción no se puede deshacer.`;
     }
     case "vencidos":
       return "Se cancelan los pedidos de Mercado Pago que siguen pendientes de pago después de su plazo de vigencia (configurado en el servidor) y su stock vuelve a estar disponible. Los pedidos contra entrega y los que tienen el pago aprobado no se tocan.";
