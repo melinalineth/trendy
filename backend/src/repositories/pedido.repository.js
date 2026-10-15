@@ -10,6 +10,33 @@ const prisma = require("../config/prisma");
 // passwordHash, rolId, estado, etc. en las respuestas; solo estos campos.
 const USUARIO_PUBLICO = { select: { id: true, nombre: true, correo: true } };
 
+// Líneas con lo que muestran el detalle del pedido y la preferencia de pago:
+// nombre del producto, talla y color (el precio es el HISTÓRICO de la línea,
+// RN-008, nunca el vigente del producto).
+const DETALLES_CON_VARIANTE = {
+  orderBy: { id: "asc" },
+  include: {
+    variante: {
+      select: {
+        id: true,
+        sku: true,
+        talla: true,
+        color: true,
+        producto: { select: { id: true, nombre: true } },
+      },
+    },
+  },
+};
+
+// Detalle completo de un pedido (respuesta de crear, consultar y gestionar).
+const INCLUDE_DETALLE = {
+  detalles: DETALLES_CON_VARIANTE,
+  usuario: USUARIO_PUBLICO,
+  pago: true,
+  infoEnvio: true,
+  direccion: true,
+};
+
 // RN-003: las consultas de un cliente siempre filtran por su usuarioId. Un
 // usuarioId ausente en un `where` de Prisma se IGNORA (devolvería los pedidos
 // de todos), así que se valida acá en vez de confiar en el llamador.
@@ -19,7 +46,9 @@ function exigirUsuarioId(usuarioId) {
   }
 }
 
-// Generar un número de pedido legible y único
+// Generar un número de pedido legible y único. Puede chocar (mismo
+// milisegundo y mismo aleatorio): Pedido.numero es @unique y el service
+// reintenta ante P2002.
 const generarNumero = () => {
   const timestamp = Date.now().toString();
   const random = Math.floor(1000 + Math.random() * 9000).toString();
@@ -27,9 +56,14 @@ const generarNumero = () => {
   return `PED-${timestamp}${random}`;
 };
 
-// Crear pedido y sus detalles en una sola operación
+// Crear el pedido (y sus detalles si vienen `items`) en una sola operación.
+// La creación desde el carrito lo llama SIN items y agrega las líneas
+// después con crearDetalles: insertar un DetallePedido toma un lock
+// compartido sobre la Variante (FK) y el descuento de stock posterior pediría
+// el exclusivo, receta de deadlock entre dos pedidos simultáneos de la misma
+// variante (ver inventario.repository.js).
 const crear = async (
-  { usuarioId, direccionId, metodoPago, subtotal, costoEnvio, total, items },
+  { usuarioId, direccionId, metodoPago, subtotal, costoEnvio, total, items = [] },
   client = prisma
 ) => {
   const numero = generarNumero();
@@ -43,13 +77,18 @@ const crear = async (
       subtotal,
       costoEnvio,
       total,
-      detalles: {
-        create: items,
-      },
+      ...(items.length > 0 ? { detalles: { create: items } } : {}),
     },
     include: {
       detalles: true,
     },
+  });
+};
+
+// Líneas del pedido: [{ varianteId, cantidad, precioUnitario }].
+const crearDetalles = async (pedidoId, items, client = prisma) => {
+  return await client.detallePedido.createMany({
+    data: items.map((item) => ({ ...item, pedidoId })),
   });
 };
 
@@ -101,18 +140,14 @@ const listarTodos = async ({ estado, numero, usuarioId } = {}) => {
 };
 
 // Obtener pedido por ID con sus relaciones (sin filtrar por dueño: para
-// admin/vendedor o procesos internos como el webhook de pagos).
+// admin/vendedor o procesos internos como el webhook de pagos; el service
+// compara el dueño cuando consulta un cliente).
 const obtenerPorId = async (id, client = prisma) => {
   return await client.pedido.findUnique({
     where: {
       id,
     },
-    include: {
-      detalles: true,
-      usuario: USUARIO_PUBLICO,
-      pago: true,
-      infoEnvio: true,
-    },
+    include: INCLUDE_DETALLE,
   });
 };
 
@@ -168,6 +203,7 @@ const actualizarEstado = async (id, estado, client = prisma) => {
 module.exports = {
   generarNumero,
   crear,
+  crearDetalles,
   listarPorUsuario,
   listarTodos,
   obtenerPorId,

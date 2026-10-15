@@ -97,9 +97,12 @@ const carritoRepository = {
   /**
    * Obtiene el carrito junto con sus items,
    * variantes y productos para calcular el resumen.
+   *
+   * `client` es opcional: la creación del pedido lo lee dentro de su
+   * transacción, después de tomar el lock del carrito (bloquearPorUsuario).
    */
-  async obtenerConItems(carritoId) {
-    return prisma.carrito.findUnique({
+  async obtenerConItems(carritoId, client = prisma) {
+    return client.carrito.findUnique({
       where: {
         id: Number(carritoId),
       },
@@ -113,6 +116,34 @@ const carritoRepository = {
             },
           },
         },
+      },
+    });
+  },
+
+  /**
+   * Sprint 4 / RF-030: toma el lock de la fila del carrito del usuario
+   * (SELECT ... FOR UPDATE, parametrizado) dentro de la transacción `client`
+   * y devuelve { id } o null si el usuario nunca tuvo carrito. Dos
+   * creaciones de pedido simultáneas desde el mismo carrito se serializan: la
+   * segunda espera a que la primera confirme y recién entonces lee los items
+   * (ya vacíos). Agregar o editar items también espera: la FK de ItemCarrito
+   * pide un lock compartido sobre esta fila.
+   */
+  async bloquearPorUsuario(usuarioId, client) {
+    const filas =
+      await client.$queryRaw`SELECT id FROM Carrito WHERE usuarioId = ${Number(usuarioId)} FOR UPDATE`;
+
+    return filas[0] ? { id: Number(filas[0].id) } : null;
+  },
+
+  /**
+   * Borra todos los items del carrito (el carrito queda vacío, no se borra).
+   * Se usa al crear el pedido, dentro de su transacción.
+   */
+  async vaciar(carritoId, client = prisma) {
+    return client.itemCarrito.deleteMany({
+      where: {
+        carritoId: Number(carritoId),
       },
     });
   },
