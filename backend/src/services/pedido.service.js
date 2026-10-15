@@ -31,7 +31,15 @@ const {
   horasDeVigenciaPreferencia,
 } = require("./pago.service");
 
-const { CoberturaNoDisponibleError, DireccionNoAutorizadaError } = envioService;
+const envioRepository = require("../repositories/envio.repository");
+
+const {
+  CoberturaNoDisponibleError,
+  DireccionNoAutorizadaError,
+  TransicionEnvioInvalidaError,
+  ESTADOS_ENVIO,
+  validarTransicionEstado,
+} = envioService;
 const { StockInsuficienteError } = inventarioService;
 
 // RF-030: el carrito no tiene líneas (o el usuario nunca tuvo carrito). Es
@@ -65,6 +73,29 @@ class PedidoNoCancelableError extends Error {
     this.name = "PedidoNoCancelableError";
     this.status = 409;
     this.codigo = "PEDIDO_NO_CANCELABLE";
+  }
+}
+
+// Cambio de EstadoPedido que la tabla de transiciones no permite (salto,
+// retroceso, mismo estado, estados de pago o CANCELADO a mano).
+class TransicionEstadoInvalidaError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TransicionEstadoInvalidaError";
+    this.status = 409;
+    this.codigo = "TRANSICION_ESTADO_INVALIDA";
+  }
+}
+
+// El pedido no tiene InfoEnvio (los creados por POST /pedidos siempre lo
+// tienen; solo puede faltar en datos cargados a mano). 409 al intentar mover
+// el envío, 404 al consultar el seguimiento.
+class EnvioNoRegistradoError extends Error {
+  constructor(status = 409) {
+    super("El pedido no tiene información de envío registrada");
+    this.name = "EnvioNoRegistradoError";
+    this.status = status;
+    this.codigo = "ENVIO_NO_REGISTRADO";
   }
 }
 
@@ -500,8 +531,205 @@ async function cancelarPedidosVencidos({ horas } = {}) {
   return { horas: horasEfectivas, corte, cancelados, omitidos };
 }
 
+// ---------------------------------------------------------------------------
+// Consulta (RF-031, RF-032)
+// ---------------------------------------------------------------------------
+
+// Colombia no tiene horario de verano: America/Bogota es UTC-5 todo el año.
+const DESFASE_BOGOTA_HORAS = 5;
+
+// 'AAAA-MM-DD' (ya validada por el DTO) -> instante en que empieza ese día en
+// Bogotá (+ diasExtra días).
+function inicioDelDiaEnBogota(texto, diasExtra = 0) {
+  const [anio, mes, dia] = texto.split("-").map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia + diasExtra, DESFASE_BOGOTA_HORAS));
+}
+
+const LIMITE_POR_DEFECTO = 20;
+
+/**
+ * GET /api/v1/pedidos. Cliente: SOLO los suyos (el usuarioId de la query se
+ * ignora: sale de la sesión, RN-003). Admin y vendedor: todos, con filtros
+ * por cliente, número, estado y fechas (RF-032). `desde`/`hasta` son días
+ * calendario en America/Bogota y `hasta` es inclusivo. Más recientes
+ * primero, paginado.
+ */
+async function listarPedidos(usuario, filtros = {}) {
+  const pagina = filtros.pagina ?? 1;
+  const limite = filtros.limite ?? LIMITE_POR_DEFECTO;
+
+  const consulta = {
+    estado: filtros.estado,
+    numero: filtros.numero,
+    desde: filtros.desde ? inicioDelDiaEnBogota(filtros.desde) : undefined,
+    hasta: filtros.hasta ? inicioDelDiaEnBogota(filtros.hasta, 1) : undefined,
+    skip: (pagina - 1) * limite,
+    take: limite,
+  };
+
+  const { pedidos, total } = esPersonal(usuario)
+    ? await pedidoRepository.listarTodos({ ...consulta, usuarioId: filtros.usuarioId })
+    : await pedidoRepository.listarPorUsuario(Number(usuario.id), consulta);
+
+  return {
+    pedidos: pedidos.map(presentarPedido),
+    paginacion: { pagina, limite, total, totalPaginas: Math.ceil(total / limite) },
+  };
+}
+
+// Pedido completo visible para `usuario` o PedidoNoEncontradoError (uno
+// ajeno responde igual que uno inexistente, RN-003 / DDS §5.2).
+async function obtenerVisible(pedidoId, usuario) {
+  const pedido = await pedidoRepository.obtenerPorId(pedidoId);
+
+  if (!pedido || (!esPersonal(usuario) && Number(pedido.usuarioId) !== Number(usuario.id))) {
+    throw new PedidoNoEncontradoError();
+  }
+
+  return pedido;
+}
+
+/**
+ * GET /api/v1/pedidos/:id: detalle con líneas (precio HISTÓRICO, RN-008),
+ * pago, InfoEnvio y dirección. Dueño, admin y vendedor.
+ */
+async function obtenerPedidoPorId(pedidoId, usuario) {
+  return presentarPedido(await obtenerVisible(pedidoId, usuario));
+}
+
+// ---------------------------------------------------------------------------
+// Gestión del estado (RF-032) y su sincronización con el envío (RF-029)
+// ---------------------------------------------------------------------------
+
+// Transiciones MANUALES de EstadoPedido (PATCH /estado), ERS §4.2. Ver
+// docs/diseno/pedidos-estados.md. Lineales y hacia adelante, sin saltos.
+//   - PENDIENTE -> CONFIRMADO: solo contra entrega con su Pago registrado (un
+//     pedido de Mercado Pago lo confirma el webhook al aprobarse el pago).
+//   - PAGO_APROBADO -> CONFIRMADO: el webhook ya lo hace en la misma
+//     transacción; queda por si un pedido quedara a mitad de camino.
+//   - CANCELADO: solo por PATCH /cancelar (repone el stock).
+//   - PENDIENTE y los estados de pago: solo los fija pago.service.
+const TRANSICIONES_PEDIDO = Object.freeze({
+  PENDIENTE: Object.freeze(["CONFIRMADO"]),
+  PAGO_APROBADO: Object.freeze(["CONFIRMADO"]),
+  CONFIRMADO: Object.freeze(["EN_PREPARACION"]),
+  EN_PREPARACION: Object.freeze(["ENVIADO"]),
+  ENVIADO: Object.freeze(["EN_TRANSITO"]),
+  EN_TRANSITO: Object.freeze(["ENTREGADO"]),
+  ENTREGADO: Object.freeze([]),
+  CANCELADO: Object.freeze([]),
+  PAGO_RECHAZADO: Object.freeze([]),
+  PAGO_PENDIENTE: Object.freeze([]),
+});
+
+const ESTADOS_DE_PAGO = Object.freeze(["PENDIENTE", "PAGO_APROBADO", "PAGO_RECHAZADO", "PAGO_PENDIENTE"]);
+
+/**
+ * Valida un cambio manual de EstadoPedido. Función pura: `pago` es el Pago
+ * del pedido (o null). Lanza TransicionEstadoInvalidaError (409) si no se
+ * permite; si se permite devuelve el estado nuevo.
+ */
+function validarTransicionPedido(estadoActual, estadoNuevo, { metodoPago, pago = null } = {}) {
+  if (estadoNuevo === "CANCELADO") {
+    throw new TransicionEstadoInvalidaError(
+      "Para cancelar un pedido usá PATCH /api/v1/pedidos/:id/cancelar (libera el stock)"
+    );
+  }
+
+  if (ESTADOS_DE_PAGO.includes(estadoNuevo)) {
+    throw new TransicionEstadoInvalidaError(
+      `El estado ${estadoNuevo} lo fija el flujo de pagos; no se puede asignar a mano`
+    );
+  }
+
+  const destinos = Object.hasOwn(TRANSICIONES_PEDIDO, estadoActual)
+    ? TRANSICIONES_PEDIDO[estadoActual]
+    : [];
+
+  if (!destinos.includes(estadoNuevo)) {
+    throw new TransicionEstadoInvalidaError(
+      `No se puede pasar el pedido de ${estadoActual} a ${estadoNuevo}` +
+        (destinos.length > 0
+          ? `; desde ${estadoActual} solo se puede pasar a ${destinos.join(", ")}`
+          : `; ${estadoActual} no admite cambios manuales`)
+    );
+  }
+
+  if (estadoActual === "PENDIENTE" && estadoNuevo === "CONFIRMADO") {
+    if (metodoPago !== "CONTRA_ENTREGA") {
+      throw new TransicionEstadoInvalidaError(
+        "Un pedido de Mercado Pago se confirma solo cuando se aprueba su pago"
+      );
+    }
+    if (!pago || pago.metodo !== "CONTRA_ENTREGA" || !["PENDIENTE", "APROBADO"].includes(pago.estado)) {
+      throw new TransicionEstadoInvalidaError(
+        "Antes de confirmar el pedido hay que registrar su pago contra entrega"
+      );
+    }
+  }
+
+  return estadoNuevo;
+}
+
+// Lleva InfoEnvio al estado de envío `estadoNuevo`, con el lock del pedido
+// tomado (misma transacción que el cambio de Pedido.estado). EN_PREPARACION
+// es el estado con el que nace el InfoEnvio: entrar en preparación no lo
+// cambia, solo exige que siga ahí. El resto pasa por validarTransicionEstado
+// (sin saltos ni retrocesos, RF-029).
+async function sincronizarEnvio(tx, pedidoId, estadoNuevo) {
+  const info = await envioRepository.obtenerInfoEnvio(pedidoId, tx);
+
+  if (!info) {
+    throw new EnvioNoRegistradoError();
+  }
+
+  if (estadoNuevo === "EN_PREPARACION") {
+    if (info.estadoEnvio !== "EN_PREPARACION") {
+      throw new TransicionEnvioInvalidaError(
+        `El envío del pedido ya está en ${info.estadoEnvio}; no puede volver a EN_PREPARACION`
+      );
+    }
+    return info;
+  }
+
+  validarTransicionEstado(info.estadoEnvio, estadoNuevo);
+  return envioRepository.actualizarEstadoEnvio(pedidoId, estadoNuevo, tx);
+}
+
+/**
+ * PATCH /api/v1/pedidos/:id/estado (admin y vendedor). Bajo el lock del
+ * pedido: valida la transición y, si el estado nuevo es de envío, actualiza
+ * InfoEnvio en la MISMA transacción (Pedido.estado manda; mientras el pedido
+ * está en EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
+ */
+async function actualizarEstado(pedidoId, estadoNuevo) {
+  await enTransaccion("ACTUALIZAR_ESTADO", async (tx) => {
+    const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
+
+    if (!bloqueado) {
+      throw new PedidoNoEncontradoError();
+    }
+
+    const pago = await pagoRepository.buscarPorPedido(pedidoId, tx);
+    validarTransicionPedido(bloqueado.estado, estadoNuevo, { metodoPago: bloqueado.metodoPago, pago });
+
+    if (ESTADOS_ENVIO.includes(estadoNuevo)) {
+      await sincronizarEnvio(tx, pedidoId, estadoNuevo);
+    }
+
+    await pedidoRepository.actualizarEstado(pedidoId, estadoNuevo, tx);
+  });
+
+  return presentarPedido(await pedidoRepository.obtenerPorId(pedidoId));
+}
+
 module.exports = {
   crearPedido,
+  listarPedidos,
+  obtenerPedidoPorId,
+  actualizarEstado,
+  validarTransicionPedido,
+  TRANSICIONES_PEDIDO,
   cancelarPedido,
   cancelarPedidosVencidos,
   presentarPedido,
@@ -510,6 +738,8 @@ module.exports = {
   CarritoVacioError,
   ProductoNoDisponibleError,
   PedidoNoCancelableError,
+  TransicionEstadoInvalidaError,
+  EnvioNoRegistradoError,
   MontoFueraDeRangoError,
   // Reexportadas para que el controller y los tests no dependan de dónde
   // nació cada error.

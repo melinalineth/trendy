@@ -92,25 +92,9 @@ const crearDetalles = async (pedidoId, items, client = prisma) => {
   });
 };
 
-// Listar pedidos de un usuario, más recientes primero (RN-003)
-const listarPorUsuario = async (usuarioId) => {
-  exigirUsuarioId(usuarioId);
-
-  return await prisma.pedido.findMany({
-    where: {
-      usuarioId,
-    },
-    orderBy: {
-      creadoEn: "desc",
-    },
-    include: {
-      detalles: true,
-    },
-  });
-};
-
-// Listar pedidos para administración y vendedores
-const listarTodos = async ({ estado, numero, usuarioId } = {}) => {
+// `where` común de los listados (RF-031/RF-032). `desde`/`hasta` son Date ya
+// resueltos por el service (`hasta` exclusivo).
+function construirFiltro({ estado, numero, usuarioId, desde, hasta } = {}) {
   const where = {};
 
   if (estado) {
@@ -127,16 +111,46 @@ const listarTodos = async ({ estado, numero, usuarioId } = {}) => {
     where.usuarioId = usuarioId;
   }
 
-  return await prisma.pedido.findMany({
-    where,
-    orderBy: {
-      creadoEn: "desc",
-    },
-    include: {
-      detalles: true,
-      usuario: USUARIO_PUBLICO,
-    },
-  });
+  if (desde || hasta) {
+    where.creadoEn = {
+      ...(desde ? { gte: desde } : {}),
+      ...(hasta ? { lt: hasta } : {}),
+    };
+  }
+
+  return where;
+}
+
+// Listar pedidos de un usuario, más recientes primero (RN-003). Mismos
+// filtros y paginación que listarTodos, pero con el dueño obligatorio (nunca
+// se puede "olvidar" el filtro y devolver los de todos).
+const listarPorUsuario = async (usuarioId, filtros = {}) => {
+  exigirUsuarioId(usuarioId);
+
+  return listarTodos({ ...filtros, usuarioId });
+};
+
+// Listar pedidos para administración y vendedores (RF-032), con filtros y
+// paginación (`skip`/`take`), más recientes primero. Devuelve
+// { pedidos, total }.
+const listarTodos = async ({ skip = 0, take = 20, ...filtros } = {}) => {
+  const where = construirFiltro(filtros);
+
+  const [pedidos, total] = await prisma.$transaction([
+    prisma.pedido.findMany({
+      where,
+      orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
+      skip,
+      take,
+      include: {
+        detalles: DETALLES_CON_VARIANTE,
+        usuario: USUARIO_PUBLICO,
+      },
+    }),
+    prisma.pedido.count({ where }),
+  ]);
+
+  return { pedidos, total };
 };
 
 // Obtener pedido por ID con sus relaciones (sin filtrar por dueño: para

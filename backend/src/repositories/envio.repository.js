@@ -52,6 +52,23 @@ const envioRepository = {
       },
     });
   },
+
+  // InfoEnvio de un pedido (o null). `client` para leerlo bajo el lock del
+  // pedido.
+  async obtenerInfoEnvio(pedidoId, client = prisma) {
+    return client.infoEnvio.findUnique({
+      where: { pedidoId },
+    });
+  },
+
+  // Cambia el estado de envío. Lo invoca pedido.service con el lock del
+  // pedido tomado y la transición ya validada (validarTransicionEstado).
+  async actualizarEstadoEnvio(pedidoId, estadoEnvio, client = prisma) {
+    return client.infoEnvio.update({
+      where: { pedidoId },
+      data: { estadoEnvio },
+    });
+  },
 };
 
 module.exports = envioRepository;
