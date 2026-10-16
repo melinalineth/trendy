@@ -2,6 +2,7 @@
 
 const prisma = require("../../prisma/client");
 const inventarioRepository = require("../repositories/inventario.repository");
+const ventaService = require("./venta.service");
 
 const {
   MercadoPagoConfig,
@@ -250,6 +251,17 @@ async function procesarWebhook(payload, firma) {
         where: { id: pedidoId },
         data: { estado: "CONFIRMADO" },
       });
+
+      await tx.pedido.update({
+  // Conservar los campos que ya existen.
+  where: { id: pedidoId },
+  data: {
+    estado: "CONFIRMADO",
+    // Conservar los demás campos existentes.
+  },
+});
+
+await ventaService.registrarVentaDePedido(pedidoId, { tx });
 
       // El inventario se descontó al crear el pedido.
       // NO volver a descontarlo aquí.

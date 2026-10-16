@@ -1,7 +1,10 @@
 
-const { PrismaClient } = require("@prisma/client");
+c// Antes: const { PrismaClient } = require("@prisma/client");
+//       const prisma = new PrismaClient();
 
-const prisma = new PrismaClient();
+const prisma = require("../config/prisma");
+
+
 
 // Generar un número de pedido legible y único
 const generarNumero = () => {
@@ -103,16 +106,14 @@ const obtenerPorId = async (id) => {
 };
 
 // Actualizar únicamente el estado del pedido
-const actualizarEstado = async (id, estado) => {
-  return await prisma.pedido.update({
-    where: {
-      id,
-    },
-    data: {
-      estado,
-    },
+const actualizarEstado = async (id, estado, { tx } = {}) => {
+  return (tx ?? prisma).pedido.update({
+    where: { id },
+    data: { estado },
   });
 };
+
+
 
 module.exports = {
   generarNumero,
