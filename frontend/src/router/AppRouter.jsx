@@ -18,6 +18,11 @@ import SellerProducts from "../pages/seller/Products";
 import AdminInventory from "../pages/admin/Inventory";
 import SellerInventory from "../pages/seller/Inventory";
 import ZonasCobertura from "../pages/admin/ZonasCobertura";
+import Checkout from "../pages/customer/Checkout";
+import CustomerOrders from "../pages/customer/Orders";
+import OrderDetail from "../pages/customer/OrderDetail";
+import AdminOrders from "../pages/admin/Orders";
+import SellerOrders from "../pages/seller/Orders";
 
 function AppRoutes() {
   return (
@@ -110,6 +115,49 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["admin"]}>
             <ZonasCobertura />
+          </RoleGuard>
+        }
+      />
+      {/* Sprint 4: checkout, pedidos y pagos (RF-028, RF-030 a RF-032,
+          RF-034, RF-037, RF-038). El cliente compra y consulta SUS pedidos;
+          admin y vendedor los gestionan desde el panel compartido. */}
+      <Route
+        path="/checkout"
+        element={
+          <RoleGuard roles={["cliente"]}>
+            <Checkout />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/pedidos"
+        element={
+          <RoleGuard roles={["cliente"]}>
+            <CustomerOrders />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/pedidos/:id"
+        element={
+          <RoleGuard roles={["cliente"]}>
+            <OrderDetail />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/admin/pedidos"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <AdminOrders />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/vendedor/pedidos"
+        element={
+          <RoleGuard roles={["vendedor"]}>
+            <SellerOrders />
           </RoleGuard>
         }
       />

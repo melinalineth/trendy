@@ -1,81 +1,66 @@
-
 import { Link } from "react-router-dom";
-import usePedidos from "../../hooks/usePedidos";
+
+import Alert from "../../components/common/Alert";
+import Badge from "../../components/common/Badge";
+import Button from "../../components/common/Button";
+import Loading from "../../components/common/Loading";
+import Pagination from "../../components/common/Pagination";
+import { usePedidos } from "../../hooks/usePedidos";
+import {
+  badgeEstadoPedido,
+  etiquetaEstadoPedido,
+  etiquetaMetodoPago,
+  formatearFecha,
+  formatearPrecio,
+} from "../../components/orders/pedidoEstados";
 import "./Orders.css";
 
+// Mis pedidos (RF-031): pedidos del cliente autenticado, más recientes
+// primero y paginados. El backend devuelve SOLO los propios (RN-003).
 export default function Orders() {
-  const { pedidos, loading, error, recargar } = usePedidos();
+  const {
+    pedidos,
+    paginacion,
+    pagina,
+    cambiarPagina,
+    loading,
+    error,
+    recargar,
+  } = usePedidos();
 
-  function formatoCOP(valor) {
-    return Number(valor || 0).toLocaleString("es-CO", {
-      style: "currency",
-      currency: "COP",
-      maximumFractionDigits: 0,
-    });
-  }
-
-  function formatoFecha(fecha) {
-    if (!fecha) return "Fecha no disponible";
-
-    const fechaValida = new Date(fecha);
-
-    if (Number.isNaN(fechaValida.getTime())) {
-      return "Fecha no disponible";
-    }
-
-    return fechaValida.toLocaleDateString("es-CO", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  function textoEstado(estado) {
-    return String(estado || "PENDIENTE")
-      .replaceAll("_", " ")
-      .toLowerCase()
-      .replace(/^\w/, (letra) => letra.toUpperCase());
-  }
-
-  if (loading) {
-    return (
-      <main className="orders">
-        <h1>Mis pedidos</h1>
-        <p>Cargando tus pedidos...</p>
-      </main>
-    );
-  }
+  const totalPaginas = paginacion?.totalPaginas ?? 0;
 
   return (
     <main className="orders">
       <header className="orders__header">
         <div>
           <h1>Mis pedidos</h1>
-          <p>Consulta tus compras y revisa su estado.</p>
+          <p>Consultá tus compras y revisá su estado.</p>
         </div>
 
-        <button
-          type="button"
+        <Button
           className="orders__refresh"
+          text={loading ? "Actualizando..." : "Actualizar"}
           onClick={recargar}
-        >
-          Actualizar
-        </button>
+          disabled={loading}
+        />
       </header>
 
-      {error && (
-        <div className="orders__error" role="alert">
-          <p>{error}</p>
-          <button type="button" onClick={recargar}>
-            Intentar de nuevo
-          </button>
-        </div>
-      )}
+      <div aria-live="polite">
+        {error && !loading && (
+          <div className="orders__error" role="alert">
+            <Alert type="error" message={error} />
+            <Button text="Intentar de nuevo" onClick={recargar} />
+          </div>
+        )}
+      </div>
 
-      {!error && pedidos.length === 0 ? (
+      {loading ? (
+        <Loading text="Cargando tus pedidos..." />
+      ) : !error && pedidos.length === 0 ? (
         <section className="orders__empty">
-          <h2>Aún no tienes pedidos</h2>
-          <p>Cuando realices una compra, aparecerá aquí.</p>
+          <h2>Aún no tenés pedidos</h2>
+          <p>Cuando realices una compra, aparecerá acá.</p>
           <Link to="/catalogo" className="orders__shop-link">
             Explorar productos
           </Link>
@@ -90,39 +75,47 @@ export default function Orders() {
                   <h2>{pedido.numero || `#${pedido.id}`}</h2>
                 </div>
 
-                <span
-                  className={`orders__status orders__status--${String(
-                    pedido.estado || "pendiente"
-                  ).toLowerCase()}`}
-                >
-                  {textoEstado(pedido.estado)}
-                </span>
+                <Badge
+                  text={etiquetaEstadoPedido(pedido.estado)}
+                  type={badgeEstadoPedido(pedido.estado)}
+                />
               </div>
 
               <div className="orders__details">
                 <div>
                   <span className="orders__label">Fecha</span>
-                  <p>{formatoFecha(pedido.creadoEn || pedido.fecha)}</p>
+                  <p>{formatearFecha(pedido.creadoEn, { conHora: false })}</p>
+                </div>
+
+                <div>
+                  <span className="orders__label">Pago</span>
+                  <p>{etiquetaMetodoPago(pedido.metodoPago)}</p>
                 </div>
 
                 <div>
                   <span className="orders__label">Total</span>
-                  <p className="orders__total">
-                    {formatoCOP(pedido.total)}
-                  </p>
+                  <p className="orders__total">{formatearPrecio(pedido.total)}</p>
                 </div>
               </div>
 
-              <Link
-                to={`/pedidos/${pedido.id}`}
-                className="orders__details-link"
-              >
+              <Link to={`/pedidos/${pedido.id}`} className="orders__details-link">
                 Ver detalle y seguimiento
+                <span className="orders__sr-only"> del pedido {pedido.numero}</span>
                 <span aria-hidden="true"> →</span>
               </Link>
             </article>
           ))}
         </section>
+      )}
+
+      {!loading && totalPaginas > 1 && (
+        <nav className="orders__paginacion" aria-label="Páginas de pedidos">
+          <Pagination
+            currentPage={pagina}
+            totalPages={totalPaginas}
+            onPageChange={cambiarPagina}
+          />
+        </nav>
       )}
     </main>
   );
