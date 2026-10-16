@@ -26,6 +26,13 @@ const Header = ({ title = "Mi aplicación", subtitle }) => {
     👤
   </button>
 
+  {/* Mis pedidos (RF-031): solo el cliente con sesión. */}
+  {isAuthenticated && rol === "cliente" && (
+    <Link to="/pedidos" className="header__link">
+      Mis pedidos
+    </Link>
+  )}
+
   {mostrarCarrito && (
     <Link
       to="/carrito"

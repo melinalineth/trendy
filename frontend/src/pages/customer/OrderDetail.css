@@ -1,0 +1,309 @@
+/* Detalle y seguimiento de un pedido (RF-028, RF-031, RF-038) */
+
+.order-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-4);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.order-detail__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.order-detail__header h1 {
+  margin: var(--space-2) 0 var(--space-1);
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  color: var(--color-text);
+}
+
+.order-detail__header p {
+  margin: 0;
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.order-detail__header-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.btn.order-detail__btn--secundario {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn.order-detail__btn--secundario:hover {
+  background-color: var(--color-brand-50);
+}
+
+.btn.order-detail__btn--secundario:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.order-detail .alert {
+  max-width: none;
+  margin: 0;
+}
+
+.order-detail__avisos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Tarjetas */
+
+.order-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.order-detail__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+
+.order-detail__card h1,
+.order-detail__card h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  color: var(--color-text);
+}
+
+.order-detail__card p {
+  margin: 0;
+}
+
+.order-detail__mensaje {
+  align-items: center;
+  text-align: center;
+}
+
+.order-detail__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.order-detail__nota {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.order-detail__link {
+  color: var(--color-brand-500);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.order-detail__link:hover {
+  color: var(--color-brand-600);
+  text-decoration: underline;
+}
+
+.order-detail__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  margin: 0;
+}
+
+.order-detail__datos dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.order-detail__datos dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+.order-detail__fila-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* Productos */
+
+.order-detail__table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.order-detail__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.order-detail__table th,
+.order-detail__table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.order-detail__table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.order-detail__totales {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+  margin: 0 0 0 auto;
+}
+
+.order-detail__totales div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.order-detail__totales dt,
+.order-detail__totales dd {
+  margin: 0;
+}
+
+.order-detail__totales .order-detail__total {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.order-detail__total dd {
+  color: var(--color-brand-500);
+}
+
+/* Seguimiento del envío */
+
+.order-detail__pasos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-detail__paso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.order-detail__paso-marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  font-weight: 700;
+}
+
+.order-detail__paso--hecho .order-detail__paso-marca {
+  border-color: var(--color-success-500);
+  background-color: var(--color-success-500);
+  color: var(--color-text-inverse);
+}
+
+.order-detail__paso--actual {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.order-detail__paso--actual .order-detail__paso-marca {
+  border-color: var(--color-brand-500);
+  background-color: var(--color-brand-500);
+  color: var(--color-text-inverse);
+}
+
+/* Dirección */
+
+.order-detail__direccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-style: normal;
+}
+
+/* Texto solo para lectores de pantalla */
+.order-detail__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  .order-detail__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .order-detail {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .order-detail__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .order-detail__header-acciones {
+    justify-content: space-between;
+  }
+
+  .order-detail__totales {
+    max-width: none;
+  }
+}

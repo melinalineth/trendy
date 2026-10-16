@@ -38,42 +38,8 @@ function cambiarEstado(id, estado) {
     .then((response) => response.data);
 }
 
-// Lee el formato estándar de error del backend ({ error: { codigo, mensaje,
-// detalles } }) y devuelve siempre { status, codigo, mensaje, detalles } para
-// que la UI no tenga que conocer la forma del payload.
-//   - Sin respuesta (backend caído / red) o 5xx: se usa `mensajePorDefecto`;
-//     en 5xx el backend puede devolver el message crudo de una excepción
-//     interna, que no queremos mostrarle al usuario.
-//   - 4xx: se usa el `mensaje` del backend (ej. ZONA_DUPLICADA, 403, 404).
-//   - `detalles` es un array de strings en 400 VALIDACION_FALLIDA.
-export function obtenerErrorApi(err, mensajePorDefecto) {
-  const status = err?.response?.status ?? null;
-  const error = err?.response?.data?.error;
-
-  if (status === null) {
-    return {
-      status,
-      codigo: "SIN_CONEXION",
-      mensaje:
-        "No pudimos conectarnos con el servidor. Revisá tu conexión e intentá de nuevo.",
-      detalles: [],
-    };
-  }
-
-  const detalles = Array.isArray(error?.detalles)
-    ? error.detalles.filter((detalle) => typeof detalle === "string")
-    : [];
-
-  const mensajeBackend =
-    status < 500 && typeof error?.mensaje === "string" ? error.mensaje : "";
-
-  return {
-    status,
-    codigo: typeof error?.codigo === "string" ? error.codigo : null,
-    mensaje: mensajeBackend || mensajePorDefecto,
-    detalles: status < 500 ? detalles : [],
-  };
-}
+// La lectura de errores ({ error: { codigo, mensaje, detalles } }) vive en
+// services/apiError.js, compartida con pedidos y pagos.
 
 const zonaCoberturaService = {
   listarZonas,

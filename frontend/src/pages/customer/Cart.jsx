@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import Alert from "../../components/common/Alert";
 import Button from "../../components/common/Button";
@@ -22,6 +22,7 @@ function describirDireccion(direccion) {
 // editable y eliminación, selector de dirección para calcular el envío y
 // resumen con subtotal, envío y total calculados por el backend.
 function Cart() {
+  const navigate = useNavigate();
   const {
     direcciones,
     loading: cargandoDirecciones,
@@ -90,6 +91,15 @@ function Cart() {
   }));
 
   const envioCalculado = Boolean(direccionId) && !errorEnvio;
+  const hayLineasSinStock = items.some(
+    (item) => item.cantidad > item.variante.stock,
+  );
+  const puedeContinuar =
+    items.length > 0 &&
+    envioCalculado &&
+    !calculandoEnvio &&
+    !hayLineasSinStock &&
+    !procesando;
 
   let textoEnvio = "Sin calcular";
   if (calculandoEnvio) {
@@ -243,14 +253,23 @@ function Cart() {
               </p>
             )}
 
-            {/* El checkout todavía no existe (Checkout.jsx está vacío y no
-                hay ruta): se deja visible el paso del mapa de pantallas pero
-                deshabilitado, en vez de un botón que lleve a una pantalla
-                en blanco. */}
-            <Button text="Continuar compra" disabled />
-            <p className="cart-resumen__nota">
-              El pago estará disponible próximamente.
-            </p>
+            {/* Checkout (RF-030): solo con el envío calculado (dirección con
+                cobertura) y sin líneas que superen el stock; la dirección
+                elegida viaja al checkout para no tener que repetirla. */}
+            <Button
+              text="Continuar compra"
+              onClick={() =>
+                navigate("/checkout", { state: { direccionId } })
+              }
+              disabled={!puedeContinuar}
+            />
+            {!puedeContinuar && !calculandoEnvio && (
+              <p className="cart-resumen__nota">
+                {hayLineasSinStock
+                  ? "Ajustá las cantidades sin stock para continuar."
+                  : "Elegí una dirección con cobertura para continuar."}
+              </p>
+            )}
 
             <Link to="/catalogo" className="cart-link">
               Seguir comprando
