@@ -1,198 +1,144 @@
-
 const pedidoService = require("../services/pedido.service");
+const {
+  validarCrearPedido,
+  validarCancelarVencidos,
+  validarListarPedidos,
+  validarActualizarEstado,
+  validarActualizarEstadoEnvio,
+} = require("../dtos/pedido.dto");
+const { validarPedidoIdParam } = require("../dtos/pago.dto");
 
-function obtenerRol(usuario) {
-  return String(usuario?.rol || usuario?.role || "").toLowerCase();
-}
-
-function esPersonalAutorizado(usuario) {
-  const rol = obtenerRol(usuario);
-  return rol === "admin" || rol === "administrador" || rol === "vendedor";
-}
+// Sprint 4 / MOD-06 (DDS §3): pedidos. Los roles se restringen en
+// pedido.routes.js (roleGuard). Sin try/catch: Express 5 reenvía las
+// rejections async a errorHandler.js, que responde
+// { error: { codigo, mensaje, detalles } } (DDS §5.3) con el status y el
+// código que trae cada error de dominio (mismo patrón que pago.controller).
+// RN-003: el usuario sale SIEMPRE de req.usuario (JWT verificado por auth.js),
+// nunca del body.
 
 /**
  * POST /api/v1/pedidos
- * Crea un pedido para el cliente autenticado.
+ * Crea un pedido para el cliente autenticado a partir de su carrito.
  */
 async function crear(req, res) {
-  try {
-    const usuarioId = req.usuario.id;
+  const datos = validarCrearPedido(req.body);
 
-    const pedido = await pedidoService.crearPedido(
-      usuarioId,
-      req.body
-    );
+  const pedido = await pedidoService.crearPedido(req.usuario.id, datos);
 
-    return res.status(201).json({
-      mensaje: "Pedido creado correctamente",
-      pedido,
-    });
-  } catch (error) {
-    if (error instanceof pedidoService.StockInsuficienteError) {
-      return res.status(409).json({ error: error.message });
-    }
-
-    if (error instanceof pedidoService.CoberturaNoDisponibleError) {
-      return res.status(409).json({ error: error.message });
-    }
-
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
-    }
-
-    console.error("Error al crear pedido:", error);
-    return res.status(500).json({
-      error: "Error interno al crear el pedido",
-    });
-  }
+  return res.status(201).json({
+    mensaje: "Pedido creado correctamente",
+    pedido,
+  });
 }
 
 /**
  * GET /api/v1/pedidos
- * Cliente: solo sus pedidos.
- * Admin/vendedor: consulta general con filtros.
+ * Cliente: solo sus pedidos (el filtro sale de la sesión, nunca de la query).
+ * Admin/vendedor: consulta general con filtros (?estado, ?numero, ?usuarioId,
+ * ?desde, ?hasta) y paginación (?pagina, ?limite).
  */
 async function listar(req, res) {
-  try {
-    const usuario = req.usuario;
-    const filtros = {
-      estado: req.query.estado,
-      numero: req.query.numero,
-    };
+  const filtros = validarListarPedidos(req.query);
 
-    if (esPersonalAutorizado(usuario)) {
-      if (req.query.usuarioId !== undefined) {
-        const usuarioId = Number(req.query.usuarioId);
+  const resultado = await pedidoService.listarPedidos(req.usuario, filtros);
 
-        if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
-          return res.status(400).json({
-            error: "El usuarioId debe ser un entero positivo",
-          });
-        }
-
-        filtros.usuarioId = usuarioId;
-      }
-
-      const pedidos = await pedidoService.listarPedidos(filtros);
-      return res.status(200).json(pedidos);
-    }
-
-    // No aceptar usuarioId enviado por un cliente:
-    // el filtro siempre sale de la sesión autenticada.
-    const pedidos = await pedidoService.listarPedidos({
-      ...filtros,
-      usuarioId: usuario.id,
-    });
-
-    return res.status(200).json(pedidos);
-  } catch (error) {
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
-    }
-
-    console.error("Error al listar pedidos:", error);
-    return res.status(500).json({
-      error: "Error interno al consultar los pedidos",
-    });
-  }
+  return res.status(200).json(resultado);
 }
 
 /**
  * GET /api/v1/pedidos/:id
- * Impide que un cliente consulte pedidos ajenos.
+ * Un cliente no puede consultar pedidos ajenos: responde 404 como si no
+ * existiera (RN-003).
  */
 async function obtenerPorId(req, res) {
-  try {
-    const id = Number(req.params.id);
+  const id = validarPedidoIdParam(req.params.id);
 
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({
-        error: "El id del pedido no es válido",
-      });
-    }
+  const pedido = await pedidoService.obtenerPedidoPorId(id, req.usuario);
 
-    const pedido = await pedidoService.obtenerPedidoPorId(id);
-
-    if (!pedido) {
-      return res.status(404).json({
-        error: "Pedido no encontrado",
-      });
-    }
-
-    const usuario = req.usuario;
-
-    if (
-      !esPersonalAutorizado(usuario) &&
-      Number(pedido.usuarioId) !== Number(usuario.id)
-    ) {
-      return res.status(404).json({
-        error: "Pedido no encontrado",
-      });
-    }
-
-    return res.status(200).json(pedido);
-  } catch (error) {
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
-    }
-
-    console.error("Error al consultar pedido:", error);
-    return res.status(500).json({
-      error: "Error interno al consultar el pedido",
-    });
-  }
+  return res.status(200).json(pedido);
 }
 
 /**
  * PATCH /api/v1/pedidos/:id/estado
- * Solo admin/vendedor, protegido también por roleGuard en las rutas.
+ * Solo admin/vendedor (roleGuard en las rutas). La transición la valida el
+ * service con la tabla de docs/diseno/pedidos-estados.md.
  */
 async function actualizarEstado(req, res) {
-  try {
-    const id = Number(req.params.id);
-    const { estado } = req.body;
+  const id = validarPedidoIdParam(req.params.id);
+  const { estado } = validarActualizarEstado(req.body);
 
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({
-        error: "El id del pedido no es válido",
-      });
-    }
+  const pedido = await pedidoService.actualizarEstado(id, estado);
 
-    if (!estado || typeof estado !== "string") {
-      return res.status(400).json({
-        error: "El estado es obligatorio",
-      });
-    }
+  return res.status(200).json({
+    mensaje: "Estado del pedido actualizado correctamente",
+    pedido,
+  });
+}
 
-    const pedido = await pedidoService.actualizarEstado(
-      id,
-      estado,
-      req.usuario.id
-    );
+/**
+ * PATCH /api/v1/pedidos/:id/cancelar
+ * Solo admin/vendedor (roleGuard): en el MVP el personal cancela a pedido del
+ * cliente (ERS v1.2 §2.8.3; RF-033 es v2.0). Repone el stock una sola vez;
+ * repetirlo responde 200 con `yaCancelado: true`.
+ */
+async function cancelar(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
 
-    return res.status(200).json({
-      mensaje: "Estado del pedido actualizado correctamente",
-      pedido,
-    });
-  } catch (error) {
-    if (error instanceof pedidoService.TransicionEstadoInvalidaError) {
-      return res.status(409).json({ error: error.message });
-    }
+  const { pedido, yaCancelado } = await pedidoService.cancelarPedido(id);
 
-    if (error.status) {
-      return res.status(error.status).json({ error: error.message });
-    }
+  return res.status(200).json({
+    mensaje: yaCancelado ? "El pedido ya estaba cancelado" : "Pedido cancelado correctamente",
+    yaCancelado,
+    pedido,
+  });
+}
 
-    console.error("Error al actualizar estado:", error);
-    return res.status(500).json({
-      error: "Error interno al actualizar el estado del pedido",
-    });
-  }
+/**
+ * POST /api/v1/pedidos/vencidos/cancelar (admin)
+ * Cancela los pedidos de Mercado Pago sin pagar más viejos que `horas`.
+ * Pensado para que lo invoque un scheduler externo.
+ */
+async function cancelarVencidos(req, res) {
+  const { horas } = validarCancelarVencidos(req.body);
+
+  const resultado = await pedidoService.cancelarPedidosVencidos({ horas });
+
+  return res.status(200).json(resultado);
+}
+
+/**
+ * PUT /api/v1/pedidos/:id/estado-envio (admin/vendedor, RF-029)
+ * Avanza el envío un paso y sincroniza el estado del pedido. Responde el
+ * seguimiento actualizado.
+ */
+async function actualizarEstadoEnvio(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
+  const { estadoEnvio } = validarActualizarEstadoEnvio(req.body);
+
+  const seguimiento = await pedidoService.actualizarEstadoEnvio(id, estadoEnvio);
+
+  return res.status(200).json(seguimiento);
+}
+
+/**
+ * GET /api/v1/pedidos/:id/seguimiento (RF-028)
+ * Dueño, admin y vendedor; un pedido ajeno responde 404.
+ */
+async function seguimiento(req, res) {
+  const id = validarPedidoIdParam(req.params.id);
+
+  const resultado = await pedidoService.obtenerSeguimiento(id, req.usuario);
+
+  return res.status(200).json(resultado);
 }
 
 module.exports = {
   crear,
+  actualizarEstadoEnvio,
+  seguimiento,
   listar,
   obtenerPorId,
   actualizarEstado,
+  cancelar,
+  cancelarVencidos,
 };

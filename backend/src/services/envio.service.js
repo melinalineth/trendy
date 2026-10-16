@@ -151,8 +151,18 @@ async function calcularCosto(direccionId, usuarioId) {
   };
 }
 
+/**
+ * Sprint 4 / RF-027: registra la información de envío de un pedido recién
+ * creado (dirección, costo congelado y estado EN_PREPARACION). Debe recibir el
+ * cliente `tx` de la transacción que crea el pedido, nunca el `prisma` raíz.
+ */
+async function crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, tx) {
+  return envioRepository.crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, tx);
+}
+
 module.exports = {
   calcularCosto,
+  crearInfoEnvio,
   validarTransicionEstado,
   ESTADOS_ENVIO,
   TRANSICIONES_ENVIO,

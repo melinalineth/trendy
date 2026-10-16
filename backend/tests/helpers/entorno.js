@@ -182,10 +182,14 @@ async function crearDireccion(usuarioId, { ciudad, departamento } = {}) {
   return direccion;
 }
 
-// Pedido creado DIRECTO con prisma (la creación por HTTP es Sprint 4 / Fase
-// B). `lineas` es [{ variante, cantidad, precioUnitario? }]; subtotal y total
-// se calculan acá (total = subtotal + costoEnvio). No toca el stock: cada test
+// Pedido creado DIRECTO con prisma, para preparar estados que el flujo HTTP
+// (POST /api/v1/pedidos) no produce solo (legados, fechas viejas, etc.).
+// `lineas` es [{ variante, cantidad, precioUnitario? }]; subtotal y total se
+// calculan acá (total = subtotal + costoEnvio). No toca el stock: cada test
 // decide si simula el descuento previo.
+//   - creadoEn (opcional): fecha de creación (pedidos vencidos, filtros).
+//   - estadoEnvio (opcional): si viene, crea también el InfoEnvio del pedido
+//     con ese estado (el alta real lo crea en EN_PREPARACION).
 async function crearPedido({
   usuarioId,
   direccionId,
@@ -193,6 +197,8 @@ async function crearPedido({
   costoEnvio = 0,
   metodoPago = "MERCADO_PAGO",
   estado = "PENDIENTE",
+  creadoEn,
+  estadoEnvio,
 }) {
   const detalles = lineas.map(({ variante, cantidad, precioUnitario = "10000.00" }) => ({
     varianteId: variante.id,
@@ -214,13 +220,50 @@ async function crearPedido({
       total: (subtotal + Number(costoEnvio)).toFixed(2),
       metodoPago,
       estado,
+      ...(creadoEn ? { creadoEn } : {}),
       detalles: { create: detalles },
+      ...(estadoEnvio
+        ? {
+            infoEnvio: {
+              create: {
+                direccionId,
+                costoEnvio: Number(costoEnvio).toFixed(2),
+                estadoEnvio,
+              },
+            },
+          }
+        : {}),
     },
-    include: { detalles: true },
+    include: { detalles: true, infoEnvio: true },
   });
   creado.pedidos.push(pedido.id);
 
   return pedido;
+}
+
+// Agrega una línea al carrito del usuario directo con prisma (crea el carrito
+// si no existe). Para tests de pedidos: el carrito se prueba en su propio
+// archivo.
+async function agregarAlCarrito(usuarioId, variante, cantidad) {
+  const carrito = await prisma.carrito.upsert({
+    where: { usuarioId },
+    create: { usuarioId },
+    update: {},
+  });
+
+  return prisma.itemCarrito.upsert({
+    where: { carritoId_varianteId: { carritoId: carrito.id, varianteId: variante.id } },
+    create: { carritoId: carrito.id, varianteId: variante.id, cantidad },
+    update: { cantidad },
+  });
+}
+
+// Líneas actuales del carrito del usuario ([] si no tiene carrito).
+async function itemsDelCarrito(usuarioId) {
+  return prisma.itemCarrito.findMany({
+    where: { carrito: { usuarioId } },
+    orderBy: { varianteId: "asc" },
+  });
 }
 
 // Borra todo lo creado, respetando el orden de las FKs, y cierra Prisma.
@@ -275,6 +318,8 @@ module.exports = {
   registrarZona,
   crearDireccion,
   crearPedido,
+  agregarAlCarrito,
+  itemsDelCarrito,
   sufijo,
   limpiar,
 };

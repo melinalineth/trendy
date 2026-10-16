@@ -35,6 +35,40 @@ const envioRepository = {
       },
     });
   },
+
+  /**
+   * Sprint 4 / RF-027: crea el InfoEnvio de un pedido. `estadoEnvio` no
+   * tiene default en el schema: el alta lo setea explícitamente en
+   * EN_PREPARACION (docs/diseno/info-envio.md). `client` es la transacción
+   * que crea el pedido (pedido e InfoEnvio confirman o revierten juntos).
+   */
+  async crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, client = prisma) {
+    return client.infoEnvio.create({
+      data: {
+        pedidoId,
+        direccionId,
+        costoEnvio,
+        estadoEnvio: "EN_PREPARACION",
+      },
+    });
+  },
+
+  // InfoEnvio de un pedido (o null). `client` para leerlo bajo el lock del
+  // pedido.
+  async obtenerInfoEnvio(pedidoId, client = prisma) {
+    return client.infoEnvio.findUnique({
+      where: { pedidoId },
+    });
+  },
+
+  // Cambia el estado de envío. Lo invoca pedido.service con el lock del
+  // pedido tomado y la transición ya validada (validarTransicionEstado).
+  async actualizarEstadoEnvio(pedidoId, estadoEnvio, client = prisma) {
+    return client.infoEnvio.update({
+      where: { pedidoId },
+      data: { estadoEnvio },
+    });
+  },
 };
 
 module.exports = envioRepository;
