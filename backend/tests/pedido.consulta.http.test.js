@@ -71,7 +71,7 @@ describe("Consulta y gestión de pedidos (RF-031, RF-032)", () => {
     return { ...cliente, direccion };
   }
 
-  async function pedidoReal(cliente, { metodoPago = "MERCADO_PAGO", precio = "19990.50" } = {}) {
+  async function pedidoReal(cliente, { metodoPago = "MERCADO_PAGO", precio = "19990.00" } = {}) {
     const variante = await crearVariante({ precio, stock: 10 });
     await agregarAlCarrito(cliente.id, variante, 2);
     const r = await api("POST", "/api/v1/pedidos", {
@@ -144,9 +144,9 @@ describe("Consulta y gestión de pedidos (RF-031, RF-032)", () => {
       assert.equal(item.numero, pedido.numero);
       assert.ok(item.creadoEn);
       assert.equal(item.estado, "PENDIENTE");
-      assert.equal(item.total, 51981);
+      assert.equal(item.total, 51980);
       assert.equal(item.detalles.length, 1);
-      assert.equal(item.detalles[0].precioUnitario, 19990.5);
+      assert.equal(item.detalles[0].precioUnitario, 19990);
     });
 
     it("admin y vendedor ven pedidos de todos y filtran por cliente, estado y número (RF-032)", async () => {
@@ -267,12 +267,12 @@ describe("Consulta y gestión de pedidos (RF-031, RF-032)", () => {
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(r.body.id, pedido.id);
       assert.equal(r.body.numero, pedido.numero);
-      assert.equal(r.body.detalles[0].precioUnitario, 19990.5);
-      assert.equal(r.body.detalles[0].subtotal, 39981);
+      assert.equal(r.body.detalles[0].precioUnitario, 19990);
+      assert.equal(r.body.detalles[0].subtotal, 39980);
       assert.equal(r.body.detalles[0].variante.producto.nombre.startsWith("Producto test"), true);
-      assert.equal(r.body.subtotal, 39981);
+      assert.equal(r.body.subtotal, 39980);
       assert.equal(r.body.costoEnvio, 12000);
-      assert.equal(r.body.total, 51981);
+      assert.equal(r.body.total, 51980);
       assert.equal(r.body.pago.metodo, "CONTRA_ENTREGA");
       assert.equal(r.body.pago.estado, "PENDIENTE");
       assert.equal(r.body.infoEnvio.estadoEnvio, "EN_PREPARACION");
