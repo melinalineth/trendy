@@ -859,9 +859,10 @@ const ESTADOS_PEDIDO_EN_ENVIO = ESTADOS_ENVIO;
 // Forma de la respuesta de seguimiento. `estadoEnvio` solo describe la
 // logística cuando el pedido está en un estado de envío; antes de eso (o si
 // se canceló) vale el EN_PREPARACION del alta y manda `estadoPedido`.
-// Historial de cambios: NO existe todavía (requiere la tabla
-// HistorialEstadoEnvio, ver docs/diseno/info-envio.md §5).
-function presentarSeguimiento(pedido) {
+// `historial` (RF-028): cambios de estado de envío, el más antiguo primero,
+// con fecha y hora; viene de HistorialEstadoEnvio (docs/diseno/info-envio.md
+// §5) y es [] en los envíos anteriores a esa tabla.
+function presentarSeguimiento(pedido, historial) {
   const direccion = pedido.direccion;
 
   return {
@@ -883,7 +884,24 @@ function presentarSeguimiento(pedido) {
           referencia: direccion.referencia,
         }
       : null,
+    historial,
   };
+}
+
+// Historial para la respuesta. El usuario que hizo cada cambio (RF-029) lo ve
+// SOLO el personal, y únicamente { id, nombre }: el cliente dueño ve estados y
+// fechas, nunca la identidad de quien atiende su pedido, y a nadie se le
+// expone correo ni datos sensibles (el repository no los selecciona).
+async function cargarHistorial(infoEnvioId, usuario) {
+  const conUsuario = esPersonal(usuario);
+  const filas = await envioRepository.listarHistorial(infoEnvioId, { conUsuario });
+
+  return filas.map((fila) => ({
+    estadoAnterior: fila.estadoAnterior,
+    estadoNuevo: fila.estadoNuevo,
+    creadoEn: fila.creadoEn,
+    ...(conUsuario ? { usuario: { id: fila.usuario.id, nombre: fila.usuario.nombre } } : {}),
+  }));
 }
 
 /**
@@ -921,13 +939,17 @@ async function actualizarEstadoEnvio(pedidoId, estadoEnvio, usuario) {
     await pedidoRepository.actualizarEstado(pedidoId, estadoEnvio, tx);
   });
 
-  return presentarSeguimiento(await pedidoRepository.obtenerPorId(pedidoId));
+  const pedido = await pedidoRepository.obtenerPorId(pedidoId);
+
+  return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario));
 }
 
 /**
  * GET /api/v1/pedidos/:id/seguimiento (RF-028): dueño, admin y vendedor; un
  * pedido ajeno responde 404 como uno inexistente. Estado actual de envío y
- * del pedido, fecha y hora del último cambio y dirección de entrega.
+ * del pedido, fecha y hora del último cambio, dirección de entrega e
+ * historial de cambios de envío (RF-028); admin y vendedor ven además quién
+ * hizo cada cambio (RF-029).
  */
 async function obtenerSeguimiento(pedidoId, usuario) {
   const pedido = await obtenerVisible(pedidoId, usuario);
@@ -936,7 +958,7 @@ async function obtenerSeguimiento(pedidoId, usuario) {
     throw new EnvioNoRegistradoError(404);
   }
 
-  return presentarSeguimiento(pedido);
+  return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario));
 }
 
 module.exports = {

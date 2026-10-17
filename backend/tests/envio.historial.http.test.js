@@ -441,4 +441,193 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
       assert.equal((await historialDe(pedido.id)).length, 1);
     });
   });
+
+  describe("GET /api/v1/pedidos/:id/seguimiento: historial", () => {
+    // Pedido con alta + 3 cambios hechos por admin y vendedor.
+    async function pedidoEntregado() {
+      const { pedido, cliente } = await pedidoEn("EN_PREPARACION");
+      for (const [estadoEnvio, usuario] of [
+        ["ENVIADO", admin],
+        ["EN_TRANSITO", vendedor],
+        ["ENTREGADO", admin],
+      ]) {
+        await new Promise((resolver) => setTimeout(resolver, 15));
+        assert.equal((await avanzar(pedido.id, estadoEnvio, usuario)).status, 200);
+      }
+      return { pedido, cliente };
+    }
+
+    it("el cliente dueño ve el historial cronológico (más antiguo primero) SIN la identidad del personal", async () => {
+      const { pedido, cliente } = await pedidoEntregado();
+
+      const r = await seguimiento(pedido.id, cliente);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(
+        r.body.historial.map((h) => [h.estadoAnterior, h.estadoNuevo]),
+        [
+          [null, "EN_PREPARACION"],
+          ["EN_PREPARACION", "ENVIADO"],
+          ["ENVIADO", "EN_TRANSITO"],
+          ["EN_TRANSITO", "ENTREGADO"],
+        ]
+      );
+      for (const entrada of r.body.historial) {
+        assert.deepEqual(Object.keys(entrada).sort(), ["creadoEn", "estadoAnterior", "estadoNuevo"]);
+        assert.ok(!Number.isNaN(new Date(entrada.creadoEn).getTime()));
+      }
+      const fechas = r.body.historial.map((h) => new Date(h.creadoEn).getTime());
+      assert.deepEqual(fechas, [...fechas].sort((a, b) => a - b));
+      // Ni id, ni nombre, ni correo del personal en ninguna parte de la respuesta.
+      const texto = JSON.stringify(r.body);
+      for (const persona of [admin, vendedor]) {
+        const fila = await prisma.usuario.findUnique({ where: { id: persona.id } });
+        assert.ok(!texto.includes(fila.correo), "se filtró el correo del personal");
+      }
+      assert.ok(!texto.includes("usuario"), texto);
+      assert.ok(!texto.includes("passwordHash"));
+    });
+
+    it("admin y vendedor ven el usuario de cada cambio ({ id, nombre } y nada más)", async () => {
+      const { pedido, cliente } = await pedidoEntregado();
+
+      for (const lector of [admin, vendedor]) {
+        const r = await seguimiento(pedido.id, lector);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(
+          r.body.historial.map((h) => h.usuario.id),
+          [cliente.id, admin.id, vendedor.id, admin.id]
+        );
+        for (const entrada of r.body.historial) {
+          assert.deepEqual(Object.keys(entrada).sort(), ["creadoEn", "estadoAnterior", "estadoNuevo", "usuario"]);
+          assert.deepEqual(Object.keys(entrada.usuario).sort(), ["id", "nombre"]);
+          assert.equal(typeof entrada.usuario.nombre, "string");
+        }
+        assert.equal(r.body.historial[1].usuario.nombre, "Test admin");
+        assert.equal(r.body.historial[2].usuario.nombre, "Test vendedor");
+      }
+    });
+
+    it("la respuesta del PUT /estado-envio (solo personal) incluye el historial con el usuario", async () => {
+      const { pedido, cliente } = await pedidoEn("EN_PREPARACION");
+
+      const r = await avanzar(pedido.id, "ENVIADO", vendedor);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(
+        r.body.historial.map((h) => [h.estadoAnterior, h.estadoNuevo, h.usuario.id]),
+        [
+          [null, "EN_PREPARACION", cliente.id],
+          ["EN_PREPARACION", "ENVIADO", vendedor.id],
+        ]
+      );
+    });
+
+    it("mantiene el contrato anterior: los campos que ya existían no cambian", async () => {
+      const { pedido, cliente } = await pedidoEn("EN_PREPARACION");
+      assert.equal((await avanzar(pedido.id, "ENVIADO")).status, 200);
+
+      const r = await seguimiento(pedido.id, cliente);
+
+      assert.deepEqual(Object.keys(r.body).sort(), [
+        "actualizadoEn",
+        "costoEnvio",
+        "direccion",
+        "estadoEnvio",
+        "estadoPedido",
+        "historial",
+        "numero",
+        "pedidoId",
+      ]);
+      assert.equal(r.body.pedidoId, pedido.id);
+      assert.equal(r.body.numero, pedido.numero);
+      assert.equal(r.body.estadoPedido, "ENVIADO");
+      assert.equal(r.body.estadoEnvio, "ENVIADO");
+      assert.equal(r.body.costoEnvio, 8000);
+      assert.equal(r.body.direccion.id, cliente.direccion.id);
+      // actualizadoEn sigue siendo el del último cambio del InfoEnvio.
+      const info = await prisma.infoEnvio.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(new Date(r.body.actualizadoEn).getTime(), info.actualizadoEn.getTime());
+    });
+
+    it("un cliente ajeno recibe 404 igual que un pedido inexistente, y sin token 401 (RN-003)", async () => {
+      const { pedido } = await pedidoEntregado();
+      const intruso = await crearUsuario("cliente");
+
+      const ajeno = await seguimiento(pedido.id, intruso);
+      const inexistente = await seguimiento(ID_INEXISTENTE, intruso);
+
+      assertErrorEstandar(ajeno, 404, "PEDIDO_NO_ENCONTRADO");
+      assertErrorEstandar(inexistente, 404, "PEDIDO_NO_ENCONTRADO");
+      assert.equal(ajeno.body.error.mensaje, inexistente.body.error.mensaje);
+      assert.equal((await api("GET", `/api/v1/pedidos/${pedido.id}/seguimiento`)).status, 401);
+    });
+
+    it("un envío anterior al historial (InfoEnvio sin filas) devuelve historial [] con el estado actual y actualizadoEn", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      const pedido = await crearPedido({
+        usuarioId: cliente.id,
+        direccionId: cliente.direccion.id,
+        lineas: [{ variante, cantidad: 1 }],
+        costoEnvio: 8000,
+        estado: "ENVIADO",
+        estadoEnvio: "ENVIADO",
+      });
+
+      for (const lector of [cliente, admin]) {
+        const r = await seguimiento(pedido.id, lector);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(r.body.historial, []);
+        assert.equal(r.body.estadoEnvio, "ENVIADO");
+        assert.equal(r.body.estadoPedido, "ENVIADO");
+        assert.equal(
+          new Date(r.body.actualizadoEn).getTime(),
+          pedido.infoEnvio.actualizadoEn.getTime()
+        );
+      }
+    });
+
+    // El orden es por fecha del cambio y, a igual fecha, por id: una fila con
+    // id mayor pero fecha anterior va antes; dos con la MISMA fecha salen en
+    // orden de inserción (el DATETIME(3) puede repetirse).
+    it("ordena por creadoEn y desempata por id", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      const pedido = await crearPedido({
+        usuarioId: cliente.id,
+        direccionId: cliente.direccion.id,
+        lineas: [{ variante, cantidad: 1 }],
+        estado: "ENTREGADO",
+        estadoEnvio: "ENTREGADO",
+      });
+      const infoEnvioId = pedido.infoEnvio.id;
+      const t0 = new Date("2026-03-01T10:00:00.000Z");
+      const t1 = new Date("2026-03-01T11:00:00.000Z");
+      // Insertadas en este orden (ids crecientes) con fechas desordenadas.
+      const insertar = (estadoAnterior, estadoNuevo, creadoEn) =>
+        prisma.historialEstadoEnvio.create({
+          data: { infoEnvioId, estadoAnterior, estadoNuevo, usuarioId: admin.id, creadoEn },
+        });
+      await insertar("EN_TRANSITO", "ENTREGADO", t1); // id menor, fecha t1 (mismo instante que la siguiente)
+      await insertar("ENVIADO", "EN_TRANSITO", t1); // empata con la anterior: va después por id
+      await insertar("EN_PREPARACION", "ENVIADO", t0); // id mayor pero fecha más vieja: va primero
+      await insertar(null, "EN_PREPARACION", new Date("2026-03-01T09:00:00.000Z"));
+
+      const r = await seguimiento(pedido.id, admin);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(
+        r.body.historial.map((h) => [h.estadoAnterior, h.estadoNuevo]),
+        [
+          [null, "EN_PREPARACION"],
+          ["EN_PREPARACION", "ENVIADO"],
+          ["EN_TRANSITO", "ENTREGADO"],
+          ["ENVIADO", "EN_TRANSITO"],
+        ]
+      );
+    });
+  });
 });
