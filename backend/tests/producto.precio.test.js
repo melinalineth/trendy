@@ -4,10 +4,12 @@
 //   - DTO (zod), sin base de datos: casos de borde del valor.
 //   - HTTP (POST / PUT /api/v1/productos): el 400 llega al cliente con el
 //     mensaje. El HTTP requiere DATABASE_URL de una base descartable.
-const { describe, it, before, after } = require("node:test");
+const { describe, it, before, beforeEach, after, mock } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { crearProductoSchema, actualizarProductoSchema } = require("../src/dtos/producto.dto");
+const productoRepository = require("../src/repositories/producto.repository");
+const productoService = require("../src/services/producto.service");
 const {
   prisma,
   iniciarServidor,
@@ -20,6 +22,10 @@ const {
 const MENSAJE_ENTERO = "El precio debe ser un valor entero en pesos (COP), sin centavos";
 
 const productoBase = { nombre: "Camisa", descripcion: "Camisa de lino", categoriaId: 1 };
+
+// Decimal(10,2) admite hasta 99.999.999,99: el tope entero es 99.999.999.
+const PRECIO_MAXIMO = 99999999;
+const MENSAJE_TOPE = `El precio no puede superar ${PRECIO_MAXIMO} (COP)`;
 
 function mensajes(resultado) {
   assert.equal(resultado.success, false, "se esperaba que la validación fallara");
@@ -65,6 +71,17 @@ describe("DTO de producto: precio entero en COP", () => {
       assert.deepEqual(mensajes(r), [MENSAJE_ENTERO]);
     });
 
+    it("acepta el tope (99999999) y rechaza lo que lo supera con el mensaje del tope, no con el de enteros", () => {
+      const tope = crearProductoSchema.safeParse({ ...productoBase, precio: PRECIO_MAXIMO });
+      assert.equal(tope.success, true);
+      assert.equal(tope.data.precio, PRECIO_MAXIMO);
+
+      for (const precio of [PRECIO_MAXIMO + 1, 1e10, 1e21]) {
+        const r = crearProductoSchema.safeParse({ ...productoBase, precio });
+        assert.deepEqual(mensajes(r), [MENSAJE_TOPE], `precio ${precio}`);
+      }
+    });
+
     it("rechaza un string numérico y un precio ausente", () => {
       assert.deepEqual(mensajes(crearProductoSchema.safeParse({ ...productoBase, precio: "15000" })), [
         "El precio es requerido",
@@ -103,6 +120,80 @@ describe("DTO de producto: precio entero en COP", () => {
     it("rechaza un string", () => {
       assert.equal(actualizarProductoSchema.safeParse({ precio: "25000" }).success, false);
     });
+
+    it("acepta el tope (99999999) y rechaza lo que lo supera con el mensaje del tope", () => {
+      assert.equal(actualizarProductoSchema.safeParse({ precio: PRECIO_MAXIMO }).success, true);
+
+      for (const precio of [PRECIO_MAXIMO + 1, 1e10, 1e21]) {
+        const r = actualizarProductoSchema.safeParse({ precio });
+        assert.deepEqual(mensajes(r), [MENSAJE_TOPE], `precio ${precio}`);
+      }
+    });
+  });
+});
+
+// Defensa en profundidad: si otro caller invoca el service sin pasar por el
+// DTO, la misma regla se exige acá y NUNCA llega al repository.
+describe("producto.service: precio entero en COP (sin pasar por el DTO)", () => {
+  let mockCrear;
+  let mockActualizar;
+  let mockObtener;
+
+  before(() => {
+    mockCrear = mock.method(productoRepository, "crear", async (datos) => ({ id: 1, ...datos }));
+    mockActualizar = mock.method(productoRepository, "actualizar", async (id, datos) => ({
+      id,
+      ...datos,
+    }));
+    mockObtener = mock.method(productoRepository, "obtenerPorId", async (id) => ({ id }));
+  });
+
+  beforeEach(() => {
+    mockCrear.mock.resetCalls();
+    mockActualizar.mock.resetCalls();
+  });
+
+  // No toca la base (repository mockeado): el pool de Prisma ya lo cierra el
+  // `after` del describe HTTP con limpiar().
+  after(() => {
+    mock.restoreAll();
+  });
+
+  for (const [nombre, precio, mensaje] of [
+    ["con centavos", 19990.5, MENSAJE_ENTERO],
+    ["menor que uno", 0.5, MENSAJE_ENTERO],
+    ["cero", 0, "El precio debe ser mayor a 0"],
+    ["negativo", -100, "El precio debe ser mayor a 0"],
+    ["sobre el tope", PRECIO_MAXIMO + 1, MENSAJE_TOPE],
+    ["astronómico (1e21)", 1e21, MENSAJE_TOPE],
+  ]) {
+    it(`crear rechaza un precio ${nombre} y no llega al repository`, async () => {
+      await assert.rejects(
+        productoService.crear({ ...productoBase, precio }, 1),
+        (error) => error.message === mensaje
+      );
+      assert.equal(mockCrear.mock.callCount(), 0);
+    });
+
+    it(`actualizar rechaza un precio ${nombre} y no llega al repository`, async () => {
+      await assert.rejects(
+        productoService.actualizar(1, { precio }),
+        (error) => error.message === mensaje
+      );
+      assert.equal(mockActualizar.mock.callCount(), 0);
+    });
+  }
+
+  it("crear y actualizar aceptan un entero válido, y actualizar sin precio (PUT parcial)", async () => {
+    await productoService.crear({ ...productoBase, precio: 25000 }, 1);
+    assert.equal(mockCrear.mock.calls[0].arguments[0].precio, 25000);
+
+    await productoService.actualizar(1, { precio: PRECIO_MAXIMO });
+    assert.equal(mockActualizar.mock.calls[0].arguments[1].precio, PRECIO_MAXIMO);
+
+    await productoService.actualizar(1, { nombre: "Solo nombre" });
+    assert.equal(mockActualizar.mock.callCount(), 2);
+    assert.equal(mockObtener.mock.callCount() >= 2, true);
   });
 });
 
@@ -132,6 +223,24 @@ describe("Productos HTTP: precio entero en COP", () => {
 
     assert.equal(r.status, 400, JSON.stringify(r.body));
     assert.ok(r.body.error.includes(MENSAJE_ENTERO), r.body.error);
+  });
+
+  it("POST y PUT con un precio sobre el tope (100000000 y 1e21) -> 400 con el mensaje del tope, no 500", async () => {
+    for (const precio of [PRECIO_MAXIMO + 1, 1e21]) {
+      const alta = await api("POST", "/api/v1/productos", {
+        token: admin.token,
+        body: { ...productoBase, precio },
+      });
+      assert.equal(alta.status, 400, JSON.stringify(alta.body));
+      assert.equal(alta.body.error, MENSAJE_TOPE);
+
+      const edicion = await api("PUT", `/api/v1/productos/${variante.productoId}`, {
+        token: admin.token,
+        body: { precio },
+      });
+      assert.equal(edicion.status, 400, JSON.stringify(edicion.body));
+      assert.equal(edicion.body.error, MENSAJE_TOPE);
+    }
   });
 
   it("PUT con precio decimal -> 400 y el precio guardado no cambia", async () => {
