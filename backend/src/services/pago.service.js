@@ -165,6 +165,22 @@ const STATUS_MP_REVERTIDOS = Object.freeze(["refunded", "charged_back"]);
 // servidor está adelantado respecto del de Mercado Pago.
 const MARGEN_RELOJ_PREFERENCIA_MS = 60 * 1000;
 
+// Offset fijo de Colombia (UTC-5, sin horario de verano): no depende de la zona
+// horaria del servidor.
+const OFFSET_COLOMBIA_MS = 5 * 60 * 60 * 1000;
+
+// Escribe un instante como ISO 8601 con milisegundos y offset de Colombia
+// ("2017-02-01T12:00:00.000-05:00"), el formato que usa la documentación de
+// Checkout Pro para las fechas de la preferencia. Es el MISMO instante que
+// `new Date(instante).toISOString()`, pero con la hora local (UTC - 5 h).
+function aIsoColombia(instante) {
+  const local = new Date(new Date(instante).getTime() - OFFSET_COLOMBIA_MS);
+
+  // toISOString() de la fecha desplazada trae la hora local; se reemplaza el
+  // sufijo "Z" (que ahora sería falso) por el offset real.
+  return `${local.toISOString().slice(0, -1)}-05:00`;
+}
+
 // Log estructurado: JSON de UNA línea para poder filtrarlo y reconciliar.
 // Quien llama arma el objeto: nunca tokens, firmas ni payloads completos.
 function logEvento(evento) {
@@ -354,22 +370,24 @@ async function crearPreferencia(pedidoId, usuarioId) {
   const preference = new Preference(obtenerClienteMercadoPago());
 
   // La preferencia vence: un link de pago viejo no debe poder usarse días
-  // después (el pedido podría haberse cancelado). ISO 8601, como pide el SDK
-  // (commonTypes.d.ts: expiration_date_from / expiration_date_to /
-  // date_of_expiration).
+  // después (el pedido podría haberse cancelado). ISO 8601 con milisegundos y
+  // offset de Colombia (-05:00), como el ejemplo de la documentación oficial de
+  // Checkout Pro (ver aIsoColombia).
   //   - desde: ahora menos un margen, por si nuestro reloj va adelantado
   //     respecto del de Mercado Pago (si no, la preferencia "todavía no rige").
-  //   - date_of_expiration = expiration_date_to: un pago en efectivo/ticket
-  //     generado antes del vencimiento no se acredita después.
+  //   - date_of_expiration = expiration_date_to: el SDK lo tipa en
+  //     commonTypes.d.ts, pero la documentación oficial NO lo confirma como
+  //     campo del request; se envía igual por si Mercado Pago lo respeta (un
+  //     pago en efectivo/ticket generado antes del vencimiento no se
+  //     acreditaría después). Si lo ignora, no hay efecto: queda por verificar
+  //     en sandbox.
   //   - hasta: el MENOR entre ahora + horas y creadoEn + horas. Una
   //     preferencia creada a la hora 23 de un pedido no puede vivir hasta la
   //     hora 47: el pedido se cancela por vencido a las 24 h (+ margen) y un
   //     pago posterior caería sobre un pedido CANCELADO (reembolso manual).
   const ahora = Date.now();
-  const desde = new Date(ahora - MARGEN_RELOJ_PREFERENCIA_MS).toISOString();
-  const vence = new Date(
-    Math.min(ahora + horasVigencia * 60 * 60 * 1000, limitePedido)
-  ).toISOString();
+  const desde = aIsoColombia(ahora - MARGEN_RELOJ_PREFERENCIA_MS);
+  const vence = aIsoColombia(Math.min(ahora + horasVigencia * 60 * 60 * 1000, limitePedido));
 
   let resultado;
   try {
@@ -818,6 +836,7 @@ module.exports = {
   // decidir cuándo un pedido de Mercado Pago sin pagar está vencido.
   horasDeVigenciaPreferencia,
   HORAS_PREFERENCIA_MAXIMO,
+  aIsoColombia,
   PedidoNoEncontradoError,
   PagoInvalidoError,
   PedidoVencidoError,

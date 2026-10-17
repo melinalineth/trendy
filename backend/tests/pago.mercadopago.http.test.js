@@ -21,6 +21,7 @@ process.env.MERCADOPAGO_WEBHOOK_URL = "https://trendy.test/api/v1/pagos/mercadop
 
 const mercadopago = require("mercadopago");
 const pedidoRepository = require("../src/repositories/pedido.repository");
+const pagoService = require("../src/services/pago.service");
 const {
   prisma,
   iniciarServidor,
@@ -217,7 +218,9 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
 
     describe("expiración de la preferencia (MERCADOPAGO_PREFERENCIA_HORAS)", () => {
       const HORA_MS = 60 * 60 * 1000;
-      const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$/;
+      // Formato de la documentación de Checkout Pro: milisegundos y offset de
+      // Colombia (-05:00, sin horario de verano), nunca el sufijo "Z".
+      const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}-05:00$/;
 
       // Crea una preferencia con la variable en `valor` (undefined = sin
       // definir) y devuelve el body que recibió el SDK + el instante del envío.
@@ -267,6 +270,9 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assert.match(body.expiration_date_to, ISO_8601);
         assert.match(body.date_of_expiration, ISO_8601);
         assert.equal(body.date_of_expiration, body.expiration_date_to);
+        for (const fecha of [body.expiration_date_from, body.expiration_date_to]) {
+          assert.ok(!fecha.endsWith("Z"), `${fecha} no debe terminar en Z`);
+        }
         const desde = Date.parse(body.expiration_date_from);
         const hasta = Date.parse(body.expiration_date_to);
         // Tolerancia de 1 s por el redondeo a ms y el tiempo del request.
@@ -277,6 +283,29 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assert.ok(hasta <= despues + horas * HORA_MS, body.expiration_date_to);
         assert.equal(hasta, creadoEn.getTime() + horas * HORA_MS);
       }
+
+      // Helper puro: misma fecha que el ISO en UTC pero escrita con la hora
+      // local de Colombia (UTC-5) y milisegundos.
+      describe("aIsoColombia (offset fijo -05:00)", () => {
+        it("resta 5 h al UTC y conserva los milisegundos", () => {
+          assert.equal(
+            pagoService.aIsoColombia(Date.UTC(2017, 1, 1, 17, 0, 0, 0)),
+            "2017-02-01T12:00:00.000-05:00"
+          );
+        });
+
+        it("cruza el día/mes/año hacia atrás (00:30 UTC del 1 de enero = 19:30 del 31 de diciembre)", () => {
+          assert.equal(
+            pagoService.aIsoColombia(new Date(Date.UTC(2026, 0, 1, 0, 30, 15, 7))),
+            "2025-12-31T19:30:15.007-05:00"
+          );
+        });
+
+        it("representa el MISMO instante que la fecha original", () => {
+          const ms = Date.UTC(2026, 9, 17, 23, 59, 59, 999);
+          assert.equal(Date.parse(pagoService.aIsoColombia(ms)), ms);
+        });
+      });
 
       it("pedido casi vencido: la preferencia vence con el pedido (creadoEn + horas), no a las 24 h de ahora", async () => {
         const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
@@ -294,6 +323,7 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
           assert.equal(r.status, 200, JSON.stringify(r.body));
           const { body } = mockCrearPreferencia.mock.calls.at(-1).arguments[0];
           const limite = new Date(pedido.creadoEn).getTime() + 24 * HORA_MS;
+          assert.match(body.expiration_date_to, ISO_8601);
           assert.ok(Date.parse(body.expiration_date_to) <= limite, body.expiration_date_to);
           assert.equal(Date.parse(body.expiration_date_to), limite);
           assert.equal(body.date_of_expiration, body.expiration_date_to);
