@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import "./SearchBar.css";
 
 // Sprint 2 (RF-008): antes este componente solo hacía console.log del

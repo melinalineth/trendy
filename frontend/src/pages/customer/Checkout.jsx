@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { crearPreferencia } from "../../services/pago.service";
-import { pagarContraEntrega } from "../../services/pago.service";
 
 import Alert from "../../components/common/Alert";
 import Button from "../../components/common/Button";
@@ -176,82 +174,6 @@ export default function Checkout() {
   } = useCarrito({ direccionId });
 
   const { crearPedido } = usePedidos({ autoCargar: false });
-  
-const procesarPago = async (pedidoId, metodoPago) => {
-  if (metodoPago === "MERCADO_PAGO") {
-    const respuesta = await crearPreferencia(pedidoId);
-
-    const initPoint =
-      respuesta?.initPoint ??
-      respuesta?.init_point ??
-      respuesta?.data?.initPoint ??
-      respuesta?.data?.init_point;
-
-    if (!initPoint) {
-      throw new Error(
-        "No se recibió la URL de pago de Mercado Pago."
-      );
-    }
-
-    window.location.href = initPoint;
-    return;
-  }
-
-  if (metodoPago === "CONTRA_ENTREGA") {
-    await pagarContraEntrega(pedidoId);
-
-    // Usa aquí el mecanismo de navegación que ya tiene Checkout.
-    window.location.href = `/pedidos/${pedidoId}?mensaje=${encodeURIComponent(
-      "Pagás al recibir tu pedido"
-    )}`;
-    return;
-  }
-
-  throw new Error("Selecciona un método de pago válido.");
-};
-const pedido = await crearPedido(datosPedido);
-
-// Adapta esta extracción a la respuesta real del servicio.
-const pedidoId = pedido?.id ?? pedido?.data?.id;
-
-if (!pedidoId) {
-  throw new Error("No se pudo obtener el ID del pedido creado.");
-}
-
-await procesarPago(pedidoId, metodoPago);
-
-  if (metodoPago === "MERCADO_PAGO") {
-    const respuesta = await crearPreferencia(pedidoId);
-
-    const initPoint =
-      respuesta?.initPoint ??
-      respuesta?.init_point ??
-      respuesta?.data?.initPoint ??
-      respuesta?.data?.init_point;
-
-    if (!initPoint) {
-      throw new Error(
-        "No se recibió la URL de pago de Mercado Pago."
-      );
-    }
-
-    window.location.href = initPoint;
-    return;
-  }
-
-  if (metodoPago === "CONTRA_ENTREGA") {
-    await pagarContraEntrega(pedidoId);
-
-    // Usa aquí el mecanismo de navegación que ya tiene Checkout.
-    window.location.href = `/pedidos/${pedidoId}?mensaje=${encodeURIComponent(
-      "Pagás al recibir tu pedido"
-    )}`;
-    return;
-  }
-
-  throw new Error("Selecciona un método de pago válido.");
-};
-
 
   const [metodoPago, setMetodoPago] = useState("MERCADO_PAGO");
   const [procesando, setProcesando] = useState(false);

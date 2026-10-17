@@ -1,4 +1,3 @@
-import React from "react";
 import { Link } from "react-router-dom";
 import SearchBar from "../products/SearchBar";
 import { useAuth } from "../../hooks/useAuth";
