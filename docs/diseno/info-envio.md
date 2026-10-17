@@ -204,6 +204,21 @@ Decisiones:
 - **Índice `(infoEnvioId, creadoEn)`** para leer el historial de un envío en orden cronológico.
 - **Auditoría general** (`Auditoria`, DDS §6.5) sigue diferida a v2.0: esta tabla cubre solo el
   envío.
+- **Lectura consistente.** El seguimiento lee el pedido y su historial en una transacción de solo
+  lectura (un mismo snapshot), para que un cambio confirmado entre las dos consultas no deje
+  `estadoEnvio` en un valor y el `historial` ya en otro.
+
+Limitaciones conocidas (estado actual, no son regresiones):
+
+- **Sin backfill.** Los envíos anteriores a la migración empiezan sin historial y sin la fila de
+  alta `null -> EN_PREPARACION`; sus primeros cambios posteriores sí quedan registrados.
+- **Fecha de la fila de alta.** La fila `null -> EN_PREPARACION` lleva la fecha y hora del alta
+  del pedido (se inserta en la misma transacción que lo crea).
+- **Usuario inexistente.** Un token válido de un usuario que ya no existe en la base produce un
+  500 en `PUT .../estado-envio` y en `PATCH .../estado` a un estado de envío: el insert del
+  historial viola la FK a `Usuario` y la transacción entera se revierte (el envío no cambia). El
+  hueco previo es que `auth` no revalida al usuario contra la base, y `errorHandler` devuelve
+  `err.message` en los 5xx. Queda como deuda, fuera de este cambio.
 
 ## 6. Cómo la consume Sprint 4
 
@@ -225,5 +240,8 @@ necesita saber qué acciones ofrecer según el estado actual.
   `ENTREGADO`, igual que `EstadoEnvio`. Hay que definir cuál es la fuente de verdad y cómo se
   sincronizan al actualizar el envío (¿pasar el envío a `ENVIADO` actualiza también
   `Pedido.estado`?). Esta propuesta no lo resuelve para no inventar una regla de MOD-06.
+  **Resuelto en `sprint-4`:** `Pedido.estado` manda y ambos se escriben en la misma transacción
+  (ver `pedidos-estados.md` §1).
 - Crear el `InfoEnvio` en el alta del pedido, con `costoEnvio` y `direccionId` del pedido y
   `estadoEnvio = EN_PREPARACION`, dentro de la misma transacción que crea `Pedido`.
+  **Resuelto en `sprint-4`** (`pedido.service.crearEnTransaccion`, RF-027).
