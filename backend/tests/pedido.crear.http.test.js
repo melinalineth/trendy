@@ -113,7 +113,7 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
 
   it("crea el pedido: 201, PENDIENTE, líneas con precio vigente, InfoEnvio EN_PREPARACION, stock descontado y carrito vacío", async () => {
     const cliente = await clienteConDireccion({ costo: "12000.00" });
-    const camisa = await crearVariante({ precio: "19990.50", stock: 10 });
+    const camisa = await crearVariante({ precio: "19990.00", stock: 10 });
     const pantalon = await crearVariante({ precio: "35000.00", stock: 4 });
     await agregarAlCarrito(cliente.id, camisa, 2);
     await agregarAlCarrito(cliente.id, pantalon, 3);
@@ -128,17 +128,17 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
     assert.equal(pedido.usuarioId, cliente.id);
     assert.equal(pedido.direccionId, cliente.direccion.id);
     assert.match(pedido.numero, /^PED-\d+$/);
-    // 2 x 19990.50 + 3 x 35000 = 144981 ; + 12000 de envío
-    assert.equal(pedido.subtotal, 144981);
+    // 2 x 19990 + 3 x 35000 = 144980 ; + 12000 de envío
+    assert.equal(pedido.subtotal, 144980);
     assert.equal(pedido.costoEnvio, 12000);
-    assert.equal(pedido.total, 156981);
+    assert.equal(pedido.total, 156980);
 
     const lineas = [...pedido.detalles].sort((a, b) => a.varianteId - b.varianteId);
     assert.equal(lineas.length, 2);
     assert.deepEqual(
       lineas.map((d) => [d.varianteId, d.cantidad, d.precioUnitario]),
       [
-        [camisa.id, 2, 19990.5],
+        [camisa.id, 2, 19990],
         [pantalon.id, 3, 35000],
       ].sort((a, b) => a[0] - b[0])
     );
@@ -172,13 +172,15 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
       where: { id: pedido.id },
       include: { infoEnvio: true, detalles: true },
     });
-    assert.equal(enBase.total.toFixed(2), "156981.00");
+    assert.equal(enBase.total.toFixed(2), "156980.00");
     assert.equal(enBase.infoEnvio.estadoEnvio, "EN_PREPARACION");
     assert.deepEqual(await itemsDelCarrito(cliente.id), []);
   });
 
+  // Con centavos solo se puede crear contra entrega (Mercado Pago los rechaza,
+  // ver "montos con centavos" más abajo).
   it("totales exactos en centavos con precios decimales (sin errores de coma flotante)", async () => {
-    const cliente = await clienteConDireccion({ costo: "0.35" });
+    const cliente = await clienteConDireccion({ costo: "0.35", permiteContraEntrega: true });
     // En float: 0.1 * 3 = 0.30000000000000004 y 0.1 + 0.2 = 0.30000000000000004.
     const a = await crearVariante({ precio: "0.10", stock: 10 });
     const b = await crearVariante({ precio: "0.20", stock: 10 });
@@ -187,7 +189,10 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
     await agregarAlCarrito(cliente.id, b, 1);
     await agregarAlCarrito(cliente.id, c, 3);
 
-    const r = await crear(cliente);
+    const r = await crear(cliente, {
+      direccionId: cliente.direccion.id,
+      metodoPago: "CONTRA_ENTREGA",
+    });
 
     assert.equal(r.status, 201, JSON.stringify(r.body));
     // 0.30 + 0.20 + 59971.65 = 59972.15 ; + 0.35 = 59972.50
@@ -196,6 +201,123 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
     assert.equal(enBase.costoEnvio.toFixed(2), "0.35");
     assert.equal(enBase.total.toFixed(2), "59972.50");
     assert.equal(r.body.pedido.total, 59972.5);
+  });
+
+  // Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): Mercado Pago solo
+  // acepta montos enteros, así que un pedido de Mercado Pago con centavos (en
+  // un precio vigente o en el envío; datos legacy, el DTO ya no los deja
+  // cargar: se insertan por Prisma) se rechaza ANTES de reservar stock. Contra
+  // entrega no cobra por la pasarela y no se bloquea.
+  describe("montos con centavos (MONTO_NO_ENTERO_COP)", () => {
+    // El rechazo no deja NADA: sin pedido, sin movimientos, stock y carrito intactos.
+    async function assertSinEfectos(cliente, lineas) {
+      assert.deepEqual(await pedidosDe(cliente.id), []);
+      for (const { variante, stock } of lineas) {
+        assert.equal(await stockDe(variante.id), stock);
+        assert.deepEqual(await movimientosDe(variante.id), []);
+      }
+      const items = await itemsDelCarrito(cliente.id);
+      assert.deepEqual(
+        items.map((i) => [i.varianteId, i.cantidad]).sort((a, b) => a[0] - b[0]),
+        lineas.map(({ variante, cantidad }) => [variante.id, cantidad]).sort((a, b) => a[0] - b[0])
+      );
+    }
+
+    it("Mercado Pago + precio vigente con centavos -> 409 que nombra el producto y nada cambia", async () => {
+      const cliente = await clienteConDireccion({ costo: "12000.00" });
+      const entera = await crearVariante({ precio: "30000.00", stock: 6 });
+      const conCentavos = await crearVariante({ precio: "19990.50", stock: 10 });
+      const { nombre } = await prisma.producto.findUnique({ where: { id: conCentavos.productoId } });
+      await agregarAlCarrito(cliente.id, entera, 1);
+      await agregarAlCarrito(cliente.id, conCentavos, 2);
+
+      const r = await crear(cliente);
+
+      assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+      assert.ok(r.body.error.mensaje.includes(`"${nombre}"`), r.body.error.mensaje);
+      assert.match(r.body.error.mensaje, /centavos/);
+      assert.match(r.body.error.mensaje, /Mercado Pago/);
+      await assertSinEfectos(cliente, [
+        { variante: entera, stock: 6, cantidad: 1 },
+        { variante: conCentavos, stock: 10, cantidad: 2 },
+      ]);
+    });
+
+    // Fija el ORDEN: el chequeo de montos va antes de reservar (descontar)
+    // stock. Con stock insuficiente Y centavos, manda MONTO_NO_ENTERO_COP; si
+    // alguien mueve el chequeo después del descuento, responde STOCK_INSUFICIENTE.
+    it("centavos + stock insuficiente -> 409 MONTO_NO_ENTERO_COP (el chequeo va antes de reservar stock)", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ precio: "19990.50", stock: 1 });
+      await agregarAlCarrito(cliente.id, variante, 3);
+
+      const r = await crear(cliente);
+
+      assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+      await assertSinEfectos(cliente, [{ variante, stock: 1, cantidad: 3 }]);
+    });
+
+    it("un solo centavo alcanza (10000.01)", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ precio: "10000.01", stock: 3 });
+      await agregarAlCarrito(cliente.id, variante, 1);
+
+      const r = await crear(cliente);
+
+      assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+      await assertSinEfectos(cliente, [{ variante, stock: 3, cantidad: 1 }]);
+    });
+
+    it("Mercado Pago + costo de envío con centavos (8500.50) -> 409 que nombra el envío y nada cambia", async () => {
+      const cliente = await clienteConDireccion({ costo: "8500.50" });
+      const variante = await crearVariante({ precio: "20000.00", stock: 5 });
+      await agregarAlCarrito(cliente.id, variante, 2);
+
+      const r = await crear(cliente);
+
+      assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+      assert.match(r.body.error.mensaje, /costo de envío/);
+      assert.match(r.body.error.mensaje, /centavos/);
+      assert.match(r.body.error.mensaje, /Mercado Pago/);
+      await assertSinEfectos(cliente, [{ variante, stock: 5, cantidad: 2 }]);
+    });
+
+    it("contra entrega con centavos (precio y envío) NO se bloquea: 201 con totales exactos", async () => {
+      const cliente = await clienteConDireccion({ costo: "8500.50", permiteContraEntrega: true });
+      const variante = await crearVariante({ precio: "19990.50", stock: 10 });
+      await agregarAlCarrito(cliente.id, variante, 2);
+
+      const r = await crear(cliente, {
+        direccionId: cliente.direccion.id,
+        metodoPago: "CONTRA_ENTREGA",
+      });
+
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      // 2 x 19990.50 + 8500.50 de envío
+      assert.equal(r.body.pedido.subtotal, 39981);
+      assert.equal(r.body.pedido.costoEnvio, 8500.5);
+      assert.equal(r.body.pedido.total, 48481.5);
+      // Presentación por línea: precio histórico con centavos y subtotal exacto.
+      assert.equal(r.body.pedido.detalles.length, 1);
+      const [linea] = r.body.pedido.detalles;
+      assert.equal(linea.varianteId, variante.id);
+      assert.equal(linea.cantidad, 2);
+      assert.equal(linea.precioUnitario, 19990.5);
+      assert.equal(linea.subtotal, 39981);
+      assert.equal(await stockDe(variante.id), 8);
+    });
+
+    it("Mercado Pago con precios y envío enteros sigue creando el pedido (201)", async () => {
+      const cliente = await clienteConDireccion({ costo: "8500.00" });
+      const variante = await crearVariante({ precio: "19990.00", stock: 10 });
+      await agregarAlCarrito(cliente.id, variante, 2);
+
+      const r = await crear(cliente);
+
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.equal(r.body.pedido.total, 48480);
+      assert.equal(await stockDe(variante.id), 8);
+    });
   });
 
   it("precio histórico (RN-008): cambiar el precio del producto después no altera el pedido", async () => {

@@ -113,6 +113,21 @@ class MontoFueraDeRangoError extends Error {
   }
 }
 
+// Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): un pedido de
+// Mercado Pago no puede llevar centavos (en una línea o en el envío) porque
+// la pasarela solo acepta montos enteros. Mismo código que pago.service
+// (crearPreferencia) para que el frontend lo reconozca; acá se detecta ANTES de
+// reservar stock, así el cliente no queda con un pedido impagable.
+class MontoNoEnteroCopError extends Error {
+  constructor(message, detalles = null) {
+    super(message);
+    this.name = "MontoNoEnteroCopError";
+    this.status = 409;
+    this.codigo = "MONTO_NO_ENTERO_COP";
+    this.detalles = detalles;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Montos en centavos
 // ---------------------------------------------------------------------------
@@ -307,6 +322,36 @@ async function enTransaccion(operacion, fn, { reintentarUnique = false } = {}) {
   }
 }
 
+// Un pedido de Mercado Pago exige pesos enteros en cada línea y en el envío
+// (centavos % 100 === 0). Función pura sobre datos ya leídos bajo el lock del
+// carrito: no consulta ni escribe nada, así que rechazar acá no deja efectos
+// (ni pedido, ni descuento de stock, ni cambios en el carrito).
+// Contra entrega NO pasa por acá a propósito: ese pago no viaja a la pasarela
+// y los precios con centavos de datos legacy siguen siendo vendibles así
+// (de hecho es la salida para esos clientes).
+function exigirMontosEnterosParaMercadoPago(items, lineas, costoEnvioCentavos) {
+  const indiceConCentavos = lineas.findIndex((linea) => linea.precioCentavos % 100 !== 0);
+
+  if (indiceConCentavos !== -1) {
+    const item = items[indiceConCentavos];
+    const nombre = item.variante.producto.nombre;
+
+    throw new MontoNoEnteroCopError(
+      `El precio de "${nombre}" tiene centavos y no se puede pagar con Mercado Pago: ` +
+        "Mercado Pago solo acepta montos enteros en pesos (COP)",
+      { varianteId: item.varianteId }
+    );
+  }
+
+  if (costoEnvioCentavos % 100 !== 0) {
+    throw new MontoNoEnteroCopError(
+      "El costo de envío tiene centavos y no se puede pagar con Mercado Pago: " +
+        "Mercado Pago solo acepta montos enteros en pesos (COP)",
+      { concepto: "costoEnvio" }
+    );
+  }
+}
+
 // Todo lo que pasa con el lock del carrito tomado. Devuelve el id del pedido.
 // Orden de escritura pensado para no provocar deadlocks entre pedidos
 // simultáneos que comparten variantes: el Pedido primero (sin líneas), luego
@@ -344,6 +389,13 @@ async function crearEnTransaccion(tx, { usuarioId, direccionId, metodoPago, cost
     cantidad: item.cantidad,
     precioCentavos: aCentavos(item.variante.producto.precio),
   }));
+
+  // 3b. Mercado Pago solo acepta pesos enteros: se corta ANTES de escribir
+  //     nada (el pedido, el descuento de stock y el vaciado del carrito vienen
+  //     después), con los precios que ya se leyeron bajo el lock del carrito.
+  if (metodoPago === "MERCADO_PAGO") {
+    exigirMontosEnterosParaMercadoPago(items, lineas, costoEnvioCentavos);
+  }
 
   const subtotal = lineas.reduce((suma, l) => suma + l.precioCentavos * l.cantidad, 0);
   const total = subtotal + costoEnvioCentavos;
@@ -904,6 +956,7 @@ module.exports = {
   TransicionEstadoInvalidaError,
   EnvioNoRegistradoError,
   MontoFueraDeRangoError,
+  MontoNoEnteroCopError,
   // Reexportadas para que el controller y los tests no dependan de dónde
   // nació cada error.
   StockInsuficienteError,

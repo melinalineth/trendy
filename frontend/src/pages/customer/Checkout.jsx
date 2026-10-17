@@ -97,6 +97,16 @@ function describirErrorCreacion(error, items) {
           "El pago contra entrega no está disponible en la zona de tu dirección. Elegí Mercado Pago o usá otra dirección.",
         accion: null,
       };
+    // El pedido NO se creó y el carrito sigue intacto (el backend rechaza antes
+    // de reservar stock). A diferencia del error de la preferencia (pedido ya
+    // creado, sin salida), acá contra entrega sí es una alternativa válida si la
+    // zona lo permite. No se ofrece reintentar: con Mercado Pago volvería a fallar.
+    case "MONTO_NO_ENTERO_COP":
+      return {
+        mensaje:
+          "Algún producto de tu carrito o el envío tiene un valor con centavos y no se puede pagar con Mercado Pago. Comunicate con la tienda o, si tu zona lo permite, elegí pago contra entrega.",
+        accion: null,
+      };
     case "DIRECCION_NO_ENCONTRADA":
       return {
         mensaje: "La dirección elegida ya no existe. Elegí otra dirección.",

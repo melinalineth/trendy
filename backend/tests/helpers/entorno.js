@@ -108,7 +108,9 @@ async function crearUsuario(nombreRol = "cliente") {
 }
 
 // Crea categoría + producto + variante propios, con precio y stock controlados.
-async function crearVariante({ precio = "19990.50", stock = 5, estado = "ACTIVO" } = {}) {
+// El precio por defecto es entero: un pedido de Mercado Pago con centavos se
+// rechaza (MONTO_NO_ENTERO_COP). Los tests de centavos lo pasan explícito.
+async function crearVariante({ precio = "19990.00", stock = 5, estado = "ACTIVO" } = {}) {
   const suf = sufijo();
 
   const categoria = await prisma.categoria.create({ data: { nombre: `Test-${suf}` } });

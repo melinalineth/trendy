@@ -11,7 +11,9 @@ import api from "./apiClient";
 // Errores: 400 VALIDACION_FALLIDA, 404 DIRECCION_NO_ENCONTRADA, 409
 // CARRITO_VACIO / SIN_COBERTURA / CONTRA_ENTREGA_NO_DISPONIBLE /
 // PRODUCTO_NO_DISPONIBLE { varianteId } / STOCK_INSUFICIENTE { varianteId,
-// disponible }.
+// disponible } / MONTO_NO_ENTERO_COP (solo con Mercado Pago: un precio o el
+// envío con centavos; se rechaza antes de reservar stock y el carrito queda
+// intacto).
 function crearPedido({ direccionId, metodoPago }) {
   return api
     .post("/pedidos", { direccionId, metodoPago })
