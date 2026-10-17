@@ -113,15 +113,17 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
   }
 
   // Envía un webhook firmado. `pago` es lo que devolverá el Payment.get
-  // mockeado (null = no se configura el mock).
+  // mockeado (null = no se configura el mock). `idQuery` agrega `?data.id=` a
+  // la URL, como lo manda Mercado Pago: es el id que entra en la firma.
   let contadorRequest = 0;
-  function webhook(dataId, { firma, body, sinFirma = false } = {}) {
+  function webhook(dataId, { firma, body, sinFirma = false, idQuery } = {}) {
     const requestId = `req-${++contadorRequest}`;
     const headers = { "x-request-id": requestId };
     if (!sinFirma) {
       headers["x-signature"] = firma ?? firmar(String(dataId), requestId);
     }
-    return api("POST", "/api/v1/pagos/mercadopago/webhook", {
+    const query = idQuery === undefined ? "" : `?data.id=${encodeURIComponent(idQuery)}`;
+    return api("POST", `/api/v1/pagos/mercadopago/webhook${query}`, {
       headers,
       body: body ?? { type: "payment", action: "payment.updated", data: { id: String(dataId) } },
     });
@@ -981,6 +983,131 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
 
       assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
       assert.equal(mockObtenerPago.mock.callCount(), 0);
+    });
+
+    // Documentación de Mercado Pago: el manifiesto de la firma usa el
+    // `data.id` de la QUERY STRING (`?data.id=...`), no el del body. Express 5
+    // (query parser "simple") entrega la clave literal req.query["data.id"].
+    describe("data.id de la query string (el id que se firma)", () => {
+      it("firma válida con el data.id en la query y el mismo id en el body -> 200", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9501, { idQuery: "9501" });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9501" });
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+      });
+
+      it("sin data.id en la query: usa el del body (compatibilidad)", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9502);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9502" });
+      });
+
+      it("query vacía o solo espacios: cae al body", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9503, { idQuery: "  " });
+
+        // La firma se calculó con el id del body (9503) y la query no cuenta.
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9503" });
+      });
+
+      it("query y body con ids distintos: manda la query (la firmada) y es la que se consulta a Mercado Pago", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9504, {
+          idQuery: "9504",
+          body: { type: "payment", data: { id: "7777" } },
+        });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        // El mismo id que se firmó es el que se consulta y el que se registra.
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9504" });
+        assert.equal((await pagoEnBase(pedido.id)).referenciaExterna, "9504");
+      });
+
+      it("query y body con ids distintos, firma calculada con el id del BODY -> 401 y no se consulta a Mercado Pago", async () => {
+        const requestId = "req-firma-body";
+
+        const r = await api("POST", "/api/v1/pagos/mercadopago/webhook?data.id=9505", {
+          headers: { "x-request-id": requestId, "x-signature": firmar("7778", requestId) },
+          body: { type: "payment", data: { id: "7778" } },
+        });
+
+        assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+      });
+
+      it("firma inválida con el data.id en la query -> 401 y log WEBHOOK_FIRMA_RECHAZADA", async () => {
+        const firma = firmar("9506", "otro-request", "secreto-falso");
+
+        const { resultado: r, lineas } = await conLogs(() =>
+          webhook(9506, { idQuery: "9506", firma })
+        );
+
+        assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+        assert.deepEqual(logDe(lineas, "WEBHOOK_FIRMA_RECHAZADA"), {
+          evento: "WEBHOOK_FIRMA_RECHAZADA",
+          motivo: "SignatureMismatch",
+        });
+        assertLogsSinSecretos(lineas, firma);
+      });
+
+      it("el body sigue exigiendo data.id aunque venga en la query -> 400", async () => {
+        const r = await webhook(9507, { idQuery: "9507", body: { type: "payment" } });
+
+        assertErrorEstandar(r, 400, "VALIDACION_FALLIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+      });
+
+      // Defensa por si el query parser pasa a "extended" (qs): el key
+      // `data.id` queda anidado como req.query.data.id.
+      it("query anidada (req.query.data.id) también se lee", async () => {
+        const mockProcesar = mock.method(pagoService, "procesarWebhook", async () => ({
+          recibido: true,
+          procesado: false,
+        }));
+        const { recibirWebhook } = require("../src/controllers/pago.controller");
+        const llamar = async (query) => {
+          const res = { status: () => res, json: () => res };
+          const req = {
+            query,
+            body: { type: "payment", data: { id: "1111" } },
+            get: () => "x",
+          };
+          await recibirWebhook(req, res);
+          return mockProcesar.mock.calls.at(-1).arguments[1].dataId;
+        };
+
+        try {
+          assert.equal(await llamar({ data: { id: "2222" } }), "2222");
+          // Literal gana a anidado; y sin ninguno de los dos, el body.
+          assert.equal(await llamar({ "data.id": "3333", data: { id: "2222" } }), "3333");
+          assert.equal(await llamar({ "data.id": ["4444", "5555"] }), "1111");
+          assert.equal(await llamar({}), "1111");
+        } finally {
+          mockProcesar.mock.restore();
+        }
+      });
     });
 
     it("notificación de otro tipo (no 'payment') con firma válida -> 200 sin procesar", async () => {

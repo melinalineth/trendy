@@ -23,6 +23,19 @@ async function crearPreferencia(req, res) {
   return res.status(200).json(resultado);
 }
 
+// `data.id` de la QUERY STRING (`?data.id=123`): según la documentación de
+// Mercado Pago, es el id que entra en el manifiesto de la firma
+// (`id:<data.id>;request-id:...;ts:...;`). Express 5 usa el query parser
+// "simple", que deja la clave literal `req.query["data.id"]`; si algún día se
+// configurara "extended" (qs), llegaría anidada como `req.query.data.id`, así
+// que se leen ambas. Un valor vacío, repetido (array) o que no sea string se
+// ignora y el caller cae al body.
+function dataIdDeLaQuery(query) {
+  const candidatos = [query?.["data.id"], query?.data?.id];
+
+  return candidatos.find((valor) => typeof valor === "string" && valor.trim() !== "");
+}
+
 // POST /api/v1/pagos/mercadopago/webhook (RF-035, RF-036). Público: lo llama
 // Mercado Pago; la seguridad es la firma x-signature (se valida en el
 // service). Responde 200 aunque el evento ya se haya procesado (RN-009):
@@ -33,7 +46,9 @@ async function recibirWebhook(req, res) {
   const firma = {
     xSignature: req.get("x-signature"),
     xRequestId: req.get("x-request-id"),
-    dataId: payload.data?.id ?? "",
+    // El id firmado (query) es el MISMO que el service consulta luego con
+    // Payment.get: no se desacoplan. Respaldo: el del body.
+    dataId: dataIdDeLaQuery(req.query) ?? payload.data?.id ?? "",
   };
 
   const resultado = await pagoService.procesarWebhook(payload, firma);
