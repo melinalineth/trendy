@@ -61,13 +61,14 @@ async function obtenerPorId(req, res) {
 /**
  * PATCH /api/v1/pedidos/:id/estado
  * Solo admin/vendedor (roleGuard en las rutas). La transición la valida el
- * service con la tabla de docs/diseno/pedidos-estados.md.
+ * service con la tabla de docs/diseno/pedidos-estados.md. Si el estado es de
+ * envío, el usuario de la sesión queda en el historial del envío (RF-029).
  */
 async function actualizarEstado(req, res) {
   const id = validarPedidoIdParam(req.params.id);
   const { estado } = validarActualizarEstado(req.body);
 
-  const pedido = await pedidoService.actualizarEstado(id, estado);
+  const pedido = await pedidoService.actualizarEstado(id, estado, req.usuario);
 
   return res.status(200).json({
     mensaje: "Estado del pedido actualizado correctamente",
@@ -108,14 +109,14 @@ async function cancelarVencidos(req, res) {
 
 /**
  * PUT /api/v1/pedidos/:id/estado-envio (admin/vendedor, RF-029)
- * Avanza el envío un paso y sincroniza el estado del pedido. Responde el
- * seguimiento actualizado.
+ * Avanza el envío un paso y sincroniza el estado del pedido. Registra en el
+ * historial al usuario de la sesión. Responde el seguimiento actualizado.
  */
 async function actualizarEstadoEnvio(req, res) {
   const id = validarPedidoIdParam(req.params.id);
   const { estadoEnvio } = validarActualizarEstadoEnvio(req.body);
 
-  const seguimiento = await pedidoService.actualizarEstadoEnvio(id, estadoEnvio);
+  const seguimiento = await pedidoService.actualizarEstadoEnvio(id, estadoEnvio, req.usuario);
 
   return res.status(200).json(seguimiento);
 }

@@ -42,7 +42,6 @@ const {
   DireccionNoAutorizadaError,
   TransicionEnvioInvalidaError,
   ESTADOS_ENVIO,
-  validarTransicionEstado,
 } = envioService;
 const { StockInsuficienteError } = inventarioService;
 
@@ -438,8 +437,10 @@ async function crearEnTransaccion(tx, { usuarioId, direccionId, metodoPago, cost
 
   // 5. RF-027: InfoEnvio con la dirección y el costo congelados, en
   //    EN_PREPARACION (docs/diseno/info-envio.md).
+  //    Su primera fila de historial (null -> EN_PREPARACION) la hace el cliente
+  //    que crea el pedido (RF-028, RF-029).
   await envioService.crearInfoEnvio(
-    { pedidoId: pedido.id, direccionId, costoEnvio: deCentavos(costoEnvioCentavos) },
+    { pedidoId: pedido.id, direccionId, costoEnvio: deCentavos(costoEnvioCentavos), usuarioId },
     tx
   );
 
@@ -797,9 +798,11 @@ function validarTransicionPedido(estadoActual, estadoNuevo, { metodoPago, pago =
 // Lleva InfoEnvio al estado de envío `estadoNuevo`, con el lock del pedido
 // tomado (misma transacción que el cambio de Pedido.estado). EN_PREPARACION
 // es el estado con el que nace el InfoEnvio: entrar en preparación no lo
-// cambia, solo exige que siga ahí. El resto pasa por validarTransicionEstado
-// (sin saltos ni retrocesos, RF-029).
-async function sincronizarEnvio(tx, pedidoId, estadoNuevo) {
+// cambia (y no escribe historial), solo exige que siga ahí. El resto pasa por
+// envioService.cambiarEstadoEnvio: validarTransicionEstado (sin saltos ni
+// retrocesos, RF-029) y la fila de historial con `usuarioId`, quien hace el
+// cambio (RF-028, RF-029).
+async function sincronizarEnvio(tx, pedidoId, estadoNuevo, usuarioId) {
   const info = await envioRepository.obtenerInfoEnvio(pedidoId, tx);
 
   if (!info) {
@@ -815,17 +818,17 @@ async function sincronizarEnvio(tx, pedidoId, estadoNuevo) {
     return info;
   }
 
-  validarTransicionEstado(info.estadoEnvio, estadoNuevo);
-  return envioRepository.actualizarEstadoEnvio(pedidoId, estadoNuevo, tx);
+  return envioService.cambiarEstadoEnvio({ pedidoId, info, estadoNuevo, usuarioId }, tx);
 }
 
 /**
  * PATCH /api/v1/pedidos/:id/estado (admin y vendedor). Bajo el lock del
  * pedido: valida la transición y, si el estado nuevo es de envío, actualiza
- * InfoEnvio en la MISMA transacción (Pedido.estado manda; mientras el pedido
- * está en EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
+ * InfoEnvio y su historial (con `usuario`, quien hace el cambio) en la MISMA
+ * transacción (Pedido.estado manda; mientras el pedido está en
+ * EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
  */
-async function actualizarEstado(pedidoId, estadoNuevo) {
+async function actualizarEstado(pedidoId, estadoNuevo, usuario) {
   await enTransaccion("ACTUALIZAR_ESTADO", async (tx) => {
     const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
@@ -837,7 +840,7 @@ async function actualizarEstado(pedidoId, estadoNuevo) {
     validarTransicionPedido(bloqueado.estado, estadoNuevo, { metodoPago: bloqueado.metodoPago, pago });
 
     if (ESTADOS_ENVIO.includes(estadoNuevo)) {
-      await sincronizarEnvio(tx, pedidoId, estadoNuevo);
+      await sincronizarEnvio(tx, pedidoId, estadoNuevo, Number(usuario.id));
     }
 
     await pedidoRepository.actualizarEstado(pedidoId, estadoNuevo, tx);
@@ -887,10 +890,11 @@ function presentarSeguimiento(pedido) {
  * PUT /api/v1/pedidos/:id/estado-envio (admin y vendedor, RF-029). Avanza el
  * envío un paso (validarTransicionEstado: sin saltos ni retrocesos) y
  * sincroniza Pedido.estado en la misma transacción, bajo el lock del pedido.
+ * El cambio queda en el historial con `usuario`, quien lo hace (RF-029).
  * Solo si el pedido ya está en preparación o en camino; entrar en
  * preparación es PATCH /estado (CONFIRMADO -> EN_PREPARACION).
  */
-async function actualizarEstadoEnvio(pedidoId, estadoEnvio) {
+async function actualizarEstadoEnvio(pedidoId, estadoEnvio, usuario) {
   await enTransaccion("ACTUALIZAR_ESTADO_ENVIO", async (tx) => {
     const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
@@ -910,9 +914,10 @@ async function actualizarEstadoEnvio(pedidoId, estadoEnvio) {
       throw new EnvioNoRegistradoError();
     }
 
-    validarTransicionEstado(info.estadoEnvio, estadoEnvio);
-
-    await envioRepository.actualizarEstadoEnvio(pedidoId, estadoEnvio, tx);
+    await envioService.cambiarEstadoEnvio(
+      { pedidoId, info, estadoNuevo: estadoEnvio, usuarioId: Number(usuario.id) },
+      tx
+    );
     await pedidoRepository.actualizarEstado(pedidoId, estadoEnvio, tx);
   });
 
