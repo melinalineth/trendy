@@ -1117,6 +1117,22 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9503" });
       });
 
+      // El WebhookSignatureValidator del SDK hace trim() del data.id antes de
+      // armar el manifest: lo que se consulta a Mercado Pago tiene que ser ese
+      // mismo valor recortado.
+      it("query con espacios alrededor y firma del id sin espacios -> 200 y Payment.get recibe el id recortado", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9508, { idQuery: " 9508 " });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9508" });
+        assert.equal((await pagoEnBase(pedido.id)).referenciaExterna, "9508");
+      });
+
       it("query y body con ids distintos: manda la query (la firmada) y es la que se consulta a Mercado Pago", async () => {
         const pedido = await pedidoDe(cliente);
         mockObtenerPago.mock.mockImplementation(async ({ id }) =>

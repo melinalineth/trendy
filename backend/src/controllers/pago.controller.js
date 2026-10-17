@@ -29,11 +29,14 @@ async function crearPreferencia(req, res) {
 // "simple", que deja la clave literal `req.query["data.id"]`; si algún día se
 // configurara "extended" (qs), llegaría anidada como `req.query.data.id`, así
 // que se leen ambas. Un valor vacío, repetido (array) o que no sea string se
-// ignora y el caller cae al body.
+// ignora y el caller cae al body. Se devuelve recortado (trim) porque el
+// WebhookSignatureValidator del SDK también recorta el data.id antes de armar
+// el manifest: lo firmado y lo que se consulta con Payment.get son el mismo.
 function dataIdDeLaQuery(query) {
   const candidatos = [query?.["data.id"], query?.data?.id];
+  const valor = candidatos.find((c) => typeof c === "string" && c.trim() !== "");
 
-  return candidatos.find((valor) => typeof valor === "string" && valor.trim() !== "");
+  return valor?.trim();
 }
 
 // POST /api/v1/pagos/mercadopago/webhook (RF-035, RF-036). Público: lo llama

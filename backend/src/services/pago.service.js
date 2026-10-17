@@ -499,7 +499,9 @@ async function procesarWebhook(payload, firma) {
     return { recibido: true, procesado: false };
   }
 
-  const paymentId = String(firma.dataId);
+  // Recortado por defensa: el validador del SDK también hace trim() del dataId
+  // al armar el manifest, así que se consulta exactamente el id firmado.
+  const paymentId = String(firma.dataId).trim();
 
   // No confiar en el estado enviado en el cuerpo del webhook.
   const pagoMP = await obtenerPagoMercadoPago(paymentId);
