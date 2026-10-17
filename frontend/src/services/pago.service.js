@@ -8,7 +8,9 @@ import api from "./apiClient";
 // { pedidoId, preferenciaId, checkoutUrl }: `checkoutUrl` es el checkout
 // hospedado de Mercado Pago al que se redirige el navegador.
 // Errores: 409 PEDIDO_VENCIDO / PEDIDO_NO_PENDIENTE / METODO_PAGO_NO_COINCIDE
-// / TOTAL_INCONSISTENTE, 503 CONFIGURACION_PAGOS_INCOMPLETA (sin credenciales
+// / TOTAL_INCONSISTENTE / MONTO_NO_ENTERO_COP (una línea o el envío con
+// centavos: Mercado Pago solo acepta pesos enteros), 503
+// CONFIGURACION_PAGOS_INCOMPLETA (sin credenciales
 // de Mercado Pago), 502 PASARELA_NO_DISPONIBLE.
 // OJO: la preferencia NO configura back_urls ni auto_return, así que Mercado
 // Pago no devuelve al cliente a la tienda: el estado se consulta abriendo
