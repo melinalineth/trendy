@@ -17,7 +17,7 @@ const {
   limpiar,
 } = require("./helpers/entorno");
 
-const PRECIO = 19990.5; // Decimal(10,2) "19990.50"
+const PRECIO = 19990; // Decimal(10,2) "19990.00" (pesos enteros, ver montos-cop.md)
 
 // DDS §5.3: { error: { codigo, mensaje, detalles } }
 function assertErrorEstandar(respuesta, status, codigo) {

@@ -24,6 +24,7 @@ model Usuario {
   passwordResetTokens  PasswordResetToken[]
   movimientosInventario InventarioMovimiento[]
   carrito              Carrito?
+  pedidos              Pedido[]
 }
 
 enum EstadoUsuario {
@@ -57,6 +58,8 @@ model Direccion {
   referencia   String?
   esPrincipal  Boolean @default(false)
   usuario      Usuario @relation(fields: [usuarioId], references: [id])
+  pedidos      Pedido[]
+  infoEnvios   InfoEnvio[]
 }
 
 // RF-003 (recuperación de contraseña): token de un solo uso con vencimiento.
@@ -116,6 +119,7 @@ model Variante {
   color       String?
   stock       Int                    @default(0)
   producto    Producto               @relation(fields: [productoId], references: [id])
+  detallesPedido DetallePedido[]
   movimientos InventarioMovimiento[]
   itemsCarrito ItemCarrito[]
 
@@ -159,6 +163,92 @@ model InventarioMovimiento {
   usuario    Usuario  @relation(fields: [usuarioId], references: [id])
 }
 
+model Pedido {
+  id Int @id @default(autoincrement())
+  numero String @unique
+  usuarioId Int
+  subtotal Decimal @db.Decimal(10,2)
+  costoEnvio Decimal @db.Decimal(10,2)
+  total Decimal @db.Decimal(10,2)
+  estado EstadoPedido @default(PENDIENTE)
+  metodoPago MetodoPago
+  direccionId Int
+  creadoEn DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  direccion Direccion @relation(fields: [direccionId], references: [id])
+  detalles DetallePedido[]
+  pago Pago?
+  infoEnvio InfoEnvio?
+}
+
+model DetallePedido {
+  id Int @id @default(autoincrement())
+  pedidoId Int
+  varianteId Int
+  cantidad Int
+  precioUnitario Decimal @db.Decimal(10,2)
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  variante Variante @relation(fields: [varianteId], references: [id])
+}
+
+model Pago {
+  id Int @id @default(autoincrement())
+  pedidoId Int @unique
+  metodo MetodoPago
+  estado EstadoPago @default(PENDIENTE)
+  referenciaExterna String?
+  monto Decimal @db.Decimal(10,2)
+  actualizadoEn DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+}
+
+model InfoEnvio {
+  id Int @id @default(autoincrement())
+  pedidoId Int @unique
+  direccionId Int
+  costoEnvio Decimal @db.Decimal(10,2)
+  estadoEnvio EstadoEnvio
+  actualizadoEn DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  direccion Direccion @relation(fields: [direccionId], references: [id])
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  PAGO_APROBADO
+  CONFIRMADO
+  EN_PREPARACION
+  ENVIADO
+  EN_TRANSITO
+  ENTREGADO
+  CANCELADO
+  PAGO_RECHAZADO
+  PAGO_PENDIENTE
+}
+
+enum MetodoPago {
+  MERCADO_PAGO
+  CONTRA_ENTREGA
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  CANCELADO
+}
+
+enum EstadoEnvio {
+  EN_PREPARACION
+  ENVIADO
+  EN_TRANSITO
+  ENTREGADO
+}
+
 // Sprint 3 / MOD-04 (RF-018, RF-021): carrito de compras. Un usuario tiene
 // como máximo un carrito (usuarioId @unique) y cada variante aparece una sola
 // vez por carrito (@@unique en ItemCarrito); agregar de nuevo suma cantidad.
@@ -194,6 +284,10 @@ model ZonaCobertura {
   departamento String
   ciudad       String
   estado       EstadoProducto @default(ACTIVO)
+  // Sprint 4 / RF-037: habilita el pago contra entrega para direcciones de
+  // esta zona (lo valida pago.service.js). Default false: una zona nueva no
+  // acepta contra entrega hasta que un admin lo habilite explícitamente.
+  permiteContraEntrega Boolean @default(false)
   tarifas      TarifaEnvio[]
 
   // Una ciudad pertenece a una sola zona: sin esto, buscarZonaPorDireccion

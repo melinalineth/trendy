@@ -11,9 +11,9 @@ import { useZonasCobertura } from "../../hooks/useZonasCobertura";
 import "./ZonasCobertura.css";
 
 // Límites alineados con el DTO del backend (zonaCobertura.dto.js): textos de
-// hasta 100 caracteres y costo entre 0.01 y 1.000.000 con hasta 2 decimales.
+// hasta 100 caracteres y costo entero (pesos COP, sin centavos) entre 1 y
+// 1.000.000. Regla "COP en pesos enteros": docs/diseno/montos-cop.md.
 const LARGO_MAXIMO_TEXTO = 100;
-const COSTO_MINIMO = 0.01;
 const COSTO_MAXIMO = 1000000;
 
 const VALORES_INICIALES = {
@@ -48,7 +48,7 @@ function validarTexto(valor, etiqueta) {
 }
 
 // Devuelve el mensaje de error del costo, o "" si es válido. Misma regla que
-// el backend: número finito >= 0.01, hasta 2 decimales y <= 1.000.000.
+// el backend: número finito, entero (sin centavos), >= 1 y <= 1.000.000.
 function validarCosto(valor) {
   const texto = valor.trim();
 
@@ -58,12 +58,10 @@ function validarCosto(valor) {
 
   if (!Number.isFinite(costo)) return "El costo debe ser un número válido.";
 
-  if (costo < COSTO_MINIMO) {
-    return `El costo debe ser como mínimo ${COSTO_MINIMO.toLocaleString("es-CO")}.`;
-  }
+  if (costo <= 0) return "El costo debe ser un número mayor que cero.";
 
-  if (Math.abs(Math.round(costo * 100) - costo * 100) > 1e-6) {
-    return "El costo admite como máximo 2 decimales.";
+  if (!Number.isInteger(costo)) {
+    return "El costo debe ser un valor entero en pesos (COP), sin centavos.";
   }
 
   if (costo > COSTO_MAXIMO) {
@@ -215,6 +213,7 @@ function FormularioZona({ onGuardar, procesando }) {
         <Input
           type="number"
           name="costo"
+          step="1"
           placeholder="ej. 12000"
           value={valores.costo}
           onChange={handleChange("costo")}
@@ -275,6 +274,7 @@ function FormularioTarifa({ zona, onGuardar, procesando }) {
         <Input
           type="number"
           name="costo"
+          step="1"
           placeholder="ej. 15000"
           value={costo}
           onChange={(event) => setCosto(event.target.value)}

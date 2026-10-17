@@ -1,0 +1,74 @@
+const express = require("express");
+const router = express.Router();
+
+const pedidoController = require("../controllers/pedido.controller");
+const auth = require("../middlewares/auth");
+const roleGuard = require("../middlewares/roleGuard");
+
+// Sprint 4 / MOD-06 (DDS §3). Paths completos, como el resto de los route
+// files. Las rutas fijas (/vencidos/cancelar) van ANTES de las que llevan
+// :id.
+//   POST  /api/v1/pedidos                    cliente (RF-030)
+//   GET   /api/v1/pedidos                    cliente (propios), admin, vendedor (RF-031, RF-032)
+//   POST  /api/v1/pedidos/vencidos/cancelar  admin (scheduler externo)
+//   GET   /api/v1/pedidos/:id                cliente dueño, admin, vendedor (RF-031)
+//   PATCH /api/v1/pedidos/:id/estado         admin, vendedor (RF-032)
+//   PATCH /api/v1/pedidos/:id/cancelar       admin, vendedor
+//   PUT   /api/v1/pedidos/:id/estado-envio   admin, vendedor (RF-029, MOD-05)
+//   GET   /api/v1/pedidos/:id/seguimiento    cliente dueño, admin, vendedor (RF-028)
+// (GET /api/v1/pedidos/:id/pago vive en pago.routes.js.)
+
+router.post("/api/v1/pedidos", auth, roleGuard(["cliente"]), pedidoController.crear);
+
+router.get(
+  "/api/v1/pedidos",
+  auth,
+  roleGuard(["cliente", "admin", "vendedor"]),
+  pedidoController.listar
+);
+
+router.post(
+  "/api/v1/pedidos/vencidos/cancelar",
+  auth,
+  roleGuard(["admin"]),
+  pedidoController.cancelarVencidos
+);
+
+router.get(
+  "/api/v1/pedidos/:id",
+  auth,
+  roleGuard(["cliente", "admin", "vendedor"]),
+  pedidoController.obtenerPorId
+);
+
+router.patch(
+  "/api/v1/pedidos/:id/estado",
+  auth,
+  roleGuard(["admin", "vendedor"]),
+  pedidoController.actualizarEstado
+);
+
+// ERS v1.2 §2.8.3 y matriz §4.1: en el MVP cancela el personal (a pedido del
+// cliente); la cancelación por el propio cliente (RF-033) es v2.0.
+router.patch(
+  "/api/v1/pedidos/:id/cancelar",
+  auth,
+  roleGuard(["admin", "vendedor"]),
+  pedidoController.cancelar
+);
+
+router.put(
+  "/api/v1/pedidos/:id/estado-envio",
+  auth,
+  roleGuard(["admin", "vendedor"]),
+  pedidoController.actualizarEstadoEnvio
+);
+
+router.get(
+  "/api/v1/pedidos/:id/seguimiento",
+  auth,
+  roleGuard(["cliente", "admin", "vendedor"]),
+  pedidoController.seguimiento
+);
+
+module.exports = router;

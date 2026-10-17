@@ -36,9 +36,18 @@ const cambiarEstado = async (req, res) => {
   return res.status(200).json(zona);
 };
 
+// PATCH /api/v1/zonas-cobertura/:id/contra-entrega (RF-037)
+const cambiarContraEntrega = async (req, res) => {
+  const zonaId = validarZonaId(req.params.id);
+  const zona = await zonaService.cambiarContraEntrega(zonaId, req.body);
+
+  return res.status(200).json(zona);
+};
+
 module.exports = {
   listar,
   crear,
   cambiarTarifa,
   cambiarEstado,
+  cambiarContraEntrega,
 };
