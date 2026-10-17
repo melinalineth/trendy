@@ -243,6 +243,20 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
       ]);
     });
 
+    // Fija el ORDEN: el chequeo de montos va antes de reservar (descontar)
+    // stock. Con stock insuficiente Y centavos, manda MONTO_NO_ENTERO_COP; si
+    // alguien mueve el chequeo después del descuento, responde STOCK_INSUFICIENTE.
+    it("centavos + stock insuficiente -> 409 MONTO_NO_ENTERO_COP (el chequeo va antes de reservar stock)", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ precio: "19990.50", stock: 1 });
+      await agregarAlCarrito(cliente.id, variante, 3);
+
+      const r = await crear(cliente);
+
+      assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+      await assertSinEfectos(cliente, [{ variante, stock: 1, cantidad: 3 }]);
+    });
+
     it("un solo centavo alcanza (10000.01)", async () => {
       const cliente = await clienteConDireccion();
       const variante = await crearVariante({ precio: "10000.01", stock: 3 });
@@ -283,6 +297,13 @@ describe("Creación de pedidos desde el carrito (RF-030)", () => {
       assert.equal(r.body.pedido.subtotal, 39981);
       assert.equal(r.body.pedido.costoEnvio, 8500.5);
       assert.equal(r.body.pedido.total, 48481.5);
+      // Presentación por línea: precio histórico con centavos y subtotal exacto.
+      assert.equal(r.body.pedido.detalles.length, 1);
+      const [linea] = r.body.pedido.detalles;
+      assert.equal(linea.varianteId, variante.id);
+      assert.equal(linea.cantidad, 2);
+      assert.equal(linea.precioUnitario, 19990.5);
+      assert.equal(linea.subtotal, 39981);
       assert.equal(await stockDe(variante.id), 8);
     });
 
