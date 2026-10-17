@@ -32,10 +32,10 @@ relajar en los DTOs y en `crearPreferencia` sin tocar el modelo de datos.
 
 | Capa | Archivo | Qué hace |
 | --- | --- | --- |
-| Alta/edición de producto | `backend/src/dtos/producto.dto.js` | `precio` entero positivo. Mensaje: «El precio debe ser un valor entero en pesos (COP), sin centavos». |
+| Alta/edición de producto | `backend/src/dtos/producto.dto.js` y `backend/src/services/producto.service.js` (`validarPrecio`, defensa en profundidad) | `precio` entero positivo y con tope `PRECIO_MAXIMO` = 99.999.999 (la columna `Decimal(10,2)` admite hasta 99.999.999,99; sin tope un `1e10` reventaría en MySQL). Mensajes: «El precio debe ser un valor entero en pesos (COP), sin centavos» y «El precio no puede superar 99999999 (COP)». |
 | Alta/cambio de tarifa | `backend/src/dtos/zonaCobertura.dto.js` (`validarCosto`) | `costo` entero ≥ 1 y ≤ `COSTO_MAXIMO` (1.000.000). |
 | Defensa al pagar | `backend/src/services/pago.service.js` (`crearPreferencia`) | Antes de llamar a Mercado Pago verifica que cada `unit_price` (incluido el envío) sea entero. Si no: 409 `MONTO_NO_ENTERO_COP` con el título de la línea, sin llamar a la pasarela y sin cambiar el pedido ni crear `Pago`. |
-| Formularios | `frontend/src/components/products/FormularioProducto.jsx`, `frontend/src/pages/admin/ZonasCobertura.jsx` | Validación local de entero (`step="1"`) con los mismos mensajes que el backend. |
+| Formularios | `frontend/src/components/products/FormularioProducto.jsx`, `frontend/src/pages/admin/ZonasCobertura.jsx` | Validación local en JS (`Number.isInteger` y el tope del precio) con los mismos mensajes que el backend. Los `<form>` llevan `noValidate` para que corra esa validación y se vea el mensaje en vez del tooltip nativo del navegador. `step="1"` solo guía las flechas del input: no valida. |
 
 Los filtros de búsqueda por rango de precio (`precioMin` / `precioMax`) **no** cambian: pueden
 seguir recibiendo decimales, porque solo comparan.

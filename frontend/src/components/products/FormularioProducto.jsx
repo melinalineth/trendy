@@ -12,6 +12,10 @@ const ESTADOS = [
   { value: "INACTIVO", label: "Inactivo" },
 ];
 
+// Tope del precio: la columna es DECIMAL(10, 2); mismo valor que
+// PRECIO_MAXIMO en backend/src/dtos/producto.dto.js.
+const PRECIO_MAXIMO = 99999999;
+
 const MENSAJE_ERROR_GUARDAR =
   "No pudimos guardar el producto. Intentá de nuevo.";
 const MENSAJE_ERROR_ESTADO =
@@ -88,6 +92,11 @@ function FormularioProducto({ producto = null, onGuardado }) {
     // Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): Mercado Pago
     // solo acepta montos enteros en COP. Mismo criterio que el backend
     // (producto.dto.js).
+    if (precioNumerico > PRECIO_MAXIMO) {
+      setErrorFormulario(`El precio no puede superar ${PRECIO_MAXIMO} (COP).`);
+      return;
+    }
+
     if (!Number.isInteger(precioNumerico)) {
       setErrorFormulario(
         "El precio debe ser un valor entero en pesos (COP), sin centavos.",
@@ -132,7 +141,10 @@ function FormularioProducto({ producto = null, onGuardado }) {
   }
 
   return (
-    <form className="formulario-producto" onSubmit={handleSubmit}>
+    // noValidate: sin esto el navegador bloquea el submit con su tooltip nativo
+    // (p. ej. por `step="1"` con un decimal) y handleSubmit, que muestra
+    // nuestros mensajes, nunca corre. La validación real es la de handleSubmit.
+    <form className="formulario-producto" onSubmit={handleSubmit} noValidate>
       {errorFormulario && <Alert type="error" message={errorFormulario} />}
       {errorCategorias && <Alert type="error" message={errorCategorias} />}
 
