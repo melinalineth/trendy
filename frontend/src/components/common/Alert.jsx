@@ -1,4 +1,3 @@
-import React from "react";
 import "./Alert.css";
 
 function Alert({ message, type = "info", onClose }) {
