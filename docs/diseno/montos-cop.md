@@ -34,6 +34,7 @@ relajar en los DTOs y en `crearPreferencia` sin tocar el modelo de datos.
 | --- | --- | --- |
 | Alta/edición de producto | `backend/src/dtos/producto.dto.js` y `backend/src/services/producto.service.js` (`validarPrecio`, defensa en profundidad) | `precio` entero positivo y con tope `PRECIO_MAXIMO` = 99.999.999 (la columna `Decimal(10,2)` admite hasta 99.999.999,99; sin tope un `1e10` reventaría en MySQL). Mensajes: «El precio debe ser un valor entero en pesos (COP), sin centavos» y «El precio no puede superar 99999999 (COP)». |
 | Alta/cambio de tarifa | `backend/src/dtos/zonaCobertura.dto.js` (`validarCosto`) | `costo` entero ≥ 1 y ≤ `COSTO_MAXIMO` (1.000.000). |
+| Al crear el pedido (Mercado Pago) | `backend/src/services/pedido.service.js` (`crearPedido`) | Si el método es Mercado Pago, verifica en centavos enteros que el precio vigente de cada línea y el costo de envío sean pesos enteros; si no, 409 `MONTO_NO_ENTERO_COP` antes de reservar stock y sin dejar escrituras. Contra entrega no se valida. |
 | Defensa al pagar | `backend/src/services/pago.service.js` (`crearPreferencia`) | Antes de llamar a Mercado Pago verifica que cada `unit_price` (incluido el envío) sea entero. Si no: 409 `MONTO_NO_ENTERO_COP` con el título de la línea, sin llamar a la pasarela y sin cambiar el pedido ni crear `Pago`. |
 | Formularios | `frontend/src/components/products/FormularioProducto.jsx`, `frontend/src/pages/admin/ZonasCobertura.jsx` | Validación local en JS (`Number.isInteger` y el tope del precio) con los mismos mensajes que el backend. Los `<form>` llevan `noValidate` para que corra esa validación y se vea el mensaje en vez del tooltip nativo del navegador. `step="1"` solo guía las flechas del input: no valida. |
 
@@ -55,17 +56,24 @@ La regla valida lo que se **carga de ahora en más**. No se migran ni se redonde
   exige corregirlo a un entero.
 - Una **tarifa** con centavos se reemplaza al cambiarla (se crea una nueva y la anterior queda
   inactiva, como siempre).
-- Un **pedido** ya creado con `precioUnitario` o `costoEnvio` con centavos (el precio se congela al
-  crear el pedido, RN-008) **no se podrá pagar con Mercado Pago**: `crearPreferencia` responde
-  409 `MONTO_NO_ENTERO_COP`. `pedido.service.crearPedido` no se tocó: el alcance acordado fue solo
-  el pago. Si en producción existen pedidos pendientes así, hay que corregirlos o cancelarlos a
-  mano. El pago contra entrega no se ve afectado.
-- Mismo efecto hacia adelante: mientras un producto con precio decimal (o una tarifa vigente con
-  centavos) no se corrija, el pedido nuevo **se crea y reserva stock** (copia el precio y el envío
-  vigentes) pero **no se puede pagar con Mercado Pago**: 409 `MONTO_NO_ENTERO_COP`. No hay salida
-  por contra entrega, porque `registrarContraEntrega` exige que el pedido se haya creado con
-  `metodoPago = CONTRA_ENTREGA`. El cliente tiene que comunicarse con la tienda (el frontend lo
-  informa y no ofrece reintentar) y el stock vuelve cuando el pedido vence o se cancela.
+- **Pedidos nuevos de Mercado Pago con centavos: se rechazan al crearse.** Si un producto del
+  carrito (precio vigente) o la tarifa de envío tiene centavos, `POST /pedidos` con
+  `metodoPago = MERCADO_PAGO` responde 409 `MONTO_NO_ENTERO_COP` (el mismo código que
+  `crearPreferencia`) **antes de reservar stock**: no se crea `Pedido`, `DetallePedido`,
+  `InfoEnvio` ni movimiento de inventario, el stock no cambia y el carrito queda intacto. La
+  validación está en `pedido.service.crearPedido` (`exigirMontosEnterosParaMercadoPago`), dentro de
+  la transacción y con los precios ya leídos bajo el lock del carrito (sin locks nuevos). El
+  checkout muestra un mensaje que sugiere comunicarse con la tienda o elegir contra entrega.
+- **Contra entrega NO se bloquea.** Ese pago no viaja a Mercado Pago, así que los centavos no
+  rompen nada y es la salida para el cliente con datos legacy (si su zona lo permite). Un pedido
+  contra entrega con centavos se sigue creando con totales exactos (hay un test que lo documenta).
+- Un **pedido** creado **antes** de este cambio con `precioUnitario` o `costoEnvio` con centavos (el
+  precio se congela al crear el pedido, RN-008) **sigue siendo impagable con Mercado Pago**:
+  `crearPreferencia` responde 409 `MONTO_NO_ENTERO_COP` (defensa que se mantiene). No hay salida por
+  contra entrega, porque `registrarContraEntrega` exige que el pedido se haya creado con
+  `metodoPago = CONTRA_ENTREGA`. Queda pendiente hasta que **venza** (o se cancele) y su stock
+  vuelva; el frontend informa que hay que comunicarse con la tienda y no ofrece reintentar. Si en
+  producción existen pedidos pendientes así, conviene corregirlos o cancelarlos a mano.
 
 ### Revisión previa a habilitar pagos reales
 
