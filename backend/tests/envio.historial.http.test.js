@@ -36,6 +36,7 @@ const {
   limpiar,
 } = require("./helpers/entorno");
 const { generarToken } = require("../src/utils/jwt");
+const envioRepository = require("../src/repositories/envio.repository");
 
 const HORA_MS = 60 * 60 * 1000;
 const ID_INEXISTENTE = 2147483000;
@@ -320,7 +321,7 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
       ]);
     });
 
-    it("las transiciones rechazadas (salto, CANCELADO a mano, Mercado Pago sin pago aprobado) no escriben historial", async () => {
+    it("las transiciones rechazadas (salto, CANCELADO a mano, PENDIENTE -> CONFIRMADO) no escriben historial", async () => {
       const pendiente = await pedidoEn("PENDIENTE");
       const confirmado = await pedidoEn("CONFIRMADO");
 
@@ -403,18 +404,22 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
     });
   });
 
-  // Atomicidad: el historial y el cambio de InfoEnvio / Pedido viajan juntos.
-  // Se fuerza el fallo del INSERT del historial con un usuario que NO existe:
-  // el token (JWT firmado) pasa auth y roleGuard sin consultar la base, pero el
-  // FK HistorialEstadoEnvio_usuarioId_fkey rechaza la fila. Si el historial se
-  // escribiera fuera de la transacción (o el cambio antes de ella), el
-  // InfoEnvio/Pedido quedarían avanzados sin su registro.
-  describe("atomicidad: si falla el INSERT del historial, no cambia nada", () => {
+  // Atomicidad del InfoEnvio y su historial: el UPDATE de InfoEnvio y el INSERT
+  // del historial viajan en la misma transacción. Se fuerza el fallo del INSERT
+  // con un usuario que NO existe: el token (JWT firmado) pasa auth y roleGuard
+  // sin consultar la base, pero el FK HistorialEstadoEnvio_usuarioId_fkey
+  // rechaza la fila. Si el historial se escribiera fuera de la transacción (o su
+  // error se ignorara), el InfoEnvio quedaría avanzado sin su registro.
+  // Alcance: lo que se prueba es el rollback de InfoEnvio + historial. El
+  // UPDATE de Pedido.estado se ejecuta DESPUÉS de cambiarEstadoEnvio, así que
+  // cuando el INSERT falla ni se intenta: acá se verifica que el pedido NO se
+  // modificó, no que su UPDATE se haya revertido (eso no se ejercita).
+  describe("atomicidad de InfoEnvio e historial: si falla el INSERT del historial, el InfoEnvio no cambia", () => {
     const fantasma = () => ({
       token: generarToken({ id: ID_INEXISTENTE, rolId: 1, rol: { nombre: "admin" } }),
     });
 
-    it("PUT /estado-envio con un usuario inexistente -> 500 y InfoEnvio y Pedido intactos", async () => {
+    it("PUT /estado-envio con un usuario inexistente -> 500, InfoEnvio e historial sin cambios y el pedido sin modificar", async () => {
       const { pedido } = await pedidoEn("EN_PREPARACION");
       const infoAntes = await prisma.infoEnvio.findUnique({ where: { pedidoId: pedido.id } });
 
@@ -431,7 +436,7 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
       assert.equal((await historialDe(pedido.id)).length, 2);
     });
 
-    it("PATCH /estado a un estado de envío con un usuario inexistente -> 500 y nada cambia", async () => {
+    it("PATCH /estado a un estado de envío con un usuario inexistente -> 500, InfoEnvio e historial sin cambios y el pedido sin modificar", async () => {
       const { pedido } = await pedidoEn("EN_PREPARACION");
 
       const r = await sinLogs(() => patchEstado(pedido.id, "ENVIADO", fantasma()));
@@ -478,7 +483,10 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
       }
       const fechas = r.body.historial.map((h) => new Date(h.creadoEn).getTime());
       assert.deepEqual(fechas, [...fechas].sort((a, b) => a - b));
-      // Ni id, ni nombre, ni correo del personal en ninguna parte de la respuesta.
+      // La aserción de claves exactas de cada entrada ya garantiza que no hay
+      // `usuario` (ni su id ni su nombre) en el historial. Además, en toda la
+      // respuesta no aparece ninguna clave "usuario*" ni el correo del personal
+      // (no se afirma nada del texto del nombre: "Test admin" es genérico).
       const texto = JSON.stringify(r.body);
       for (const persona of [admin, vendedor]) {
         const fila = await prisma.usuario.findUnique({ where: { id: persona.id } });
@@ -486,6 +494,45 @@ describe("Historial de estados de envío (RF-028, RF-029)", () => {
       }
       assert.ok(!texto.includes("usuario"), texto);
       assert.ok(!texto.includes("passwordHash"));
+    });
+
+    // Carrera determinista: el pedido y su historial se leen de un mismo
+    // snapshot (transacción de solo lectura, REPEATABLE READ). Se intercala un
+    // cambio de envío ya confirmado ENTRE las dos lecturas (espiando la segunda,
+    // listarHistorial): con dos queries sueltas la respuesta diría
+    // estadoEnvio EN_PREPARACION con un historial que ya termina en ENVIADO.
+    it("pedido e historial salen del mismo snapshot: un cambio confirmado entre las dos lecturas no se mezcla", async () => {
+      const { pedido, cliente } = await pedidoEn("EN_PREPARACION");
+      const original = envioRepository.listarHistorial;
+      let disparado = false;
+      const espia = mock.method(envioRepository, "listarHistorial", async function (...args) {
+        if (!disparado) {
+          disparado = true;
+          assert.equal((await avanzar(pedido.id, "ENVIADO", admin)).status, 200);
+        }
+        return original.apply(this, args);
+      });
+
+      let durante;
+      try {
+        durante = await seguimiento(pedido.id, cliente);
+      } finally {
+        espia.mock.restore();
+      }
+
+      assert.equal(disparado, true, "el espía no llegó a intercalar el cambio");
+      assert.equal(durante.status, 200, JSON.stringify(durante.body));
+      assert.equal(durante.body.estadoEnvio, "EN_PREPARACION");
+      assert.deepEqual(
+        durante.body.historial.map((h) => h.estadoNuevo),
+        ["EN_PREPARACION"],
+        "el historial incluye un cambio posterior al estado que muestra la respuesta"
+      );
+
+      // Una lectura nueva ya ve el cambio completo y coherente.
+      const despues = await seguimiento(pedido.id, cliente);
+      assert.equal(despues.body.estadoEnvio, "ENVIADO");
+      assert.equal(despues.body.historial.at(-1).estadoNuevo, "ENVIADO");
     });
 
     it("admin y vendedor ven el usuario de cada cambio ({ id, nombre } y nada más)", async () => {

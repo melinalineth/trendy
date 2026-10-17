@@ -703,8 +703,8 @@ async function listarPedidos(usuario, filtros = {}) {
 
 // Pedido completo visible para `usuario` o PedidoNoEncontradoError (uno
 // ajeno responde igual que uno inexistente, RN-003 / DDS §5.2).
-async function obtenerVisible(pedidoId, usuario) {
-  const pedido = await pedidoRepository.obtenerPorId(pedidoId);
+async function obtenerVisible(pedidoId, usuario, client = prisma) {
+  const pedido = await pedidoRepository.obtenerPorId(pedidoId, client);
 
   if (!pedido || (!esPersonal(usuario) && Number(pedido.usuarioId) !== Number(usuario.id))) {
     throw new PedidoNoEncontradoError();
@@ -892,9 +892,9 @@ function presentarSeguimiento(pedido, historial) {
 // SOLO el personal, y únicamente { id, nombre }: el cliente dueño ve estados y
 // fechas, nunca la identidad de quien atiende su pedido, y a nadie se le
 // expone correo ni datos sensibles (el repository no los selecciona).
-async function cargarHistorial(infoEnvioId, usuario) {
+async function cargarHistorial(infoEnvioId, usuario, client = prisma) {
   const conUsuario = esPersonal(usuario);
-  const filas = await envioRepository.listarHistorial(infoEnvioId, { conUsuario });
+  const filas = await envioRepository.listarHistorial(infoEnvioId, { conUsuario }, client);
 
   return filas.map((fila) => ({
     estadoAnterior: fila.estadoAnterior,
@@ -902,6 +902,25 @@ async function cargarHistorial(infoEnvioId, usuario) {
     creadoEn: fila.creadoEn,
     ...(conUsuario ? { usuario: { id: fila.usuario.id, nombre: fila.usuario.nombre } } : {}),
   }));
+}
+
+// Seguimiento completo (pedido + historial) visible para `usuario`. El pedido
+// y el historial son DOS consultas, así que se leen dentro de una transacción
+// de solo lectura: MySQL/MariaDB (InnoDB) trabaja en REPEATABLE READ por
+// defecto y el snapshot se toma en la primera lectura, de modo que un cambio
+// de envío confirmado entre las dos no se mezcla (estadoEnvio X con un
+// historial que ya termina en Y). Sin locks: no bloquea a quien escribe.
+// Lo comparten GET /seguimiento y la respuesta de PUT /estado-envio.
+async function leerSeguimiento(pedidoId, usuario) {
+  return prisma.$transaction(async (tx) => {
+    const pedido = await obtenerVisible(pedidoId, usuario, tx);
+
+    if (!pedido.infoEnvio) {
+      throw new EnvioNoRegistradoError(404);
+    }
+
+    return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario, tx));
+  }, OPCIONES_TRANSACCION);
 }
 
 /**
@@ -939,9 +958,7 @@ async function actualizarEstadoEnvio(pedidoId, estadoEnvio, usuario) {
     await pedidoRepository.actualizarEstado(pedidoId, estadoEnvio, tx);
   });
 
-  const pedido = await pedidoRepository.obtenerPorId(pedidoId);
-
-  return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario));
+  return leerSeguimiento(pedidoId, usuario);
 }
 
 /**
@@ -952,13 +969,7 @@ async function actualizarEstadoEnvio(pedidoId, estadoEnvio, usuario) {
  * hizo cada cambio (RF-029).
  */
 async function obtenerSeguimiento(pedidoId, usuario) {
-  const pedido = await obtenerVisible(pedidoId, usuario);
-
-  if (!pedido.infoEnvio) {
-    throw new EnvioNoRegistradoError(404);
-  }
-
-  return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario));
+  return leerSeguimiento(pedidoId, usuario);
 }
 
 module.exports = {
