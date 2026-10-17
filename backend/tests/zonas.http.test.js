@@ -194,7 +194,7 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       ["costo cero", bodyZona(0)],
       ["costo texto", bodyZona("abc")],
       ["costo numérico como string", bodyZona("15000")],
-      ["costo con más de 2 decimales", bodyZona(1.005)],
+      ["costo no entero (1.005)", bodyZona(1.005)],
       ["costo con centavos (8500.50)", bodyZona(8500.5)],
       ["costo con un solo centavo (0.01)", bodyZona(0.01)],
       ["costo menor que un peso (0.5)", bodyZona(0.5)],
@@ -203,7 +203,7 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       // "entero >= 1" queda cerrado por construcción; el caso se conserva como
       // regresión.
       ["costo positivo que se redondea a 0.00 (1e-8)", bodyZona(1e-8)],
-      ["costo por debajo del mínimo (0.004)", bodyZona(0.004)],
+      ["costo no entero (0.004)", bodyZona(0.004)],
       ["costo sobre el tope", bodyZona(1000000.01)],
       ["costo infinito (JSON lo serializa como null)", bodyZona(Infinity)],
     ];
@@ -341,7 +341,7 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       ["costo negativo", { costo: -1 }],
       ["costo cero", { costo: 0 }],
       ["costo texto", { costo: "abc" }],
-      ["costo con 3 decimales", { costo: 10.123 }],
+      ["costo no entero (10.123)", { costo: 10.123 }],
       ["costo con centavos (2000.25)", { costo: 2000.25 }],
       ["costo menor que un peso (0.5)", { costo: 0.5 }],
       ["costo positivo que se redondea a 0.00 (1e-8)", { costo: 1e-8 }],

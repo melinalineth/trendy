@@ -60,7 +60,26 @@ La regla valida lo que se **carga de ahora en más**. No se migran ni se redonde
   409 `MONTO_NO_ENTERO_COP`. `pedido.service.crearPedido` no se tocó: el alcance acordado fue solo
   el pago. Si en producción existen pedidos pendientes así, hay que corregirlos o cancelarlos a
   mano. El pago contra entrega no se ve afectado.
-- Mismo efecto hacia adelante: mientras un producto con precio decimal no se corrija, un pedido
-  nuevo con ese producto se crea bien (copia el precio vigente) pero no se podrá pagar con Mercado
-  Pago. Conviene revisar el catálogo existente (`precio` con centavos) antes de habilitar pagos
-  reales.
+- Mismo efecto hacia adelante: mientras un producto con precio decimal (o una tarifa vigente con
+  centavos) no se corrija, el pedido nuevo **se crea y reserva stock** (copia el precio y el envío
+  vigentes) pero **no se puede pagar con Mercado Pago**: 409 `MONTO_NO_ENTERO_COP`. No hay salida
+  por contra entrega, porque `registrarContraEntrega` exige que el pedido se haya creado con
+  `metodoPago = CONTRA_ENTREGA`. El cliente tiene que comunicarse con la tienda (el frontend lo
+  informa y no ofrece reintentar) y el stock vuelve cuando el pedido vence o se cancela.
+
+### Revisión previa a habilitar pagos reales
+
+**Antes** de habilitar pagos reales hay que revisar el catálogo y las tarifas existentes con
+consultas de solo lectura (nombres de tabla y columna según `backend/prisma/schema.prisma`; sin
+`@@map`, la tabla se llama como el modelo):
+
+```sql
+-- Productos con precio con centavos
+SELECT id, nombre, precio FROM Producto WHERE precio <> FLOOR(precio);
+
+-- Tarifas de envío con centavos
+SELECT id, zonaCoberturaId, costo, estado FROM TarifaEnvio WHERE costo <> FLOOR(costo);
+```
+
+Cada fila devuelta se corrige desde la administración (editar el producto / cambiar la tarifa),
+que ya exige enteros.
