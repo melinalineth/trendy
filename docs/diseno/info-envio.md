@@ -12,7 +12,8 @@ error); ERS v1.2 (RF-027, RF-028, RF-029, matriz de roles 4.1, estados 4.2).
 | --- | --- |
 | Validación de transiciones (`validarTransicionEstado`) | Implementada y testeada en `backend/src/services/envio.service.js` (función pura). |
 | Modelo `InfoEnvio` y enum `EstadoEnvio` | **No existen en `sprint-3`** (decisión de la tarjeta: no se crea el modelo hasta que exista `Pedido`). **Ya están en `sprint-4`** (`backend/prisma/schema.prisma`), con los campos de esta propuesta. |
-| Endpoints `PUT .../estado-envio` y `GET .../seguimiento` | Sin implementar: cuelgan de `/pedidos/:id`, y `Pedido` (MOD-06) llega en Sprint 4. DDS §4.1: `Pedido (1)───(1) InfoEnvio`. |
+| Endpoints `PUT .../estado-envio` y `GET .../seguimiento` | Sin implementar: cuelgan de `/pedidos/:id`, y `Pedido` (MOD-06) llega en Sprint 4. DDS §4.1: `Pedido (1)───(1) InfoEnvio`. **Ya implementados en `sprint-4`** (`pedido.routes.js`). |
+| Modelo `HistorialEstadoEnvio` | **Ya existe en `sprint-4`** (RF-028 y RF-029): ver sección 5. |
 
 Por eso RF-027/028/029 no se pueden cerrar de punta a punta en Sprint 3: esta entrega deja el
 diseño y la regla de negocio (la parte que no depende de `Pedido`).
@@ -127,19 +128,30 @@ formatea como `{ error: { codigo, mensaje, detalles } }` (DDS §5.3) sin registr
 
 - Cliente: solo pedidos propios; uno ajeno responde 404 (DDS §5.2 "recurso no encontrado o sin
   acceso del usuario", mismo criterio que direcciones, RN-003). Admin/vendedor: cualquiera.
-- Devuelve el estado actual de envío y su fecha/hora (`actualizadoEn`), más el historial de
-  estados cuando exista (ver sección 5).
+- Devuelve el estado actual de envío y su fecha/hora (`actualizadoEn`), más el arreglo
+  `historial` de cambios de estado (ver sección 5). Forma de cada entrada, del cambio más
+  antiguo al más reciente (a igual fecha y hora, por `id`):
+  - **Cliente dueño:** `{ estadoAnterior, estadoNuevo, creadoEn }`. No ve quién hizo el cambio.
+  - **Admin / vendedor:** lo mismo más `usuario: { id, nombre }`. Nunca se expone el correo ni
+    otros datos del usuario.
+  - `estadoAnterior` es `null` en la primera entrada (el alta del pedido). Un envío anterior a
+    la tabla de historial devuelve `historial: []` (el estado actual y `actualizadoEn` siguen
+    en la respuesta).
+  - La respuesta de `PUT .../estado-envio` (solo personal) trae el mismo `historial`, con
+    usuario.
 
 ## 5. Reglas por requisito y brechas detectadas
 
 | Requisito | Qué cubre `InfoEnvio` | Brecha |
 | --- | --- | --- |
 | RF-027 Registro de información de envío | Dirección (`direccionId`), costo (`costoEnvio`), asociación al pedido (`pedidoId` único). Contacto vía `Direccion`. | Ninguna de fondo; ver riesgo del snapshot de dirección en la sección 2. |
-| RF-028 Seguimiento | Estado actual y fecha/hora del último cambio. | **Historial de estados**: ERS pide "historial de estados" con fecha y hora por cambio; `InfoEnvio` solo guarda el último (`actualizadoEn`). |
-| RF-029 Actualización | Estados predefinidos (`EstadoEnvio`) y control de roles. | **Usuario que cambia**: ERS pide registrar "usuario, fecha y hora" de cada modificación; no hay dónde guardar el usuario. **Notificación al cliente**: depende de RF-040, diferido (ERS: "requiere infraestructura adicional"). |
+| RF-028 Seguimiento | Estado actual y fecha/hora del último cambio (`InfoEnvio`) e historial de cambios con fecha y hora (`HistorialEstadoEnvio`). | **Cerrada.** El seguimiento devuelve `historial` (sección 4). |
+| RF-029 Actualización | Estados predefinidos (`EstadoEnvio`), control de roles y usuario, fecha y hora de cada cambio (`HistorialEstadoEnvio`). | **Usuario que cambia: cerrada.** **Notificación al cliente**: depende de RF-040, diferido a v2.0 (ERS: "requiere infraestructura adicional"). |
 
-Propuesta para cubrir historial y autoría en Sprint 4 (o v2.0, junto con `Auditoria`, que el
-DDS ya difiere a la v2.0), sin tocar `InfoEnvio`:
+### Historial de estados de envío (implementado en Sprint 4)
+
+La tabla `HistorialEstadoEnvio` **ya existe** en `backend/prisma/schema.prisma` (migración
+`20261018120000_add_historial_estado_envio`) y se agregó sin tocar `InfoEnvio`:
 
 ```prisma
 model HistorialEstadoEnvio {
@@ -149,11 +161,49 @@ model HistorialEstadoEnvio {
   estadoNuevo    EstadoEnvio
   usuarioId      Int                        // quién hizo el cambio (RF-029)
   creadoEn       DateTime     @default(now())
+
+  infoEnvio InfoEnvio @relation(fields: [infoEnvioId], references: [id], onDelete: Restrict)
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([infoEnvioId, creadoEn])
 }
 ```
 
-El service escribiría el historial y actualizaría `InfoEnvio` en una misma `prisma.$transaction`.
-Esta tabla es solo una propuesta: no se agregó al schema en esta entrega.
+El historial y el cambio de `InfoEnvio` (y de `Pedido.estado`) se escriben en la **misma
+transacción** y bajo el mismo lock del pedido (`envioService.crearInfoEnvio` para el alta y
+`envioService.cambiarEstadoEnvio` para los cambios). Si falla el insert del historial, no cambia
+nada.
+
+**Quién escribe una fila** (los tres únicos sitios que modifican `InfoEnvio.estadoEnvio`):
+
+| Sitio | Fila | Usuario |
+| --- | --- | --- |
+| Alta del pedido (`POST /api/v1/pedidos`) | `null -> EN_PREPARACION` | El cliente que crea el pedido. |
+| `PUT /api/v1/pedidos/:id/estado-envio` | `anterior -> nuevo` | El admin o vendedor de la sesión. |
+| `PATCH /api/v1/pedidos/:id/estado` con un estado de envío (`ENVIADO`, `EN_TRANSITO`, `ENTREGADO`) | `anterior -> nuevo` | El admin o vendedor de la sesión. |
+
+No escriben fila: un cambio rechazado por `validarTransicionEstado` (salto, retroceso, mismo
+estado), `PATCH /estado` a `EN_PREPARACION` (el `InfoEnvio` ya nace en ese estado y no cambia),
+la cancelación, la cancelación de vencidos y el webhook de pagos (ninguno toca `InfoEnvio`).
+
+Decisiones:
+
+- **`usuarioId` es obligatorio (NOT NULL).** Ningún cambio de envío lo dispara el sistema sin un
+  usuario: cancelar, vencer y el webhook de pagos solo modifican `Pedido.estado`. Si algún día un
+  proceso automático moviera el envío (p. ej. un scheduler que marque `ENTREGADO`), habría que
+  volver `usuarioId` opcional (`NULL` = sistema) en una migración nueva.
+- **Sin backfill.** Los `InfoEnvio` existentes al migrar no reciben fila: no hay datos reales de
+  quién ni cuándo cambió cada uno, y inventarlos (por ejemplo con `actualizadoEn` y un usuario
+  ficticio) falsearía el registro. El seguimiento devuelve para ellos `historial: []`, con el
+  estado actual y `actualizadoEn` como respaldo. Solo los cambios posteriores a la migración
+  quedan registrados.
+- **Foreign keys `ON DELETE RESTRICT`, explícito y sin cascade.** El historial es el registro de
+  quién hizo qué: no se borra con el `InfoEnvio` ni deja borrar al usuario que lo respalda.
+- **Visibilidad por rol.** El cliente dueño ve estados y fechas; **no** ve la identidad del
+  personal. Admin y vendedor ven además `usuario: { id, nombre }` (nunca el correo ni el hash).
+- **Índice `(infoEnvioId, creadoEn)`** para leer el historial de un envío en orden cronológico.
+- **Auditoría general** (`Auditoria`, DDS §6.5) sigue diferida a v2.0: esta tabla cubre solo el
+  envío.
 
 ## 6. Cómo la consume Sprint 4
 
