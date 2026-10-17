@@ -25,6 +25,8 @@ model Usuario {
   movimientosInventario InventarioMovimiento[]
   carrito              Carrito?
   pedidos              Pedido[]
+  ventasComoCliente    Venta[]               @relation("VentaCliente")
+  ventasGestionadas    Venta[]               @relation("VentaResponsable")
 }
 
 enum EstadoUsuario {
@@ -180,6 +182,7 @@ model Pedido {
   detalles DetallePedido[]
   pago Pago?
   infoEnvio InfoEnvio?
+  venta Venta?
 }
 
 model DetallePedido {
@@ -247,6 +250,45 @@ enum EstadoEnvio {
   ENVIADO
   EN_TRANSITO
   ENTREGADO
+}
+
+// Sprint 5 / MOD-08 (RF-041, RN-008, ERS 4.12): registro de venta. Una venta
+// nace cuando un pedido queda CONFIRMADO. subtotal, costoEnvio y total se
+// COPIAN del pedido (historial, no se recalculan); productos, cantidades y
+// valores NO se duplican: salen de DetallePedido. pedidoId @unique es la
+// garantía a nivel de base de que una venta no se registra dos veces. Una
+// venta nunca se borra: si el pedido se cancela pasa a ANULADA (anuladaEn).
+// responsableId es NULL cuando la dispara el webhook de Mercado Pago (sin
+// usuario) y guarda al admin/vendedor en un cambio manual de estado.
+// Decisión v1.0: admin y vendedores ven TODAS las ventas; las "ventas
+// asignadas" a un vendedor quedan para una versión posterior (por eso no hay
+// modelo de asignaciones). pedido y cliente son RESTRICT (no se puede borrar
+// un pedido o un usuario con ventas); responsable, al ser opcional, usa el
+// default de Prisma ON DELETE SET NULL.
+enum EstadoVenta {
+  REGISTRADA
+  ANULADA
+}
+
+model Venta {
+  id            Int         @id @default(autoincrement())
+  pedidoId      Int         @unique
+  clienteId     Int
+  responsableId Int?
+  subtotal      Decimal     @db.Decimal(10,2)
+  costoEnvio    Decimal     @db.Decimal(10,2)
+  total         Decimal     @db.Decimal(10,2)
+  metodoPago    MetodoPago
+  estado        EstadoVenta @default(REGISTRADA)
+  registradaEn  DateTime    @default(now())
+  anuladaEn     DateTime?
+
+  pedido      Pedido   @relation(fields: [pedidoId], references: [id])
+  cliente     Usuario  @relation("VentaCliente", fields: [clienteId], references: [id])
+  responsable Usuario? @relation("VentaResponsable", fields: [responsableId], references: [id])
+
+  @@index([registradaEn])
+  @@index([estado, registradaEn])
 }
 
 // Sprint 3 / MOD-04 (RF-018, RF-021): carrito de compras. Un usuario tiene
