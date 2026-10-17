@@ -1,7 +1,11 @@
 -- Sprint 5 (RF-041, RN-008, ERS 4.12): registro de ventas. Agrega la tabla Venta
--- (una por pedido, pedidoId UNIQUE) y el enum de estado (REGISTRADA / ANULADA
--- como ENUM de columna). Generada con `prisma migrate dev --create-only`; solo
--- se agregó el backfill del final. No modifica tablas existentes.
+-- (una por pedido, pedidoId UNIQUE) y su estado (REGISTRADA / ANULADA como ENUM
+-- de columna), con sus índices y FKs (los tres RESTRICT). SOLO DDL, generado con
+-- `prisma migrate diff` desde el schema de sprint-4: no modifica tablas
+-- existentes. El backfill de ventas va aparte, en la migración siguiente
+-- (backfill_ventas): en MySQL el DDL hace commit implícito y Prisma no envuelve
+-- el archivo en una transacción, así que mezclarlos dejaría la migración a
+-- medias si el INSERT fallara.
 
 -- CreateTable
 CREATE TABLE `Venta` (
@@ -30,20 +34,4 @@ ALTER TABLE `Venta` ADD CONSTRAINT `Venta_pedidoId_fkey` FOREIGN KEY (`pedidoId`
 ALTER TABLE `Venta` ADD CONSTRAINT `Venta_clienteId_fkey` FOREIGN KEY (`clienteId`) REFERENCES `Usuario`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Venta` ADD CONSTRAINT `Venta_responsableId_fkey` FOREIGN KEY (`responsableId`) REFERENCES `Usuario`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-
--- Backfill: una venta REGISTRADA por cada pedido que ya estaba confirmado, con
--- los montos, el método de pago, el cliente y la fecha COPIADOS del pedido
--- (registradaEn = Pedido.creadoEn: es la única fecha que hay). Estados que
--- cuentan como confirmados: CONFIRMADO, EN_PREPARACION, ENVIADO, EN_TRANSITO y
--- ENTREGADO. Quedan afuera PENDIENTE y CANCELADO (nunca generaron venta) y los
--- estados de pago PAGO_APROBADO, PAGO_RECHAZADO y PAGO_PENDIENTE (legados: el
--- flujo vigente no los produce; un PAGO_APROBADO pasa a CONFIRMADO y ahí nace su
--- venta). responsableId queda NULL (no se sabe quién confirmó). Corre UNA sola
--- vez, dentro de esta migración, y NO es idempotente a propósito: si se
--- repitiera, el UNIQUE de pedidoId lo rechazaría en lugar de duplicar ventas.
--- Es seguro en una base vacía (no inserta nada).
-INSERT INTO `Venta` (`pedidoId`, `clienteId`, `subtotal`, `costoEnvio`, `total`, `metodoPago`, `estado`, `registradaEn`)
-SELECT `id`, `usuarioId`, `subtotal`, `costoEnvio`, `total`, `metodoPago`, 'REGISTRADA', `creadoEn`
-FROM `Pedido`
-WHERE `estado` IN ('CONFIRMADO', 'EN_PREPARACION', 'ENVIADO', 'EN_TRANSITO', 'ENTREGADO');
+ALTER TABLE `Venta` ADD CONSTRAINT `Venta_responsableId_fkey` FOREIGN KEY (`responsableId`) REFERENCES `Usuario`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
