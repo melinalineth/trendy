@@ -5,6 +5,11 @@ const { z } = require("zod");
 // refuerza en producto.service (defensa en profundidad, mismo criterio que
 // vendedor.service revalidando el estado aunque el controller ya filtró
 // casos obvios).
+// Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): el precio además
+// es ENTERO (sin centavos), porque Mercado Pago solo acepta montos enteros en
+// COP. La columna sigue siendo DECIMAL(10, 2).
+const MENSAJE_PRECIO_ENTERO = "El precio debe ser un valor entero en pesos (COP), sin centavos";
+
 const crearProductoSchema = z.object({
   nombre: z
     .string({ error: "El nombre es requerido" })
@@ -16,6 +21,7 @@ const crearProductoSchema = z.object({
     .min(1, "La descripción es requerida"),
   precio: z
     .number({ error: "El precio es requerido" })
+    .int(MENSAJE_PRECIO_ENTERO)
     .positive("El precio debe ser mayor a 0"),
   categoriaId: z
     .number({ error: "La categoría es requerida" })
@@ -31,7 +37,11 @@ const actualizarProductoSchema = z.object({
     .trim()
     .min(1, "La descripción no puede estar vacía")
     .optional(),
-  precio: z.number().positive("El precio debe ser mayor a 0").optional(),
+  precio: z
+    .number()
+    .int(MENSAJE_PRECIO_ENTERO)
+    .positive("El precio debe ser mayor a 0")
+    .optional(),
   categoriaId: z.number().int("La categoría es inválida").optional(),
 });
 

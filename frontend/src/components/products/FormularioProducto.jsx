@@ -85,6 +85,16 @@ function FormularioProducto({ producto = null, onGuardado }) {
       return;
     }
 
+    // Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): Mercado Pago
+    // solo acepta montos enteros en COP. Mismo criterio que el backend
+    // (producto.dto.js).
+    if (!Number.isInteger(precioNumerico)) {
+      setErrorFormulario(
+        "El precio debe ser un valor entero en pesos (COP), sin centavos.",
+      );
+      return;
+    }
+
     const body = {
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
@@ -152,7 +162,8 @@ function FormularioProducto({ producto = null, onGuardado }) {
         <Input
           type="number"
           name="precio"
-          placeholder="0.00"
+          step="1"
+          placeholder="ej. 49900"
           value={precio}
           onChange={(event) => setPrecio(event.target.value)}
         />

@@ -99,7 +99,7 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
 
   describe("POST /api/v1/zonas-cobertura", () => {
     it("crea la zona con su tarifa inicial -> 201", async () => {
-      const body = bodyZona(8500.5);
+      const body = bodyZona(8500);
       const r = await api("POST", "/api/v1/zonas-cobertura", { token: admin.token, body });
 
       assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -111,13 +111,35 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       assert.equal(r.body.ciudad, body.ciudad);
       assert.equal(r.body.estado, "ACTIVO");
       assert.equal(typeof r.body.tarifaActiva.id, "number");
-      assert.equal(r.body.tarifaActiva.costo, 8500.5);
+      assert.equal(r.body.tarifaActiva.costo, 8500);
       assert.equal(r.body.tarifaActiva.estado, "ACTIVO");
 
       const tarifas = await tarifasDeZona(r.body.id);
       assert.equal(tarifas.length, 1);
       assert.equal(tarifas[0].estado, "ACTIVO");
-      assert.equal(Number(tarifas[0].costo), 8500.5);
+      assert.equal(Number(tarifas[0].costo), 8500);
+    });
+
+    // Regla "COP en pesos enteros" (docs/diseno/montos-cop.md): la tarifa se
+    // carga sin centavos. El mínimo es 1 peso y el tope se mantiene.
+    it("acepta los extremos válidos: 1 peso y el tope (1.000.000)", async () => {
+      for (const costo of [1, 1000000]) {
+        const { zona } = await crearZonaApi(costo);
+        assert.equal(zona.tarifaActiva.costo, costo);
+        assert.equal(Number((await tarifasDeZona(zona.id))[0].costo), costo);
+      }
+    });
+
+    it("un costo con centavos se rechaza con el mensaje de pesos enteros", async () => {
+      const r = await api("POST", "/api/v1/zonas-cobertura", {
+        token: admin.token,
+        body: bodyZona(8500.5),
+      });
+
+      assertErrorEstandar(r, 400, "VALIDACION_FALLIDA");
+      assert.deepEqual(r.body.error.detalles, [
+        "tarifa.costo debe ser un valor entero en pesos (COP), sin centavos",
+      ]);
     });
 
     it("recorta los espacios de nombre, departamento y ciudad", async () => {
@@ -173,8 +195,13 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       ["costo texto", bodyZona("abc")],
       ["costo numérico como string", bodyZona("15000")],
       ["costo con más de 2 decimales", bodyZona(1.005)],
+      ["costo con centavos (8500.50)", bodyZona(8500.5)],
+      ["costo con un solo centavo (0.01)", bodyZona(0.01)],
+      ["costo menor que un peso (0.5)", bodyZona(0.5)],
       // Un valor positivo pero minúsculo pasaba la tolerancia de decimales y
-      // MySQL lo guardaba como DECIMAL(10,2) = 0.00 (tarifa en cero).
+      // MySQL lo guardaba como DECIMAL(10,2) = 0.00 (tarifa en cero). Con
+      // "entero >= 1" queda cerrado por construcción; el caso se conserva como
+      // regresión.
       ["costo positivo que se redondea a 0.00 (1e-8)", bodyZona(1e-8)],
       ["costo por debajo del mínimo (0.004)", bodyZona(0.004)],
       ["costo sobre el tope", bodyZona(1000000.01)],
@@ -244,11 +271,11 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
 
       const r1 = await api("PUT", `/api/v1/zonas-cobertura/${zona.id}/tarifa`, {
         token: admin.token,
-        body: { costo: 2000.25 },
+        body: { costo: 2250 },
       });
       assert.equal(r1.status, 200, JSON.stringify(r1.body));
       assert.equal(r1.body.id, zona.id);
-      assert.equal(r1.body.tarifaActiva.costo, 2000.25);
+      assert.equal(r1.body.tarifaActiva.costo, 2250);
       assert.notEqual(r1.body.tarifaActiva.id, zona.tarifaActiva.id);
 
       const r2 = await api("PUT", `/api/v1/zonas-cobertura/${zona.id}/tarifa`, {
@@ -261,7 +288,7 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       assert.equal(tarifas.length, 3, "se conserva el historial (no se borra nada)");
       assert.deepEqual(tarifas.map((t) => [Number(t.costo), t.estado]), [
         [1000, "INACTIVO"],
-        [2000.25, "INACTIVO"],
+        [2250, "INACTIVO"],
         [3000, "ACTIVO"],
       ]);
     });
@@ -315,6 +342,10 @@ describe("Zonas de cobertura y tarifas (RF-026)", () => {
       ["costo cero", { costo: 0 }],
       ["costo texto", { costo: "abc" }],
       ["costo con 3 decimales", { costo: 10.123 }],
+      ["costo con centavos (2000.25)", { costo: 2000.25 }],
+      ["costo menor que un peso (0.5)", { costo: 0.5 }],
+      ["costo positivo que se redondea a 0.00 (1e-8)", { costo: 1e-8 }],
+      ["costo numérico como string", { costo: "2000" }],
       ["costo sobre el tope", { costo: 5000000 }],
     ]) {
       it(`${descripcion} -> 400 y no toca las tarifas`, async () => {
