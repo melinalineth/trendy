@@ -21,6 +21,7 @@ process.env.MERCADOPAGO_WEBHOOK_URL = "https://trendy.test/api/v1/pagos/mercadop
 
 const mercadopago = require("mercadopago");
 const pedidoRepository = require("../src/repositories/pedido.repository");
+const pagoService = require("../src/services/pago.service");
 const {
   prisma,
   iniciarServidor,
@@ -104,7 +105,7 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
     return crearPedido({
       usuarioId: usuario.id,
       direccionId: direccion.id,
-      lineas: [{ variante, cantidad: 2, precioUnitario: "19990.50" }],
+      lineas: [{ variante, cantidad: 2, precioUnitario: "19990.00" }],
       costoEnvio: 12000,
       metodoPago: "MERCADO_PAGO",
       ...opciones,
@@ -112,15 +113,17 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
   }
 
   // Envía un webhook firmado. `pago` es lo que devolverá el Payment.get
-  // mockeado (null = no se configura el mock).
+  // mockeado (null = no se configura el mock). `idQuery` agrega `?data.id=` a
+  // la URL, como lo manda Mercado Pago: es el id que entra en la firma.
   let contadorRequest = 0;
-  function webhook(dataId, { firma, body, sinFirma = false } = {}) {
+  function webhook(dataId, { firma, body, sinFirma = false, idQuery } = {}) {
     const requestId = `req-${++contadorRequest}`;
     const headers = { "x-request-id": requestId };
     if (!sinFirma) {
       headers["x-signature"] = firma ?? firmar(String(dataId), requestId);
     }
-    return api("POST", "/api/v1/pagos/mercadopago/webhook", {
+    const query = idQuery === undefined ? "" : `?data.id=${encodeURIComponent(idQuery)}`;
+    return api("POST", `/api/v1/pagos/mercadopago/webhook${query}`, {
       headers,
       body: body ?? { type: "payment", action: "payment.updated", data: { id: String(dataId) } },
     });
@@ -205,10 +208,10 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       assert.equal(body.notification_url, process.env.MERCADOPAGO_WEBHOOK_URL);
 
       const total = body.items.reduce((suma, i) => suma + i.unit_price * i.quantity, 0);
-      // 2 x 19990.50 + 12000 de envío: si el envío no viaja, Mercado Pago
+      // 2 x 19990 + 12000 de envío: si el envío no viaja, Mercado Pago
       // cobraría menos que Pedido.total y el webhook rechazaría el pago.
       assert.equal(total, Number(pedido.total));
-      assert.equal(total, 51981);
+      assert.equal(total, 51980);
       for (const item of body.items) {
         assert.equal(item.currency_id, "COP");
       }
@@ -217,7 +220,9 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
 
     describe("expiración de la preferencia (MERCADOPAGO_PREFERENCIA_HORAS)", () => {
       const HORA_MS = 60 * 60 * 1000;
-      const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$/;
+      // Formato de la documentación de Checkout Pro: milisegundos y offset de
+      // Colombia (-05:00, sin horario de verano), nunca el sufijo "Z".
+      const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}-05:00$/;
 
       // Crea una preferencia con la variable en `valor` (undefined = sin
       // definir) y devuelve el body que recibió el SDK + el instante del envío.
@@ -267,6 +272,9 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assert.match(body.expiration_date_to, ISO_8601);
         assert.match(body.date_of_expiration, ISO_8601);
         assert.equal(body.date_of_expiration, body.expiration_date_to);
+        for (const fecha of [body.expiration_date_from, body.expiration_date_to]) {
+          assert.ok(!fecha.endsWith("Z"), `${fecha} no debe terminar en Z`);
+        }
         const desde = Date.parse(body.expiration_date_from);
         const hasta = Date.parse(body.expiration_date_to);
         // Tolerancia de 1 s por el redondeo a ms y el tiempo del request.
@@ -277,6 +285,29 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
         assert.ok(hasta <= despues + horas * HORA_MS, body.expiration_date_to);
         assert.equal(hasta, creadoEn.getTime() + horas * HORA_MS);
       }
+
+      // Helper puro: misma fecha que el ISO en UTC pero escrita con la hora
+      // local de Colombia (UTC-5) y milisegundos.
+      describe("aIsoColombia (offset fijo -05:00)", () => {
+        it("resta 5 h al UTC y conserva los milisegundos", () => {
+          assert.equal(
+            pagoService.aIsoColombia(Date.UTC(2017, 1, 1, 17, 0, 0, 0)),
+            "2017-02-01T12:00:00.000-05:00"
+          );
+        });
+
+        it("cruza el día/mes/año hacia atrás (00:30 UTC del 1 de enero = 19:30 del 31 de diciembre)", () => {
+          assert.equal(
+            pagoService.aIsoColombia(new Date(Date.UTC(2026, 0, 1, 0, 30, 15, 7))),
+            "2025-12-31T19:30:15.007-05:00"
+          );
+        });
+
+        it("representa el MISMO instante que la fecha original", () => {
+          const ms = Date.UTC(2026, 9, 17, 23, 59, 59, 999);
+          assert.equal(Date.parse(pagoService.aIsoColombia(ms)), ms);
+        });
+      });
 
       it("pedido casi vencido: la preferencia vence con el pedido (creadoEn + horas), no a las 24 h de ahora", async () => {
         const anterior = process.env.MERCADOPAGO_PREFERENCIA_HORAS;
@@ -294,6 +325,7 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
           assert.equal(r.status, 200, JSON.stringify(r.body));
           const { body } = mockCrearPreferencia.mock.calls.at(-1).arguments[0];
           const limite = new Date(pedido.creadoEn).getTime() + 24 * HORA_MS;
+          assert.match(body.expiration_date_to, ISO_8601);
           assert.ok(Date.parse(body.expiration_date_to) <= limite, body.expiration_date_to);
           assert.equal(Date.parse(body.expiration_date_to), limite);
           assert.equal(body.date_of_expiration, body.expiration_date_to);
@@ -410,6 +442,96 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
 
       assertErrorEstandar(r, 502, "PASARELA_NO_DISPONIBLE");
+    });
+
+    // Defensa: fuentes no oficiales indican que Mercado Pago solo acepta montos
+    // enteros en COP (a confirmar en sandbox). Si un ítem trae centavos NO se
+    // llama a Mercado Pago: se corta antes con un error claro, sin tocar el
+    // pedido ni crear Pago.
+    describe("montos enteros en COP (MONTO_NO_ENTERO_COP)", () => {
+      async function assertSinEfectos(pedido) {
+        assert.equal(mockCrearPreferencia.mock.callCount(), 0);
+        assert.equal(await pagoEnBase(pedido.id), null);
+        const enBase = await prisma.pedido.findUnique({ where: { id: pedido.id } });
+        assert.equal(enBase.estado, "PENDIENTE");
+        assert.equal(enBase.total.toFixed(2), pedido.total.toFixed(2));
+      }
+
+      it("precio unitario histórico con centavos -> 409 que nombra el producto, sin llamar a Mercado Pago", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const { nombre } = await prisma.producto.findUnique({ where: { id: variante.productoId } });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 2, precioUnitario: "19990.50" }],
+          costoEnvio: 12000,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        assert.ok(r.body.error.mensaje.includes(nombre), r.body.error.mensaje);
+        assert.match(r.body.error.mensaje, /centavos/);
+        await assertSinEfectos(pedido);
+      });
+
+      it("un solo centavo alcanza (10000.01)", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 1, precioUnitario: "10000.01" }],
+          costoEnvio: 12000,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        await assertSinEfectos(pedido);
+      });
+
+      it("costo de envío con centavos (8500.50) -> 409 que nombra el costo de envío, sin llamar a Mercado Pago", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 1, precioUnitario: "20000.00" }],
+          costoEnvio: 8500.5,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        assert.match(r.body.error.mensaje, /Costo de envío/);
+        await assertSinEfectos(pedido);
+      });
+
+      it("precios y envío enteros (con decimales .00 en la base) siguen funcionando", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 3, precioUnitario: "19990.00" }],
+          costoEnvio: 8500,
+        });
+        mockCrearPreferencia.mock.mockImplementation(async () => ({
+          id: "pref-entera",
+          init_point: "https://mp.test/pref-entera",
+        }));
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        const { body } = mockCrearPreferencia.mock.calls[0].arguments[0];
+        assert.deepEqual(
+          body.items.map((i) => i.unit_price),
+          [19990, 8500]
+        );
+      });
     });
 
     it("líneas + envío que no suman Pedido.total -> 409 TOTAL_INCONSISTENTE y NO se llama a Mercado Pago", async () => {
@@ -951,6 +1073,147 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
 
       assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
       assert.equal(mockObtenerPago.mock.callCount(), 0);
+    });
+
+    // Documentación de Mercado Pago: el manifiesto de la firma usa el
+    // `data.id` de la QUERY STRING (`?data.id=...`), no el del body. Express 5
+    // (query parser "simple") entrega la clave literal req.query["data.id"].
+    describe("data.id de la query string (el id que se firma)", () => {
+      it("firma válida con el data.id en la query y el mismo id en el body -> 200", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9501, { idQuery: "9501" });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9501" });
+        assert.equal(await estadoPedido(pedido.id), "CONFIRMADO");
+      });
+
+      it("sin data.id en la query: usa el del body (compatibilidad)", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9502);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9502" });
+      });
+
+      it("query vacía o solo espacios: cae al body", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9503, { idQuery: "  " });
+
+        // La firma se calculó con el id del body (9503) y la query no cuenta.
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9503" });
+      });
+
+      // El WebhookSignatureValidator del SDK hace trim() del data.id antes de
+      // armar el manifest: lo que se consulta a Mercado Pago tiene que ser ese
+      // mismo valor recortado.
+      it("query con espacios alrededor y firma del id sin espacios -> 200 y Payment.get recibe el id recortado", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9508, { idQuery: " 9508 " });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9508" });
+        assert.equal((await pagoEnBase(pedido.id)).referenciaExterna, "9508");
+      });
+
+      it("query y body con ids distintos: manda la query (la firmada) y es la que se consulta a Mercado Pago", async () => {
+        const pedido = await pedidoDe(cliente);
+        mockObtenerPago.mock.mockImplementation(async ({ id }) =>
+          pagoMercadoPago(pedido, { id, status: "approved" })
+        );
+
+        const r = await webhook(9504, {
+          idQuery: "9504",
+          body: { type: "payment", data: { id: "7777" } },
+        });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        // El mismo id que se firmó es el que se consulta y el que se registra.
+        assert.deepEqual(mockObtenerPago.mock.calls[0].arguments[0], { id: "9504" });
+        assert.equal((await pagoEnBase(pedido.id)).referenciaExterna, "9504");
+      });
+
+      it("query y body con ids distintos, firma calculada con el id del BODY -> 401 y no se consulta a Mercado Pago", async () => {
+        const requestId = "req-firma-body";
+
+        const r = await api("POST", "/api/v1/pagos/mercadopago/webhook?data.id=9505", {
+          headers: { "x-request-id": requestId, "x-signature": firmar("7778", requestId) },
+          body: { type: "payment", data: { id: "7778" } },
+        });
+
+        assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+      });
+
+      it("firma inválida con el data.id en la query -> 401 y log WEBHOOK_FIRMA_RECHAZADA", async () => {
+        const firma = firmar("9506", "otro-request", "secreto-falso");
+
+        const { resultado: r, lineas } = await conLogs(() =>
+          webhook(9506, { idQuery: "9506", firma })
+        );
+
+        assertErrorEstandar(r, 401, "FIRMA_WEBHOOK_INVALIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+        assert.deepEqual(logDe(lineas, "WEBHOOK_FIRMA_RECHAZADA"), {
+          evento: "WEBHOOK_FIRMA_RECHAZADA",
+          motivo: "SignatureMismatch",
+        });
+        assertLogsSinSecretos(lineas, firma);
+      });
+
+      it("el body sigue exigiendo data.id aunque venga en la query -> 400", async () => {
+        const r = await webhook(9507, { idQuery: "9507", body: { type: "payment" } });
+
+        assertErrorEstandar(r, 400, "VALIDACION_FALLIDA");
+        assert.equal(mockObtenerPago.mock.callCount(), 0);
+      });
+
+      // Defensa por si el query parser pasa a "extended" (qs): el key
+      // `data.id` queda anidado como req.query.data.id.
+      it("query anidada (req.query.data.id) también se lee", async () => {
+        const mockProcesar = mock.method(pagoService, "procesarWebhook", async () => ({
+          recibido: true,
+          procesado: false,
+        }));
+        const { recibirWebhook } = require("../src/controllers/pago.controller");
+        const llamar = async (query) => {
+          const res = { status: () => res, json: () => res };
+          const req = {
+            query,
+            body: { type: "payment", data: { id: "1111" } },
+            get: () => "x",
+          };
+          await recibirWebhook(req, res);
+          return mockProcesar.mock.calls.at(-1).arguments[1].dataId;
+        };
+
+        try {
+          assert.equal(await llamar({ data: { id: "2222" } }), "2222");
+          // Literal gana a anidado; y sin ninguno de los dos, el body.
+          assert.equal(await llamar({ "data.id": "3333", data: { id: "2222" } }), "3333");
+          assert.equal(await llamar({ "data.id": ["4444", "5555"] }), "1111");
+          assert.equal(await llamar({}), "1111");
+        } finally {
+          mockProcesar.mock.restore();
+        }
+      });
     });
 
     it("notificación de otro tipo (no 'payment') con firma válida -> 200 sin procesar", async () => {

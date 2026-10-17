@@ -191,13 +191,15 @@ export function esUrlDeCheckoutValida(url) {
 }
 
 // Errores de la preferencia que no se arreglan reintentando el pago del mismo
-// pedido (venció, ya no está pendiente, se creó con otro método o su total no
-// cierra). El resto (pasarela caída, pagos sin configurar, red) sí.
+// pedido (venció, ya no está pendiente, se creó con otro método, su total no
+// cierra o trae un monto con centavos que Mercado Pago no acepta). El resto
+// (pasarela caída, pagos sin configurar, red) sí.
 const ERRORES_PAGO_DEFINITIVOS = Object.freeze([
   "PEDIDO_VENCIDO",
   "PEDIDO_NO_PENDIENTE",
   "METODO_PAGO_NO_COINCIDE",
   "TOTAL_INCONSISTENTE",
+  "MONTO_NO_ENTERO_COP",
 ]);
 
 export function sePuedeReintentarPago(error) {
@@ -231,6 +233,11 @@ export function mensajeErrorPreferencia(error) {
       return "Este pedido no se creó para pagar con Mercado Pago.";
     case "TOTAL_INCONSISTENTE":
       return "Hay una inconsistencia en el total del pedido. Comunicate con la tienda antes de pagar.";
+    // Un pedido de Mercado Pago no se puede pasar a contra entrega (el backend
+    // exige que el pedido se haya creado con ese método), por eso no se
+    // sugiere: el cliente tiene que hablar con la tienda.
+    case "MONTO_NO_ENTERO_COP":
+      return "Este pedido tiene un monto con centavos que Mercado Pago no acepta, así que no se puede pagar online. Comunicate con la tienda para resolverlo.";
     case "CONFIGURACION_PAGOS_INCOMPLETA":
       return "El pago online no está disponible por ahora. Probá de nuevo más tarde; en tus próximas compras también podés elegir pago contra entrega.";
     case "PASARELA_NO_DISPONIBLE":
