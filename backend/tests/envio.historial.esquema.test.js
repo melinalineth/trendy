@@ -290,12 +290,16 @@ describe("Esquema de HistorialEstadoEnvio (RF-028, RF-029)", () => {
       );
     });
 
-    it("es la última de la carpeta, así que el orden de aplicación sigue creciente al juntar las ramas", () => {
+    // Prisma aplica las migraciones por orden de nombre: con todas las carpetas
+    // bien formadas (14 dígitos) y sin timestamps repetidos, el orden de
+    // aplicación es estricto y no ambiguo. NO se exige que esta sea la última:
+    // las migraciones que lleguen después son válidas.
+    it("todas las carpetas de migración tienen un timestamp de 14 dígitos y ninguno se repite", () => {
       const lista = nombres();
-      const migracion = lista.find((n) => n.endsWith("_add_historial_estado_envio"));
 
-      assert.equal(lista.at(-1), migracion);
-      assert.deepEqual(lista, [...lista].sort());
+      for (const nombre of lista) {
+        assert.match(nombre, /^\d{14}_/, `${nombre} no empieza con un timestamp de 14 dígitos`);
+      }
       assert.equal(new Set(lista.map((n) => n.slice(0, 14))).size, lista.length, "timestamps repetidos");
     });
 
