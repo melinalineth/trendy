@@ -353,6 +353,20 @@ async function crearPreferencia(pedidoId, usuarioId) {
     });
   }
 
+  // Defensa: fuentes no oficiales (a confirmar en sandbox) indican que Mercado
+  // Pago solo acepta montos ENTEROS en COP. Un unit_price con centavos
+  // (precio histórico de un pedido viejo, o un costo de envío cargado antes de
+  // la regla "COP en pesos enteros") se corta acá, antes de llamar a la
+  // pasarela, con un error que dice qué línea es.
+  const lineaConCentavos = items.find((item) => aCentavos(item.unit_price) % 100 !== 0);
+  if (lineaConCentavos) {
+    throw new PagoInvalidoError(
+      `El monto de "${lineaConCentavos.title}" tiene centavos y Mercado Pago solo ` +
+        "acepta montos enteros en pesos (COP)",
+      "MONTO_NO_ENTERO_COP"
+    );
+  }
+
   // Lo que Mercado Pago va a cobrar tiene que ser EXACTAMENTE Pedido.total
   // (en centavos, sin errores de coma flotante): si no, el webhook rechazaría
   // el pago por monto distinto después de que el cliente ya pagó.

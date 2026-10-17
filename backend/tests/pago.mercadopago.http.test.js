@@ -105,7 +105,7 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
     return crearPedido({
       usuarioId: usuario.id,
       direccionId: direccion.id,
-      lineas: [{ variante, cantidad: 2, precioUnitario: "19990.50" }],
+      lineas: [{ variante, cantidad: 2, precioUnitario: "19990.00" }],
       costoEnvio: 12000,
       metodoPago: "MERCADO_PAGO",
       ...opciones,
@@ -208,10 +208,10 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       assert.equal(body.notification_url, process.env.MERCADOPAGO_WEBHOOK_URL);
 
       const total = body.items.reduce((suma, i) => suma + i.unit_price * i.quantity, 0);
-      // 2 x 19990.50 + 12000 de envío: si el envío no viaja, Mercado Pago
+      // 2 x 19990 + 12000 de envío: si el envío no viaja, Mercado Pago
       // cobraría menos que Pedido.total y el webhook rechazaría el pago.
       assert.equal(total, Number(pedido.total));
-      assert.equal(total, 51981);
+      assert.equal(total, 51980);
       for (const item of body.items) {
         assert.equal(item.currency_id, "COP");
       }
@@ -442,6 +442,96 @@ describe("Pagos con Mercado Pago (RF-034, RF-035, RF-036)", () => {
       const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
 
       assertErrorEstandar(r, 502, "PASARELA_NO_DISPONIBLE");
+    });
+
+    // Defensa: fuentes no oficiales indican que Mercado Pago solo acepta montos
+    // enteros en COP (a confirmar en sandbox). Si un ítem trae centavos NO se
+    // llama a Mercado Pago: se corta antes con un error claro, sin tocar el
+    // pedido ni crear Pago.
+    describe("montos enteros en COP (MONTO_NO_ENTERO_COP)", () => {
+      async function assertSinEfectos(pedido) {
+        assert.equal(mockCrearPreferencia.mock.callCount(), 0);
+        assert.equal(await pagoEnBase(pedido.id), null);
+        const enBase = await prisma.pedido.findUnique({ where: { id: pedido.id } });
+        assert.equal(enBase.estado, "PENDIENTE");
+        assert.equal(enBase.total.toFixed(2), pedido.total.toFixed(2));
+      }
+
+      it("precio unitario histórico con centavos -> 409 que nombra el producto, sin llamar a Mercado Pago", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const { nombre } = await prisma.producto.findUnique({ where: { id: variante.productoId } });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 2, precioUnitario: "19990.50" }],
+          costoEnvio: 12000,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        assert.ok(r.body.error.mensaje.includes(nombre), r.body.error.mensaje);
+        assert.match(r.body.error.mensaje, /centavos/);
+        await assertSinEfectos(pedido);
+      });
+
+      it("un solo centavo alcanza (10000.01)", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 1, precioUnitario: "10000.01" }],
+          costoEnvio: 12000,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        await assertSinEfectos(pedido);
+      });
+
+      it("costo de envío con centavos (8500.50) -> 409 que nombra el costo de envío, sin llamar a Mercado Pago", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 1, precioUnitario: "20000.00" }],
+          costoEnvio: 8500.5,
+        });
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assertErrorEstandar(r, 409, "MONTO_NO_ENTERO_COP");
+        assert.match(r.body.error.mensaje, /Costo de envío/);
+        await assertSinEfectos(pedido);
+      });
+
+      it("precios y envío enteros (con decimales .00 en la base) siguen funcionando", async () => {
+        const variante = await crearVariante({ stock: 10 });
+        const direccion = await crearDireccion(cliente.id);
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: direccion.id,
+          lineas: [{ variante, cantidad: 3, precioUnitario: "19990.00" }],
+          costoEnvio: 8500,
+        });
+        mockCrearPreferencia.mock.mockImplementation(async () => ({
+          id: "pref-entera",
+          init_point: "https://mp.test/pref-entera",
+        }));
+
+        const r = await api("POST", ruta, { token: cliente.token, body: { pedidoId: pedido.id } });
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        const { body } = mockCrearPreferencia.mock.calls[0].arguments[0];
+        assert.deepEqual(
+          body.items.map((i) => i.unit_price),
+          [19990, 8500]
+        );
+      });
     });
 
     it("líneas + envío que no suman Pedido.total -> 409 TOTAL_INCONSISTENTE y NO se llama a Mercado Pago", async () => {
