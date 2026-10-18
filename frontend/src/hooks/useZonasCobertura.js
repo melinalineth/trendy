@@ -10,6 +10,8 @@ const MENSAJE_ERROR_TARIFA =
   "No pudimos actualizar la tarifa. Intentá de nuevo.";
 const MENSAJE_ERROR_ESTADO =
   "No pudimos actualizar el estado de la zona. Intentá de nuevo.";
+const MENSAJE_ERROR_CONTRA_ENTREGA =
+  "No pudimos actualizar el pago contra entrega de la zona. Intentá de nuevo.";
 
 // Estado y acciones de la administración de zonas de cobertura (RF-026).
 //   - zonas/loading/error: carga de la lista (error = falló el listado).
@@ -136,6 +138,15 @@ export function useZonasCobertura() {
     [ejecutarMutacion],
   );
 
+  const cambiarContraEntrega = useCallback(
+    (id, permiteContraEntrega) =>
+      ejecutarMutacion(
+        () => zonaCoberturaService.actualizarContraEntrega(id, permiteContraEntrega),
+        MENSAJE_ERROR_CONTRA_ENTREGA,
+      ),
+    [ejecutarMutacion],
+  );
+
   return {
     zonas,
     loading,
@@ -146,6 +157,7 @@ export function useZonasCobertura() {
     crear,
     cambiarTarifa,
     cambiarEstado,
+    cambiarContraEntrega,
     limpiarErrorAccion,
   };
 }

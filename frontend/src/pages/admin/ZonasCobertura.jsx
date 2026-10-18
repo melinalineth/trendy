@@ -325,10 +325,54 @@ function ConfirmarDesactivar({ zona, onConfirmar, procesando, error }) {
   );
 }
 
+// Confirmación previa a deshabilitar el contra entrega: además de sacar la
+// opción del checkout, los pedidos contra entrega que ya existen en la zona y
+// todavía no registraron su pago dejan de poder registrarlo.
+function ConfirmarDeshabilitarContraEntrega({
+  zona,
+  onConfirmar,
+  procesando,
+  error,
+}) {
+  const contenedorRef = useRef(null);
+
+  useFocoEnCancelar(contenedorRef);
+
+  return (
+    <div ref={contenedorRef} className="zonas-form">
+      {error && (
+        <div role="alert" className="zonas-form__error-general">
+          <Alert type="error" message={error} />
+        </div>
+      )}
+
+      <p className="zonas-form__resumen">
+        ¿Deshabilitar el pago contra entrega en la zona{" "}
+        <strong>{zona.nombre}</strong> ({zona.ciudad}, {zona.departamento})? Los
+        clientes con una dirección en esa ciudad ya no podrán pagar así (el
+        sistema rechazará el pedido). Los pedidos contra entrega de la zona que
+        todavía no registraron su pago no podrán registrarlo: quedarán
+        pendientes, reteniendo su stock, hasta que alguien los cancele a mano.
+        Se puede volver a habilitar en cualquier momento.
+      </p>
+
+      <div className="zonas-form__acciones">
+        <Button
+          className="zonas-page__btn--peligro"
+          text={procesando ? "Deshabilitando..." : "Deshabilitar contra entrega"}
+          onClick={() => onConfirmar(zona)}
+          disabled={procesando}
+        />
+      </div>
+    </div>
+  );
+}
+
 // Administración de zonas de cobertura y tarifas de envío (RF-026), solo
 // admin. La tarjeta pide crear y ver; además se exponen cambiar tarifa y
 // activar/desactivar porque RF-026 los exige y el backend (PUT .../tarifa y
-// PATCH .../estado) ya los soporta.
+// PATCH .../estado) ya los soporta. El contra entrega (RF-037) nace
+// deshabilitado en cada zona: sin este control nadie podría pagar así.
 function ZonasCobertura() {
   const {
     zonas,
@@ -340,15 +384,20 @@ function ZonasCobertura() {
     crear,
     cambiarTarifa,
     cambiarEstado,
+    cambiarContraEntrega,
     limpiarErrorAccion,
   } = useZonasCobertura();
 
   // { tipo: "crear" } | { tipo: "tarifa", zona } | { tipo: "desactivar", zona }
+  // | { tipo: "deshabilitarContraEntrega", zona }
   const [modal, setModal] = useState(null);
   const [activandoId, setActivandoId] = useState(null);
+  const [habilitandoId, setHabilitandoId] = useState(null);
+  const [aviso, setAviso] = useState("");
 
   function abrirModal(nuevoModal) {
     limpiarErrorAccion();
+    setAviso("");
     setModal(nuevoModal);
   }
 
@@ -391,9 +440,32 @@ function ZonasCobertura() {
   }
 
   async function handleActivar(zona) {
+    setAviso("");
     setActivandoId(zona.id);
     await cambiarEstado(zona.id, "ACTIVO");
     setActivandoId(null);
+  }
+
+  // El aviso se arma después de la mutación: el hook recarga la lista siempre,
+  // así que solo se anuncia el éxito cuando el backend confirmó el cambio.
+  async function handleHabilitarContraEntrega(zona) {
+    setAviso("");
+    setHabilitandoId(zona.id);
+    const resultado = await cambiarContraEntrega(zona.id, true);
+    setHabilitandoId(null);
+
+    if (resultado.ok) {
+      setAviso(`Pago contra entrega habilitado en la zona ${zona.nombre}.`);
+    }
+  }
+
+  async function handleDeshabilitarContraEntrega(zona) {
+    const resultado = await cambiarContraEntrega(zona.id, false);
+
+    if (resultado.ok) {
+      setModal(null);
+      setAviso(`Pago contra entrega deshabilitado en la zona ${zona.nombre}.`);
+    }
   }
 
   const columns = [
@@ -421,6 +493,22 @@ function ZonasCobertura() {
         ),
     },
     {
+      key: "contraEntrega",
+      label: "Contra entrega",
+      render: (zona) =>
+        zona.permiteContraEntrega === true ? (
+          // Una zona inactiva no entra en el cálculo de cobertura: aunque esté
+          // marcada, no se puede comprar con contra entrega en ella.
+          zona.estado === "ACTIVO" ? (
+            <Badge text="Habilitado" type="success" />
+          ) : (
+            <Badge text="Habilitado (zona inactiva)" type="warning" />
+          )
+        ) : (
+          <Badge text="No habilitado" type="warning" />
+        ),
+    },
+    {
       key: "acciones",
       label: "Acciones",
       render: (zona) => (
@@ -431,6 +519,32 @@ function ZonasCobertura() {
             onClick={() => abrirModal({ tipo: "tarifa", zona })}
             disabled={procesando}
           />
+          {zona.permiteContraEntrega === true ? (
+            <Button
+              className="zonas-page__btn--secundario"
+              text="Deshabilitar contra entrega"
+              ariaLabel={`Deshabilitar contra entrega en la zona ${zona.nombre}`}
+              onClick={() =>
+                abrirModal({ tipo: "deshabilitarContraEntrega", zona })
+              }
+              disabled={procesando}
+            />
+          ) : (
+            <Button
+              text={
+                habilitandoId === zona.id
+                  ? "Habilitando..."
+                  : "Habilitar contra entrega"
+              }
+              ariaLabel={
+                habilitandoId === zona.id
+                  ? undefined
+                  : `Habilitar contra entrega en la zona ${zona.nombre}`
+              }
+              onClick={() => handleHabilitarContraEntrega(zona)}
+              disabled={procesando}
+            />
+          )}
           {zona.estado === "ACTIVO" ? (
             <Button
               className="zonas-page__btn--peligro"
@@ -454,6 +568,7 @@ function ZonasCobertura() {
     crear: "Nueva zona de cobertura",
     tarifa: "Cambiar tarifa de envío",
     desactivar: "Desactivar zona",
+    deshabilitarContraEntrega: "Deshabilitar contra entrega",
   };
 
   const hayError = Boolean(error);
@@ -467,6 +582,9 @@ function ZonasCobertura() {
       </div>
 
       <div aria-live="polite">
+        {aviso && (
+          <Alert type="success" message={aviso} onClose={() => setAviso("")} />
+        )}
         {errorAccion && !modal && <Alert type="error" message={errorAccion} />}
       </div>
 
@@ -508,6 +626,15 @@ function ZonasCobertura() {
           <ConfirmarDesactivar
             zona={modal.zona}
             onConfirmar={handleDesactivar}
+            procesando={procesando}
+            error={errorAccion}
+          />
+        )}
+
+        {modal?.tipo === "deshabilitarContraEntrega" && (
+          <ConfirmarDeshabilitarContraEntrega
+            zona={modal.zona}
+            onConfirmar={handleDeshabilitarContraEntrega}
             procesando={procesando}
             error={errorAccion}
           />
