@@ -65,13 +65,15 @@ describe("Service de ventas (RF-041)", () => {
       assert.ok(Object.isFrozen(ventaService.ESTADOS_QUE_CUENTAN));
     });
 
-    it("no exporta funciones para modificar o borrar ventas (solo registrar y anular)", () => {
-      const funciones = Object.entries(ventaService)
-        .filter(([, valor]) => typeof valor === "function" && !/Error$/.test(valor.name))
-        .map(([nombre]) => nombre)
-        .sort();
-
-      assert.deepEqual(funciones, ["anularVentaDePedido", "registrarVentaDePedido"]);
+    // No se compara el conjunto exacto de exports: las consultas del listado de
+    // ventas se suman a este módulo. Lo que no puede existir es modificar o borrar.
+    it("exporta registrar y anular, y NO funciones para modificar o borrar ventas", () => {
+      for (const nombre of ["registrarVentaDePedido", "anularVentaDePedido"]) {
+        assert.equal(typeof ventaService[nombre], "function", nombre);
+      }
+      for (const nombre of Object.keys(ventaService)) {
+        assert.doesNotMatch(nombre, /update|actualizar|delete|eliminar|borrar|remove/i, nombre);
+      }
     });
   });
 

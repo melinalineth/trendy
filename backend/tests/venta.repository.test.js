@@ -66,13 +66,15 @@ describe("Repository de ventas (RF-041)", () => {
     await limpiar();
   });
 
-  it("solo expone leer, registrar y anular: ni update ni delete (la historia no se modifica)", () => {
-    assert.deepEqual(Object.keys(ventaRepository).sort(), [
-      "anular",
-      "buscarPorPedido",
-      "crear",
-      "obtenerPedidoParaVenta",
-    ]);
+  // No se compara el conjunto exacto de exports: las consultas del listado de
+  // ventas se suman a este módulo. Lo que no puede existir es modificar o borrar.
+  it("expone leer, registrar y anular, y NO funciones para modificar o borrar (la historia no se modifica)", () => {
+    for (const nombre of ["anular", "buscarPorPedido", "crear", "obtenerPedidoParaVenta"]) {
+      assert.equal(typeof ventaRepository[nombre], "function", nombre);
+    }
+    for (const nombre of Object.keys(ventaRepository)) {
+      assert.doesNotMatch(nombre, /update|actualizar|delete|eliminar|borrar|remove/i, nombre);
+    }
   });
 
   describe("obtenerPedidoParaVenta", () => {
