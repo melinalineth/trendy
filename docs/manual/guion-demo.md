@@ -3,9 +3,9 @@
 Guía para quien presenta. Cada paso dice **qué hago**, **qué digo**, **qué debe pasar** y **plan B si
 falla**. El relato de los bloques 0 a 7 con la opción A (desarrollo local) se recorrió de punta a
 punta en la aplicación real, con los textos de pantalla copiados tal cual. **No** se ensayó la opción B
-(Docker), el equivalente en PowerShell del paso 3.4, ni el plan B de cancelar desde «Confirmado»
-saltando el envío (ver la nota del bloque 3); el detalle está en [Cómo se
-ensayó](#cómo-se-ensayó). Para el detalle de cada pantalla, el [manual de usuario](manual-usuario.md).
+(Docker), el paso 3.4 (habilitar el contra entrega desde la pantalla) dentro del flujo completo, ni el
+plan B de cancelar desde «Confirmado» saltando el envío (ver la nota del bloque 3); el detalle está en
+[Cómo se ensayó](#cómo-se-ensayó). Para el detalle de cada pantalla, el [manual de usuario](manual-usuario.md).
 
 ## 1. Objetivo y público
 
@@ -55,8 +55,9 @@ indica la nota del bloque 3). Las preguntas van aparte
   bloques 3 a 5 se harían con el admin y se pierde el contraste entre «Responsable» y «Anulada por».
   **Ojo con los puertos y las direcciones:** en la opción B todo entra por `http://localhost:8080`
   (nginx), la API está en `http://localhost:8080/api/v1` y **no** existen `:3000` ni `:5173`. Donde
-  este guion dice `http://localhost:3000/api/v1` (3.2, 3.4, 3.7) o `API=...`, usá esa dirección; el
-  correo del admin es el que pusiste en `SEED_ADMIN_CORREO` y el id de Bogotá puede ser otro.
+  este guion dice `http://localhost:3000/api/v1` (3.2, 3.7), usá esa dirección, y donde dice
+  `http://localhost:5173` (las pantallas), usá `http://localhost:8080`; el correo del admin es el que
+  pusiste en `SEED_ADMIN_CORREO`.
 
 ### 3.2 Levantar la opción A
 
@@ -123,37 +124,22 @@ sirve de ensayo.)
 
 ### 3.4 Habilitar el contra entrega en Bogotá (obligatorio)
 
-Las zonas del seed nacen **sin** contra entrega y **la pantalla de zonas no tiene botón para
-habilitarlo**. Sin este paso, el cliente de la demo no podrá pagar contra entrega. Se activa con una
-llamada a la API autenticada como administrador (el id de Bogotá en un seed limpio es 1; verificalo con
-el `GET` de la tercera línea de comandos del bloque, el que lista las zonas). **Usá la misma terminal
-donde definiste `NUEVO_USUARIO_PASSWORD` en el paso 3.3**: si abrís otra, la variable no existe, el
-login responde 401 y `TOKEN` queda vacío.
+Las zonas del seed nacen **sin** contra entrega. Sin este paso, el cliente de la demo no podrá pagar
+contra entrega. Se habilita desde la pantalla de zonas, con la sesión de administrador (es la ventana B
+de 3.6: si todavía no iniciaste sesión, hacelo ahora con `demo-admin@trendy.test`):
 
-**Git Bash / Linux / macOS** (usa `curl`):
+1. Abrí `/admin/envios` (**Zonas de cobertura y tarifas de envío**).
+2. Buscá la fila de **Bogotá**. En la columna **Contra entrega** tiene que decir **No habilitado**.
+3. Tocá **Habilitar contra entrega** en esa fila. No pide confirmación: el botón pasa un instante a
+   «Habilitando...».
+4. Debe pasar: la columna **Contra entrega** de Bogotá cambia a **Habilitado** y arriba aparece el
+   aviso **Pago contra entrega habilitado en la zona Bogotá.**
 
-```bash
-API=http://localhost:3000/api/v1
-TOKEN=$(curl -s -X POST $API/auth/login -H "Content-Type: application/json" \
-  -d "{\"correo\":\"demo-admin@trendy.test\",\"password\":\"$NUEVO_USUARIO_PASSWORD\"}" \
-  | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).token")
-curl -s $API/zonas-cobertura -H "Authorization: Bearer $TOKEN"        # buscá el id de Bogotá
-curl -s -X PATCH $API/zonas-cobertura/1/contra-entrega \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"permiteContraEntrega":true}'                                  # responde la zona con "permiteContraEntrega":true
-```
-
-**PowerShell** (equivalente con `Invoke-RestMethod`; no se ensayó):
-
-```powershell
-$API = "http://localhost:3000/api/v1"
-$login = @{ correo = "demo-admin@trendy.test"; password = $env:NUEVO_USUARIO_PASSWORD } | ConvertTo-Json
-$TOKEN = (Invoke-RestMethod -Method Post -Uri "$API/auth/login" -ContentType "application/json" -Body $login).token
-$headers = @{ Authorization = "Bearer $TOKEN" }
-Invoke-RestMethod -Uri "$API/zonas-cobertura" -Headers $headers       # buscá el id de Bogotá
-Invoke-RestMethod -Method Patch -Uri "$API/zonas-cobertura/1/contra-entrega" -Headers $headers `
-  -ContentType "application/json" -Body '{"permiteContraEntrega":true}'   # responde la zona con permiteContraEntrega en True
-```
+Si en la columna ya dice **Habilitado**, no hay nada que hacer. Si aparece **No pudimos actualizar el
+pago contra entrega de la zona. Intentá de nuevo.**, volvé a tocar el botón. Para deshabilitarlo (por
+ejemplo, para repetir la demo desde cero) se usa **Deshabilitar contra entrega** en la misma fila, que
+sí pide confirmación y avisa lo que implica (ver la sección 6.4 del [manual de
+usuario](manual-usuario.md#64-zonas-de-cobertura-y-tarifas-de-envío)).
 
 ### 3.5 Datos que dejar listos
 
@@ -453,6 +439,16 @@ Probar Mercado Pago en el sandbox, un servidor con HTTPS y dominio, secretos ges
 proceso que cancele pedidos vencidos y definir con el negocio la política de cancelaciones y de
 reembolsos (docs/despliegue/staging.md, «Qué falta para un despliegue real»).
 
+**17. ¿Cómo decide la tienda dónde se puede pagar contra entrega?** *(extra opcional; no está cronometrado
+y no cuenta en los 13:30)*
+El administrador lo habilita zona por zona en `/admin/envios` (ventana B, pestaña ya preparada): la
+columna **Contra entrega** muestra **Habilitado** / **No habilitado** y cada fila tiene el botón
+**Habilitar contra entrega** o **Deshabilitar contra entrega**. Si lo deshabilita, el sistema pide
+confirmación y avisa que los pedidos contra entrega de esa zona que todavía no registraron su pago
+quedan pendientes, reteniendo su stock, hasta que el personal los cancele a mano. **No deshabilites
+Bogotá en vivo**: rompería el resto de la demo; si querés mostrarlo, abrí la confirmación y cerrala con
+**Cancelar**.
+
 ## 8. Cómo se ensayó
 
 El 18/10/2026 se recorrió el relato completo en la aplicación real (backend y frontend en desarrollo,
@@ -461,6 +457,8 @@ contra entrega con aviso, la confirmación y la venta, la cancelación con «Anu
 totales, los errores de precio y de stock y el aviso de Mercado Pago. Las pantallas cargaron en torno a
 un segundo. Los tiempos de la sección 2 son **estimados** a ritmo de presentación (cantidad de clics y
 de texto a decir), no medidos con una persona presentando: ensayalo una vez con cronómetro. Lo que **no**
-se ensayó: la opción B (staging con Docker), el equivalente en PowerShell del paso 3.4, el plan B de
+se ensayó: la opción B (staging con Docker), el paso 3.4 dentro del flujo completo del guion (el botón
+**Habilitar contra entrega** de `/admin/envios`, con su columna y su aviso, se verificó en el navegador
+al integrarlo en el PR #48, pero no se recorrió como parte de este ensayo completo), el plan B de
 cancelar desde «Confirmado» sin pasar por «Enviado» (los textos de ese camino se tomaron del código,
 no de la pantalla), otros navegadores que no sean Chromium y pantallas de celular.
