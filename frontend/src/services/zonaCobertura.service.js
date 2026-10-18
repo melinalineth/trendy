@@ -4,7 +4,8 @@ import api from "./apiClient";
 // endpoints son solo para el rol "admin" (cliente/vendedor reciben 403).
 
 // GET /api/v1/zonas-cobertura -> incluye zonas INACTIVAS. Cada zona trae
-// { id, nombre, departamento, ciudad, estado, tarifaActiva: {id, costo, estado} | null }.
+// { id, nombre, departamento, ciudad, estado, permiteContraEntrega,
+// tarifaActiva: {id, costo, estado} | null }.
 function listarZonas() {
   return api.get("/zonas-cobertura").then((response) => response.data);
 }
@@ -38,6 +39,14 @@ function cambiarEstado(id, estado) {
     .then((response) => response.data);
 }
 
+// PATCH /:id/contra-entrega con un boolean JSON estricto (RF-037, RN-006): el
+// backend rechaza "true" o 1. La respuesta es la zona con `permiteContraEntrega`.
+function actualizarContraEntrega(id, permiteContraEntrega) {
+  return api
+    .patch(`/zonas-cobertura/${id}/contra-entrega`, { permiteContraEntrega })
+    .then((response) => response.data);
+}
+
 // La lectura de errores ({ error: { codigo, mensaje, detalles } }) vive en
 // services/apiError.js, compartida con pedidos y pagos.
 
@@ -46,6 +55,7 @@ const zonaCoberturaService = {
   crearZona,
   cambiarTarifa,
   cambiarEstado,
+  actualizarContraEntrega,
 };
 
 export default zonaCoberturaService;

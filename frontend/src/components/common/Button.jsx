@@ -6,6 +6,7 @@ function Button({
   type = "button",
   className = "",
   disabled = false,
+  ariaLabel,
 }) {
   return (
     <button
@@ -13,6 +14,7 @@ function Button({
       className={`btn ${className}`}
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
     >
       {text}
     </button>
