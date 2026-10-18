@@ -465,10 +465,22 @@ function mensajeExito(confirmacion, datos) {
       return `Pedido ${numero}: envío «${etiquetaEstadoEnvio(destino)}».`;
     case "cobro":
       return `Registramos el cobro contra entrega del pedido ${numero}.`;
-    case "cancelar":
-      return datos?.yaCancelado
-        ? `El pedido ${numero} ya estaba cancelado.`
-        : `Pedido ${numero} cancelado. Su stock volvió a estar disponible.`;
+    case "cancelar": {
+      if (datos?.yaCancelado) return `El pedido ${numero} ya estaba cancelado.`;
+
+      // Mismo criterio que el modal de confirmación: un contra entrega
+      // confirmado tenía venta (se anula) y, desde ENVIADO / EN_TRANSITO, el
+      // stock se repone en el sistema aunque la mercadería pueda no haber
+      // vuelto todavía.
+      const anulaVenta = ESTADOS_CANCELABLES_CONTRA_ENTREGA.includes(pedido?.estado);
+      const yaSalio = ["ENVIADO", "EN_TRANSITO"].includes(pedido?.estado);
+
+      const stock = yaSalio
+        ? "El stock se repuso en el sistema, pero la mercadería puede no haber vuelto todavía."
+        : "Su stock volvió a estar disponible.";
+
+      return `Pedido ${numero} cancelado. ${stock}${anulaVenta ? " La venta quedó anulada." : ""}`;
+    }
     case "vencidos": {
       const cancelados = datos?.cancelados ?? [];
       const omitidos = datos?.omitidos ?? [];
