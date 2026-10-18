@@ -154,8 +154,15 @@ poder cancelar: 403, ERS §2.8.3).
 | cualquiera | `PENDIENTE`, `PAGO_PENDIENTE`, `PAGO_RECHAZADO` | Sí (como antes) |
 | `CONTRA_ENTREGA` | `CONFIRMADO`, `EN_PREPARACION`, `ENVIADO`, `EN_TRANSITO` | Sí |
 | `CONTRA_ENTREGA` | `ENTREGADO` | No: 409 `PEDIDO_NO_CANCELABLE` |
-| `MERCADO_PAGO` | `PAGO_APROBADO`, `CONFIRMADO`..`ENTREGADO` (ya pagado) | No: 409 `PEDIDO_NO_CANCELABLE`, el mensaje explica que el reembolso queda fuera del sistema |
+| `MERCADO_PAGO` | `PAGO_APROBADO`, `CONFIRMADO`..`ENTREGADO` (ya pagado) | No: 409 `PEDIDO_NO_CANCELABLE` (mensaje según el caso, ver abajo) |
 | cualquiera con `Pago` `APROBADO` | cualquiera | No: 409 (§7) |
+
+Mensaje del 409 (`mensajeNoCancelable`): con `Pago` `APROBADO` el de pago aprobado (el reembolso
+es manual); un `MERCADO_PAGO` en `CONFIRMADO`..`EN_TRANSITO` explica que ya está pagado y que el
+reembolso queda fuera del sistema; `ENTREGADO` dice que ya se entregó; y cualquier otro caso,
+incluido un `MERCADO_PAGO` en el estado legado `PAGO_APROBADO` sin `Pago` registrado y un contra
+entrega en `PAGO_APROBADO`, recibe el mensaje genérico (solo se cancelan pedidos pendientes de pago
+o contra entrega que todavía no se entregaron). El código es siempre `PEDIDO_NO_CANCELABLE`.
 
 Al cancelar, en **una sola transacción** y bajo el lock del pedido:
 

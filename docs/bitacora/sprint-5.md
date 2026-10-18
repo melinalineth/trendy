@@ -50,13 +50,11 @@ reescribir.
   atribución: con `SET NULL`, borrar al responsable modificaría la venta en silencio.
 - `responsableId` es `NULL` cuando la venta la dispara el webhook de Mercado Pago (no hay usuario) y
   guarda al admin o vendedor en un cambio manual de estado.
-- **`ANULADA` es un estado reservado, hoy sin productor** (_actualización: desde la sesión 2 lo
-  produce la cancelación de un contra entrega confirmado_). En el flujo vigente ningún pedido con
-  venta puede cancelarse: la cancelación solo admite `PENDIENTE` y los legados `PAGO_PENDIENTE` /
-  `PAGO_RECHAZADO` (`docs/diseno/pedidos-estados.md` §6), y la venta nace al confirmarse. Cuándo y
-  cómo se anula una venta lo define la tarjeta de anulación. Decisión abierta que la condiciona: un
-  contra entrega `CONFIRMADO` que el cliente rechaza en la entrega hoy no puede cancelarse
-  (`pedidos-estados.md` §9).
+- **`ANULADA`**: al cerrar esta tarjeta (sesión 1) era un estado reservado sin productor, porque
+  la cancelación solo admitía `PENDIENTE` y los legados. Desde la sesión 2 lo produce la
+  cancelación de un pedido **contra entrega ya confirmado** (decisión de producto del 17/10;
+  `docs/diseno/pedidos-estados.md` §6 y §9): la venta pasa a `ANULADA` con `anuladaEn` y nunca se
+  borra. Un pedido de Mercado Pago pagado no se cancela por esta vía.
 
 ## Decisiones
 

@@ -948,8 +948,11 @@ async function actualizarEstado(pedidoId, estadoNuevo, usuario) {
 const ESTADOS_PEDIDO_EN_ENVIO = ESTADOS_ENVIO;
 
 // Forma de la respuesta de seguimiento. `estadoEnvio` solo describe la
-// logística cuando el pedido está en un estado de envío; antes de eso (o si
-// se canceló) vale el EN_PREPARACION del alta y manda `estadoPedido`.
+// logística cuando el pedido está en un estado de envío; antes de eso vale el
+// EN_PREPARACION del alta y manda `estadoPedido`. Si el pedido se canceló,
+// InfoEnvio no se toca: conserva el último valor (puede ser ENVIADO o
+// EN_TRANSITO en un contra entrega cancelado en camino) y también manda
+// `estadoPedido` (CANCELADO).
 // `historial` (RF-028): cambios de estado de envío, el más antiguo primero,
 // con fecha y hora; viene de HistorialEstadoEnvio (docs/diseno/info-envio.md
 // §5) y es [] en los envíos anteriores a esa tabla.
