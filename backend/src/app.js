@@ -15,6 +15,7 @@ const envioRoutes = require("./routes/envio.routes");
 const zonaCoberturaRoutes = require("./routes/zonaCobertura.routes");
 const pagoRoutes = require("./routes/pago.routes");
 const pedidoRoutes = require("./routes/pedido.routes");
+const ventaRoutes = require("./routes/venta.routes");
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use(envioRoutes);
 app.use(zonaCoberturaRoutes);
 app.use(pagoRoutes);
 app.use(pedidoRoutes);
+app.use(ventaRoutes);
 
 // DDS §5.3: SIEMPRE al final, después de montar todas las rutas — es el
 // único middleware con firma de 4 argumentos, por eso Express lo trata
