@@ -15,9 +15,14 @@ import "./ProductsPanel.css";
 const MENSAJE_ERROR_ACCION =
   "No pudimos actualizar el estado del producto. Intentá de nuevo.";
 
+// El backend serializa el precio (Decimal) como texto ("89900"): se convierte a
+// número antes de darle formato. Si no es un número válido se muestra tal cual.
 function formatearPrecio(precio) {
-  if (typeof precio !== "number") return precio;
-  return `$${precio.toLocaleString("es-CO")}`;
+  const numero = Number(precio);
+
+  if (!Number.isFinite(numero)) return precio;
+
+  return `$${numero.toLocaleString("es-CO")}`;
 }
 
 // Panel de gestión de productos (RF-013, RF-014, RF-016), reusado tal cual
