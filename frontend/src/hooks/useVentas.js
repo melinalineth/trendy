@@ -108,9 +108,16 @@ export function useVentas() {
         const paginacion = data?.paginacion ?? null;
         const totalPaginas = paginacion?.totalPaginas ?? 0;
 
-        // La página quedó vacía (hay menos ventas que antes, ej. por un
-        // refresco): saltamos a la última que existe.
-        if (ventas.length === 0 && consultaACargar.pagina > 1 && totalPaginas >= 1) {
+        // La página pedida quedó más allá de la última (hay menos ventas que
+        // antes, ej. por un refresco): saltamos a la última que existe. Exigir
+        // totalPaginas < pagina evita un bucle de requests si el backend
+        // devuelve una página vacía que no pasa del total.
+        if (
+          ventas.length === 0 &&
+          consultaACargar.pagina > 1 &&
+          totalPaginas >= 1 &&
+          totalPaginas < consultaACargar.pagina
+        ) {
           setConsulta((previa) => ({ ...previa, pagina: totalPaginas }));
           return;
         }
