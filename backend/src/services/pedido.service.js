@@ -28,6 +28,7 @@ const carritoRepository = require("../repositories/carrito.repository");
 const direccionRepository = require("../repositories/direccion.repository");
 const zonaCoberturaRepository = require("../repositories/zonaCobertura.repository");
 const envioService = require("./envio.service");
+const ventaService = require("./venta.service");
 const inventarioService = require("./inventario.service");
 const {
   PedidoNoEncontradoError,
@@ -827,6 +828,14 @@ async function sincronizarEnvio(tx, pedidoId, estadoNuevo, usuarioId) {
  * InfoEnvio y su historial (con `usuario`, quien hace el cambio) en la MISMA
  * transacción (Pedido.estado manda; mientras el pedido está en
  * EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
+ *
+ * RF-041: la venta nace cuando el pedido queda confirmado. TODA transición a
+ * CONFIRMADO la registra (contra entrega desde PENDIENTE, o la salida del
+ * estado legado PAGO_APROBADO; el webhook de Mercado Pago hace lo mismo en
+ * pago.service), a nombre del usuario que la hace, en la misma transacción y
+ * bajo el mismo lock: si el registro falla, el cambio de estado se revierte.
+ * Es idempotente: si la venta ya existía no se duplica ni se cambia su
+ * responsable. Las transiciones posteriores no tocan la venta.
  */
 async function actualizarEstado(pedidoId, estadoNuevo, usuario) {
   await enTransaccion("ACTUALIZAR_ESTADO", async (tx) => {
@@ -844,6 +853,10 @@ async function actualizarEstado(pedidoId, estadoNuevo, usuario) {
     }
 
     await pedidoRepository.actualizarEstado(pedidoId, estadoNuevo, tx);
+
+    if (estadoNuevo === "CONFIRMADO") {
+      await ventaService.registrarVentaDePedido(pedidoId, { responsableId: Number(usuario.id) }, tx);
+    }
   });
 
   return presentarPedido(await pedidoRepository.obtenerPorId(pedidoId));

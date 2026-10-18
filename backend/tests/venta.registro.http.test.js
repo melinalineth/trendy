@@ -30,6 +30,7 @@ const {
   crearVariante,
   crearZona,
   crearDireccion,
+  crearPedido,
   agregarAlCarrito,
   limpiar,
 } = require("./helpers/entorno");
@@ -304,6 +305,171 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal(reintento.body.procesado, true);
       assert.equal(await estadoDe(pedido.id), "CONFIRMADO");
       assert.equal((await pagoDe(pedido.id)).estado, "APROBADO");
+      assert.equal(await ventasDe(pedido.id), 1);
+    });
+  });
+  describe("cambio manual de estado: PATCH /api/v1/pedidos/:id/estado", () => {
+    const cambiarEstado = (pedidoId, estado, usuario = admin) =>
+      api("PATCH", `/api/v1/pedidos/${pedidoId}/estado`, { token: usuario.token, body: { estado } });
+
+    // Contra entrega con su pago registrado, listo para que el personal lo confirme.
+    async function contraEntregaConPago() {
+      const real = await pedidoReal({ metodoPago: "CONTRA_ENTREGA" });
+      const registro = await api("POST", "/api/v1/pagos/contra-entrega", {
+        token: real.cliente.token,
+        body: { pedidoId: real.pedido.id },
+      });
+      assert.equal(registro.status, 201, JSON.stringify(registro.body));
+      return real;
+    }
+
+    it("PENDIENTE -> CONFIRMADO de un contra entrega: registra UNA venta con el responsable (admin o vendedor) y los montos del pedido", async () => {
+      for (const staff of [admin, vendedor]) {
+        const { pedido, cliente } = await contraEntregaConPago();
+
+        const r = await cambiarEstado(pedido.id, "CONFIRMADO", staff);
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.pedido.estado, "CONFIRMADO");
+        assert.equal(await ventasDe(pedido.id), 1);
+        const venta = await ventaDe(pedido.id);
+        assert.equal(venta.estado, "REGISTRADA");
+        assert.equal(venta.responsableId, staff.id);
+        assert.equal(venta.clienteId, cliente.id);
+        assert.equal(venta.metodoPago, "CONTRA_ENTREGA");
+        assert.equal(venta.subtotal.toFixed(2), "39980.00");
+        assert.equal(venta.costoEnvio.toFixed(2), "12000.00");
+        assert.equal(venta.total.toFixed(2), "51980.00");
+      }
+    });
+
+    it("la salida del estado legado PAGO_APROBADO -> CONFIRMADO también registra la venta", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      const pedido = await crearPedido({
+        usuarioId: cliente.id,
+        direccionId: cliente.direccion.id,
+        lineas: [{ variante, cantidad: 1, precioUnitario: "25000.00" }],
+        costoEnvio: 12000,
+        estado: "PAGO_APROBADO",
+      });
+
+      const r = await cambiarEstado(pedido.id, "CONFIRMADO", vendedor);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      const venta = await ventaDe(pedido.id);
+      assert.equal(venta.responsableId, vendedor.id);
+      assert.equal(venta.metodoPago, "MERCADO_PAGO");
+      assert.equal(venta.total.toFixed(2), "37000.00");
+    });
+
+    it("las transiciones POSTERIORES (EN_PREPARACION ... ENTREGADO) no crean otra venta ni cambian al responsable", async () => {
+      const { pedido } = await contraEntregaConPago();
+      assert.equal((await cambiarEstado(pedido.id, "CONFIRMADO", admin)).status, 200);
+      const primera = await ventaDe(pedido.id);
+
+      for (const estado of ["EN_PREPARACION", "ENVIADO", "EN_TRANSITO", "ENTREGADO"]) {
+        const r = await cambiarEstado(pedido.id, estado, vendedor);
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(await ventasDe(pedido.id), 1, estado);
+      }
+
+      const final = await ventaDe(pedido.id);
+      assert.equal(final.id, primera.id);
+      assert.equal(final.responsableId, admin.id);
+      assert.equal(final.estado, "REGISTRADA");
+    });
+
+    it("si la venta ya existía (p. ej. backfill), confirmar no falla ni la duplica", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 5 });
+      const pedido = await crearPedido({
+        usuarioId: cliente.id,
+        direccionId: cliente.direccion.id,
+        lineas: [{ variante, cantidad: 1 }],
+        estado: "PAGO_APROBADO",
+      });
+      const previa = await prisma.venta.create({
+        data: {
+          pedidoId: pedido.id,
+          clienteId: cliente.id,
+          subtotal: pedido.subtotal,
+          costoEnvio: pedido.costoEnvio,
+          total: pedido.total,
+          metodoPago: pedido.metodoPago,
+        },
+      });
+
+      const r = await cambiarEstado(pedido.id, "CONFIRMADO", admin);
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(await ventasDe(pedido.id), 1);
+      assert.equal((await ventaDe(pedido.id)).id, previa.id);
+    });
+
+    it("transición rechazada o sin permiso: NO registra venta y el estado no cambia", async () => {
+      // Mercado Pago pendiente: solo lo confirma el webhook.
+      const mp = await pedidoReal();
+      assertErrorEstandar(await cambiarEstado(mp.pedido.id, "CONFIRMADO"), 409, "TRANSICION_ESTADO_INVALIDA");
+
+      // Contra entrega SIN su pago registrado.
+      const sinPago = await pedidoReal({ metodoPago: "CONTRA_ENTREGA" });
+      assertErrorEstandar(
+        await cambiarEstado(sinPago.pedido.id, "CONFIRMADO"),
+        409,
+        "TRANSICION_ESTADO_INVALIDA"
+      );
+
+      // El cliente no puede cambiar estados.
+      const propio = await contraEntregaConPago();
+      assertErrorEstandar(
+        await cambiarEstado(propio.pedido.id, "CONFIRMADO", propio.cliente),
+        403,
+        "ACCESO_DENEGADO"
+      );
+
+      for (const { pedido } of [mp, sinPago, propio]) {
+        assert.equal(await ventasDe(pedido.id), 0);
+        assert.equal(await estadoDe(pedido.id), "PENDIENTE");
+      }
+    });
+
+    it("5 confirmaciones SIMULTÁNEAS: una gana (200), las otras 409, y hay una sola venta", async () => {
+      const { pedido } = await contraEntregaConPago();
+
+      const respuestas = await Promise.all(
+        [admin, vendedor, admin, vendedor, admin].map((staff) =>
+          cambiarEstado(pedido.id, "CONFIRMADO", staff)
+        )
+      );
+
+      assert.equal(respuestas.filter((r) => r.status === 200).length, 1, JSON.stringify(respuestas.map((r) => r.body)));
+      for (const r of respuestas.filter((r) => r.status !== 200)) {
+        assertErrorEstandar(r, 409, "TRANSICION_ESTADO_INVALIDA");
+      }
+      assert.equal(await ventasDe(pedido.id), 1);
+      assert.equal(await estadoDe(pedido.id), "CONFIRMADO");
+    });
+
+    it("ATOMICIDAD: si falla el registro de la venta, el estado del pedido NO cambia (500, sin venta)", async () => {
+      const { pedido } = await contraEntregaConPago();
+      const fallo = new Error("falla simulada al registrar la venta");
+      const espia = mock.method(ventaRepository, "crear", () => Promise.reject(fallo));
+
+      let fallido;
+      try {
+        fallido = (await conLogs(() => cambiarEstado(pedido.id, "CONFIRMADO"))).resultado;
+      } finally {
+        espia.mock.restore();
+      }
+
+      assert.equal(fallido.status, 500, JSON.stringify(fallido.body));
+      assert.equal(await estadoDe(pedido.id), "PENDIENTE");
+      assert.equal(await ventasDe(pedido.id), 0);
+
+      // Sin la falla, el mismo cambio se completa.
+      const r = await cambiarEstado(pedido.id, "CONFIRMADO");
+      assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal(await ventasDe(pedido.id), 1);
     });
   });
