@@ -200,6 +200,10 @@ function presentarVenta(venta) {
     responsable: venta.responsable
       ? { id: venta.responsable.id, nombre: venta.responsable.nombre }
       : null,
+    // Quien ANULÓ la venta (no confundir con `responsable`, quien la registró).
+    anuladaPor: venta.anuladaPor
+      ? { id: venta.anuladaPor.id, nombre: venta.anuladaPor.nombre }
+      : null,
     // Montos copiados al registrar la venta (no se recalculan del pedido).
     subtotal: pesosDeDecimal(venta.subtotal),
     costoEnvio: pesosDeDecimal(venta.costoEnvio),

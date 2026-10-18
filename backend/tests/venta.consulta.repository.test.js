@@ -266,6 +266,32 @@ describe("Repository de consulta de ventas (RF-042)", () => {
       assert.equal(fila.responsable, null);
     });
 
+    it("trae anuladaPor con solo id y nombre (distinto del responsable) y null si no hay quién anuló", async () => {
+      const quienAnulo = await crearUsuario("vendedor");
+      const { venta } = await nueva({
+        registradaEn: bogota("2032-01-13T12:00:00.000"),
+        responsableId: admin.id,
+        estado: "ANULADA",
+        anuladaPorId: quienAnulo.id,
+      });
+      await nueva({ registradaEn: bogota("2032-01-14T12:00:00.000"), estado: "ANULADA" });
+
+      const [anulada] = await ventaRepository.listar(
+        filtros({ desde: "2032-01-13", hasta: "2032-01-13" }, { skip: 0, take: 10 })
+      );
+      const [sinQuien] = await ventaRepository.listar(
+        filtros({ desde: "2032-01-14", hasta: "2032-01-14" }, { skip: 0, take: 10 })
+      );
+
+      assert.equal(anulada.id, venta.id);
+      assert.deepEqual(Object.keys(anulada.anuladaPor).sort(), ["id", "nombre"]);
+      assert.equal(anulada.anuladaPor.id, quienAnulo.id);
+      assert.equal(anulada.anuladaPor.nombre, "Test vendedor");
+      assert.equal(anulada.responsable.id, admin.id);
+      assert.equal(sinQuien.anuladaPor, null);
+      assert.doesNotMatch(JSON.stringify(anulada), /correo|passwordHash|email|@trendy\.test/i);
+    });
+
     it("no expone correo ni passwordHash del cliente ni del responsable", async () => {
       await nueva({ registradaEn: bogota("2032-01-12T12:00:00.000"), responsableId: admin.id });
 

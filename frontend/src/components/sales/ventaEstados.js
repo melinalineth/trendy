@@ -19,6 +19,13 @@ export function badgeEstadoVenta(estado) {
   return ESTADOS_VENTA_INFO[estado]?.badge ?? "default";
 }
 
+// Quién anuló la venta (`anuladaPor`, distinto de `responsable`, que es quien la
+// registró). Llega null en las ventas anuladas antes de que existiera el dato
+// o sin usuario: ahí el nombre no está registrado.
+export function textoAnuladaPor(venta) {
+  return venta.anuladaPor?.nombre || "No registrado";
+}
+
 // "1 venta" / "3 ventas".
 export function textoVentas(cantidad) {
   return `${cantidad} ${cantidad === 1 ? "venta" : "ventas"}`;
