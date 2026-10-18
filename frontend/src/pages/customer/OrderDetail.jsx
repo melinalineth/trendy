@@ -34,10 +34,14 @@ const REFRESCOS_AUTOMATICOS = 8;
 // Seguimiento del envío (RF-028): los 4 pasos de InfoEnvio. No hay historial
 // guardado todavía, así que solo el paso actual muestra su fecha.
 function SeguimientoEnvio({ pedido, seguimiento }) {
+  // Un contra entrega se puede cancelar aun después de salir de la tienda (por
+  // ejemplo, si lo rechazás en la puerta), así que un pedido cancelado pudo
+  // haber tenido envío: no se afirma lo contrario ni se muestran los pasos.
   if (pedido.estado === "CANCELADO") {
     return (
       <p className="order-detail__nota">
-        Este pedido fue cancelado: no tiene envío.
+        Este pedido fue cancelado. Si ya lo habías recibido o estaba en camino,
+        comunicate con la tienda.
       </p>
     );
   }
