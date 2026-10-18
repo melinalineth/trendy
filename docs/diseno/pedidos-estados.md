@@ -180,7 +180,8 @@ Al cancelar, en **una sola transacción** y bajo el lock del pedido:
    transacción confirmada, el log JSON `VENTA_ANULADA` (`{ evento, pedidoId, anuladaPorId }`).
    Si el pedido estaba confirmado pero **no tenía venta** (el hueco de §9), se cancela igual y,
    en lugar de `VENTA_ANULADA`, se escribe `VENTA_NO_ENCONTRADA_AL_CANCELAR`
-   (`{ evento, pedidoId, estado, responsableId }`) para reconciliarlo a mano.
+   (`{ evento, pedidoId, estado, anuladaPorId }`, con `anuladaPorId` = quien canceló, igual que en
+   `VENTA_ANULADA`) para reconciliarlo a mano.
 
 Si algo falla (p. ej. la anulación de la venta), se revierte todo: el pedido sigue como estaba.
 **`InfoEnvio` y su historial no se tocan** (ver §1). Un pedido cancelado ya no se puede avanzar

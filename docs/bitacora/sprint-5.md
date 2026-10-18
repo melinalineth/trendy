@@ -17,9 +17,10 @@ a 05), ni frontend.
 - Se agregó el enum `EstadoVenta` (`REGISTRADA`, `ANULADA`).
 - Se agregó el modelo `Venta`: `pedidoId @unique`, `clienteId`, `responsableId?`, `subtotal`,
   `costoEnvio`, `total` (`Decimal(10,2)`), `metodoPago`, `estado` (default `REGISTRADA`),
-  `registradaEn`, `anuladaEn?`, con los índices `(registradaEn)` y `(estado, registradaEn)`.
+  `registradaEn`, `anuladaEn?`, con los índices `(registradaEn)` y `(estado, registradaEn)`
+  (ahora también `anuladaPorId?`: se sumó en la sesión 3).
 - Se agregaron las relaciones inversas `Pedido.venta`, `Usuario.ventasComoCliente` y
-  `Usuario.ventasGestionadas`. No se modificó nada más del esquema existente (el diff de
+  `Usuario.ventasGestionadas` (ahora también `Usuario.ventasAnuladas`, sesión 3). No se modificó nada más del esquema existente (el diff de
   `schema.prisma` son solo adiciones).
 - Dos migraciones, en este orden:
   1. `20261017220145_add_venta`: **solo DDL** (tabla, índices y FKs). Su SQL es el que genera
@@ -44,7 +45,8 @@ reescribir.
   recalcula. Los productos, cantidades y valores por línea **no se duplican**: salen de
   `DetallePedido`.
 - `pedidoId @unique` es la garantía, a nivel de base, de que una venta no se registra dos veces.
-- Una venta **nunca se borra**. Los tres FK (`pedido`, `cliente`, `responsable`) son `RESTRICT`: no
+- Una venta **nunca se borra**. Los tres FK (`pedido`, `cliente`, `responsable`; ahora cuatro: se sumó
+  `anuladaPorId` en la sesión 3) son `RESTRICT`: no
   se puede borrar un pedido ni un usuario con ventas, aunque la venta esté `ANULADA`. Se eligió
   `RESTRICT` también para `responsable` (la columna sí es opcional) para proteger la historia y la
   atribución: con `SET NULL`, borrar al responsable modificaría la venta en silencio.
@@ -116,7 +118,8 @@ La lista coincide con la de la tarjeta; se contrastó con el enum `EstadoPedido`
 - Migraciones reales sobre una base con datos (manual, ver abajo): se aplicaron las migraciones
   hasta antes de `add_venta`, se insertaron por SQL pedidos `CONFIRMADO`, `ENTREGADO`, `PENDIENTE` y
   `CANCELADO`, se hizo `migrate deploy` y solo el confirmado y el entregado quedaron con venta, con
-  montos, método y fecha copiados y los tres FK en `RESTRICT`.
+  montos, método y fecha copiados y los tres FK en `RESTRICT` (ahora cuatro: se sumó
+  `anuladaPorId` en la sesión 3).
 
 ## No se verificó
 
@@ -188,7 +191,8 @@ ignoró).
   sesión 3** con la columna `Venta.anuladaPorId` (ver más abajo). Lo que sigue describe el estado
   de esta sesión.
 - **Cancelar un confirmado sin venta** (el hueco de abajo) funciona igual, pero deja el log
-  `VENTA_NO_ENCONTRADA_AL_CANCELAR` (`{ evento, pedidoId, estado, responsableId }`) en vez de
+  `VENTA_NO_ENCONTRADA_AL_CANCELAR` (`{ evento, pedidoId, estado, anuladaPorId }`; en la sesión 2
+  la última clave se llamaba `responsableId`, renombrada en la sesión 3) en vez de
   anular en silencio.
 - **Solo `CONFIRMADO` registra la venta en `PATCH /estado`** (no toda transición a un estado de
   `ESTADOS_QUE_CUENTAN`, como decía la tarjeta 02-04). Registrar al avanzar atribuiría al usuario
@@ -259,8 +263,8 @@ constancia). El usuario decidió sumar la columna.
   que engañaba: es quien **registró**). `cancelarBajoLock` recibe `anuladaPorId`; `cancelarPedido` le
   pasa el admin/vendedor autenticado. Puede ser NULL (anulación sin usuario).
 - **Log**: `VENTA_ANULADA` sigue existiendo y ahora lleva `anuladaPorId` (antes `responsableId`).
-  `VENTA_NO_ENCONTRADA_AL_CANCELAR` conserva su clave `responsableId` (quien canceló; no hay venta
-  donde guardarlo).
+  `VENTA_NO_ENCONTRADA_AL_CANCELAR` también pasó de `responsableId` a `anuladaPorId` (quien canceló;
+  mismo nombre y significado que en `VENTA_ANULADA`).
 - **Tests**: esquema (columna nullable, FK RESTRICT, relaciones), repository, service y HTTP (cancelar
   como vendedor y como admin deja `anuladaPorId` = quien cancela y `responsableId` sin cambios;
   atomicidad y concurrencia). `limpiar()` de `tests/helpers/entorno.js` borra también las ventas con
