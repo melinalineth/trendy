@@ -1,12 +1,15 @@
 # Staging de Trendy con Docker Compose: nginx (frontend + proxy /api), backend
-# (Express + Prisma) y MySQL 8. Guía completa: docs/despliegue/staging.md.
+# (Express + Prisma) y MySQL 8.4. Guía completa: docs/despliegue/staging.md.
 #
 # Todas las variables llegan por --env-file (nada de secretos en el repo):
-#   cp .env.staging.example .env.staging     # y editar los valores
+#   cp staging.env.example .env.staging      # y GENERAR secretos propios
 #   docker compose -p trendy-staging --env-file .env.staging up -d --build
 #
 # MySQL NO publica ningún puerto al host: solo lo ve el backend por la red de
-# Compose. El único puerto publicado es el de nginx (STAGING_HTTP_PORT).
+# Compose. El único puerto publicado es el de nginx (STAGING_HTTP_PORT) y, por
+# defecto, SOLO en loopback (127.0.0.1): no es visible desde la red local. Para
+# exponerlo a propósito: STAGING_BIND_ADDRESS=0.0.0.0 en .env.staging (ver la
+# guía; con secretos propios y sabiendo que no hay HTTPS).
 services:
   nginx:
     build:
@@ -14,7 +17,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
     ports:
-      - "${STAGING_HTTP_PORT:-8080}:80"
+      - "${STAGING_BIND_ADDRESS:-127.0.0.1}:${STAGING_HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
@@ -29,13 +32,19 @@ services:
 
   backend:
     build: ./backend
+    # tini como PID 1: reenvía SIGTERM a node y `docker stop` no espera 10 s.
+    init: true
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
       # El host de la base dentro de la red de Compose es el nombre del
-      # servicio (`mysql`). Usar usuario y contraseña sin caracteres que
-      # requieran URL-encoding (@ : / ? # %).
+      # servicio (`mysql`). Usuario y contraseña sin caracteres que requieran
+      # URL-encoding (@ : / ? # %) y un $ se escribe $$ en el env-file.
       DATABASE_URL: mysql://${MYSQL_USER:?definir MYSQL_USER}:${MYSQL_PASSWORD:?definir MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:?definir MYSQL_DATABASE}
+      # Solo para que el entrypoint valide que la URL de arriba quedó bien
+      # armada (docker/validar-entorno.js).
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:?definir JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       # Mercado Pago vacío por defecto: sin credenciales, crear una preferencia
@@ -61,12 +70,13 @@ services:
       retries: 5
       # Margen para las migraciones y el seed del primer arranque.
       start_period: 60s
-    # Si las migraciones fallan, el contenedor sale con error: se reintenta unas
-    # pocas veces y se detiene (no queda en un loop infinito de reinicios).
-    restart: on-failure:5
+    # Vuelve tras reiniciar Docker o la máquina. Si el proceso sale con error
+    # (p. ej. una migración fallida) Docker reintenta con espera creciente.
+    # Ojo: un contenedor `unhealthy` NO se reinicia solo (solo uno que sale).
+    restart: unless-stopped
 
   mysql:
-    image: mysql:8
+    image: mysql:8.4
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:?definir MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER:?definir MYSQL_USER}
