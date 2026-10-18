@@ -140,8 +140,13 @@ describe("Service de consulta de ventas (RF-042)", () => {
     });
 
     it("no hay claves sensibles en ningún nivel de la respuesta", async () => {
-      const respuesta = await consultar({ desde: "2034-03-10", hasta: "2034-03-12" });
+      // Autosuficiente: crea su propia venta (con responsable) en un día propio.
+      await nueva({ registradaEn: bogota("2034-03-13T09:15:00.000"), responsableId: admin.id });
 
+      const respuesta = await consultar({ desde: "2034-03-13", hasta: "2034-03-13" });
+
+      assert.equal(respuesta.ventas.length, 1);
+      assert.ok(respuesta.ventas[0].cliente && respuesta.ventas[0].responsable);
       assert.doesNotMatch(JSON.stringify(respuesta), /correo|passwordHash|email|@trendy\.test/i);
     });
   });
