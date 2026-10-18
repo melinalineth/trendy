@@ -1,29 +1,97 @@
+# Staging de Trendy con Docker Compose: nginx (frontend + proxy /api), backend
+# (Express + Prisma) y MySQL 8.4. Guía completa: docs/despliegue/staging.md.
+#
+# Todas las variables llegan por --env-file (nada de secretos en el repo):
+#   cp staging.env.example .env.staging      # y GENERAR secretos propios
+#   docker compose -p trendy-staging --env-file .env.staging up -d --build
+#
+# MySQL NO publica ningún puerto al host: solo lo ve el backend por la red de
+# Compose. El único puerto publicado es el de nginx (STAGING_HTTP_PORT) y, por
+# defecto, SOLO en loopback (127.0.0.1): no es visible desde la red local. Para
+# exponerlo a propósito: STAGING_BIND_ADDRESS=0.0.0.0 en .env.staging (ver la
+# guía; con secretos propios y sabiendo que no hay HTTPS).
 services:
   nginx:
-    image: nginx:alpine
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
     ports:
-      - "80:80"
+      - "${STAGING_BIND_ADDRESS:-127.0.0.1}:${STAGING_HTTP_PORT:-8080}:80"
     volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   backend:
     build: ./backend
-    env_file: ./backend/.env
+    # tini como PID 1: reenvía SIGTERM a node y `docker stop` no espera 10 s.
+    init: true
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "3000"
+      # El host de la base dentro de la red de Compose es el nombre del
+      # servicio (`mysql`). Usuario y contraseña sin caracteres que requieran
+      # URL-encoding (@ : / ? # %) y un $ se escribe $$ en el env-file.
+      DATABASE_URL: mysql://${MYSQL_USER:?definir MYSQL_USER}:${MYSQL_PASSWORD:?definir MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:?definir MYSQL_DATABASE}
+      # Solo para que el entrypoint valide que la URL de arriba quedó bien
+      # armada (docker/validar-entorno.js).
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?definir JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      # Mercado Pago vacío por defecto: sin credenciales, crear una preferencia
+      # responde 503 (documentado). Solo credenciales de PRUEBA en staging.
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      MERCADOPAGO_WEBHOOK_URL: ${MERCADOPAGO_WEBHOOK_URL:-}
+      MERCADOPAGO_PREFERENCIA_HORAS: ${MERCADOPAGO_PREFERENCIA_HORAS:-}
+      # Seed al arrancar (idempotente) y admin inicial opcional.
+      RUN_SEED: ${RUN_SEED:-false}
+      SEED_ADMIN_NOMBRE: ${SEED_ADMIN_NOMBRE:-}
+      SEED_ADMIN_CORREO: ${SEED_ADMIN_CORREO:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     expose:
       - "3000"
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Margen para las migraciones y el seed del primer arranque.
+      start_period: 60s
+    # Vuelve tras reiniciar Docker o la máquina. Si el proceso sale con error
+    # (p. ej. una migración fallida) Docker reintenta con espera creciente.
+    # Ojo: un contenedor `unhealthy` NO se reinicia solo (solo uno que sale).
     restart: unless-stopped
 
   mysql:
-    image: mysql:8
-    env_file: ./mysql/.env
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?definir MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER:?definir MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?definir MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?definir MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      # 127.0.0.1 (TCP) y no el socket: durante la inicialización el servidor
+      # temporal solo escucha por socket y no debe contar como "sano".
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
 volumes:
