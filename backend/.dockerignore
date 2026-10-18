@@ -1,3 +1,16 @@
+# Nada de esto entra a la imagen del backend.
+
+# Dependencias: se instalan dentro de la imagen con `npm ci`.
 node_modules
-.env
 npm-debug.log
+
+# Secretos y variables locales (las variables llegan por docker-compose).
+.env
+.env.*
+
+# Tests y archivos de desarrollo.
+tests
+
+# Metadatos del propio build.
+Dockerfile
+.dockerignore
