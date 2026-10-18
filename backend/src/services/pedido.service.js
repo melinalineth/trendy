@@ -1089,6 +1089,7 @@ module.exports = {
   cancelarPedido,
   cancelarPedidosVencidos,
   esCancelable,
+  mensajeNoCancelable,
   ESTADOS_CANCELABLES,
   ESTADOS_CANCELABLES_CONTRA_ENTREGA,
   MARGEN_VENCIMIENTO_MS,

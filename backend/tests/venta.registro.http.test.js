@@ -674,6 +674,58 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
     });
 
+    it("el estado legado PAGO_APROBADO no se cancela, ni contra entrega ni Mercado Pago: 409 por estado (esCancelable), sin reponer", async () => {
+      const cliente = await clienteConDireccion();
+      for (const metodoPago of ["CONTRA_ENTREGA", "MERCADO_PAGO"]) {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: cliente.direccion.id,
+          lineas: [{ variante, cantidad: 2 }],
+          metodoPago,
+          estado: "PAGO_APROBADO",
+        });
+
+        const r = await cancelar(pedido.id);
+
+        assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+        assert.deepEqual(r.body.error.detalles, {
+          estado: "PAGO_APROBADO",
+          metodoPago,
+          motivo: "ESTADO_NO_CANCELABLE",
+        });
+        assert.equal(await estadoDe(pedido.id), "PAGO_APROBADO", metodoPago);
+        assert.equal(await stockDe(variante.id), 3, metodoPago);
+      }
+    });
+
+    it("con un Pago APROBADO el motivo es PAGO_APROBADO (reembolso manual), también en el estado legado PAGO_APROBADO", async () => {
+      const cliente = await clienteConDireccion();
+      const variante = await crearVariante({ stock: 3 });
+      const pedido = await crearPedido({
+        usuarioId: cliente.id,
+        direccionId: cliente.direccion.id,
+        lineas: [{ variante, cantidad: 2 }],
+        estado: "PAGO_APROBADO",
+      });
+      await prisma.pago.create({
+        data: {
+          pedidoId: pedido.id,
+          metodo: "MERCADO_PAGO",
+          estado: "APROBADO",
+          referenciaExterna: "legado-1",
+          monto: String(pedido.total),
+        },
+      });
+
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id));
+
+      assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+      assert.equal(r.body.error.detalles.motivo, "PAGO_APROBADO");
+      assert.match(r.body.error.mensaje, /pago aprobado/);
+      assert.equal(await stockDe(variante.id), 3);
+    });
+
     it("el cliente NO puede cancelar ni su propio pedido confirmado: 403 y nada cambia", async () => {
       const { pedido, variante, cliente } = await contraEntregaEn("EN_PREPARACION");
 
