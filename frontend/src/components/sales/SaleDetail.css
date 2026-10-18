@@ -1,0 +1,77 @@
+/* Detalle de una venta dentro del Modal común (RF-042). El Modal no hace
+   scroll y recorta lo que se pasa de la pantalla (overflow: hidden), por eso
+   el contenido limita su alto y scrollea por su cuenta. */
+
+.sale-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: calc(100vh - 16rem);
+  min-height: 8rem;
+  overflow-y: auto;
+  color: var(--color-text);
+}
+
+.sale-detail__datos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.sale-detail__datos dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sale-detail__datos dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.sale-detail__muted {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.sale-detail__totales {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+  margin: 0 0 0 auto;
+}
+
+.sale-detail__totales div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.sale-detail__totales dt,
+.sale-detail__totales dd {
+  margin: 0;
+}
+
+.sale-detail__totales .sale-detail__total {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .sale-detail__datos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sale-detail__totales {
+    max-width: none;
+  }
+}

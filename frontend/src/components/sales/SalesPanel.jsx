@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
+
 import Alert from "../common/Alert";
 import Badge from "../common/Badge";
 import Button from "../common/Button";
 import Input from "../common/Input";
 import Loading from "../common/Loading";
+import Modal from "../common/Modal";
 import Pagination from "../common/Pagination";
 import Select from "../common/Select";
 import Table from "../common/Table";
@@ -18,6 +21,7 @@ import {
   etiquetaEstadoVenta,
   textoVentas,
 } from "./ventaEstados";
+import SaleDetail from "./SaleDetail";
 import "./SalesPanel.css";
 
 // Valor del Select común para "sin filtro": su opción de placeholder está
@@ -72,6 +76,22 @@ export default function SalesPanel() {
     recargar,
   } = useVentas();
 
+  // Venta cuyo detalle se muestra en el Modal (null = cerrado). El detalle no
+  // pide nada al backend: GET /ventas ya trae las líneas de cada venta.
+  const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
+
+  // Escape cierra el modal (el Modal común no lo maneja).
+  useEffect(() => {
+    if (!ventaSeleccionada) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setVentaSeleccionada(null);
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [ventaSeleccionada]);
+
   function filtrar(event) {
     event.preventDefault();
     aplicarFiltros();
@@ -110,6 +130,17 @@ export default function SalesPanel() {
         <Badge
           text={etiquetaEstadoVenta(venta.estado)}
           type={badgeEstadoVenta(venta.estado)}
+        />
+      ),
+    },
+    {
+      key: "acciones",
+      label: "Acciones",
+      render: (venta) => (
+        <Button
+          className="sales-panel__btn--secundario"
+          text="Ver detalle"
+          onClick={() => setVentaSeleccionada(venta)}
         />
       ),
     },
@@ -229,6 +260,18 @@ export default function SalesPanel() {
           )}
         </>
       )}
+
+      <Modal
+        isOpen={Boolean(ventaSeleccionada)}
+        onClose={() => setVentaSeleccionada(null)}
+        title={
+          ventaSeleccionada
+            ? `Venta #${ventaSeleccionada.id} — pedido ${ventaSeleccionada.numeroPedido ?? `#${ventaSeleccionada.pedidoId}`}`
+            : ""
+        }
+      >
+        {ventaSeleccionada && <SaleDetail venta={ventaSeleccionada} />}
+      </Modal>
     </section>
   );
 }
