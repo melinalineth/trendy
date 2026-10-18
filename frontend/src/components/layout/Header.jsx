@@ -32,6 +32,16 @@ const Header = ({ title = "Mi aplicación", subtitle }) => {
     </Link>
   )}
 
+  {/* Ventas (RF-042): solo admin y vendedor, cada uno en su ruta. */}
+  {isAuthenticated && (rol === "admin" || rol === "vendedor") && (
+    <Link
+      to={rol === "admin" ? "/admin/ventas" : "/vendedor/ventas"}
+      className="header__link"
+    >
+      Ventas
+    </Link>
+  )}
+
   {mostrarCarrito && (
     <Link
       to="/carrito"

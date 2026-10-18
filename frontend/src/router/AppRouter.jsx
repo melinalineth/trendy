@@ -163,26 +163,24 @@ function AppRoutes() {
           </RoleGuard>
         }
       />
-
-      
-<Route
-  path="/admin/ventas"
-  element={
-    <RoleGuard roles={["admin"]}>
-      <AdminSales />
-    </RoleGuard>
-  }
-/>
-
-<Route
-  path="/vendedor/ventas"
-  element={
-    <RoleGuard roles={["vendedor"]}>
-      <SellerSales />
-    </RoleGuard>
-  }
-/>
-
+      {/* Sprint 5: consulta de ventas (RF-042). En v1.0 admin y vendedor ven
+          todas las ventas desde el mismo panel compartido. */}
+      <Route
+        path="/admin/ventas"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <AdminSales />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/vendedor/ventas"
+        element={
+          <RoleGuard roles={["vendedor"]}>
+            <SellerSales />
+          </RoleGuard>
+        }
+      />
       {/* Resto del panel de vendedor (rutas /vendedor/*) queda pendiente:
           RF-007, RF-045, RF-046 son exclusivamente de administración y no
           forman parte de esta ronda. Gestión de productos (RF-013, RF-014,
