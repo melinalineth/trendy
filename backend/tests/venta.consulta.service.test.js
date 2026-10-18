@@ -83,6 +83,7 @@ describe("Service de consulta de ventas (RF-042)", () => {
         "estado",
         "anuladaEn",
         "responsable",
+        "anuladaPor",
         "subtotal",
         "costoEnvio",
         "total",
@@ -98,6 +99,7 @@ describe("Service de consulta de ventas (RF-042)", () => {
       assert.equal(v.estado, "REGISTRADA");
       assert.equal(v.anuladaEn, null);
       assert.deepEqual(v.responsable, { id: admin.id, nombre: "Test admin" });
+      assert.equal(v.anuladaPor, null);
       // 2 x 12345 = 24690 ; + 8000 = 32690. NÚMEROS, no textos.
       assert.strictEqual(v.subtotal, 24690);
       assert.strictEqual(v.costoEnvio, 8000);
@@ -150,6 +152,32 @@ describe("Service de consulta de ventas (RF-042)", () => {
 
       assert.equal(ventas[0].estado, "ANULADA");
       assert.equal(ventas[0].anuladaEn, "2034-03-12T20:00:00.000Z");
+    });
+
+    it("una venta ANULADA por un usuario trae anuladaPor { id, nombre }, distinto del responsable", async () => {
+      const vendedor = await crearUsuario("vendedor");
+      await nueva({
+        registradaEn: bogota("2034-03-14T09:15:00.000"),
+        responsableId: admin.id,
+        estado: "ANULADA",
+        anuladaPorId: vendedor.id,
+      });
+
+      const { ventas } = await consultar({ desde: "2034-03-14", hasta: "2034-03-14" });
+
+      assert.deepEqual(ventas[0].anuladaPor, { id: vendedor.id, nombre: "Test vendedor" });
+      assert.deepEqual(Object.keys(ventas[0].anuladaPor), ["id", "nombre"]);
+      assert.deepEqual(ventas[0].responsable, { id: admin.id, nombre: "Test admin" });
+      assert.doesNotMatch(JSON.stringify(ventas[0]), /correo|passwordHash|email|@trendy\.test/i);
+    });
+
+    it("anuladaPor es null en una venta ANULADA sin quién la anuló (legada)", async () => {
+      await nueva({ registradaEn: bogota("2034-03-15T09:15:00.000"), estado: "ANULADA" });
+
+      const { ventas } = await consultar({ desde: "2034-03-15", hasta: "2034-03-15" });
+
+      assert.equal(ventas[0].estado, "ANULADA");
+      assert.equal(ventas[0].anuladaPor, null);
     });
 
     it("no hay claves sensibles en ningún nivel de la respuesta", async () => {

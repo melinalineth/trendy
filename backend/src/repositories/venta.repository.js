@@ -116,6 +116,8 @@ const SELECT_LISTADO = {
   anuladaEn: true,
   cliente: PERSONA_PUBLICA,
   responsable: PERSONA_PUBLICA,
+  // Quien ANULÓ la venta (NULL si no está anulada o se anuló sin usuario).
+  anuladaPor: PERSONA_PUBLICA,
   pedido: {
     select: {
       numero: true,

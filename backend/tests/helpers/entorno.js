@@ -252,6 +252,7 @@ async function crearPedido({
 //   - estado: REGISTRADA (por defecto) o ANULADA; una ANULADA lleva anuladaEn
 //     (el dado o "ahora").
 //   - responsableId (opcional): usuario que la registró (NULL = webhook).
+//   - anuladaPorId (opcional): usuario que la anuló (NULL = sin dato / sin usuario).
 // Devuelve { venta, pedido }. `limpiar` borra la venta antes que el pedido.
 async function crearVenta({
   usuarioId,
@@ -264,6 +265,7 @@ async function crearVenta({
   estado = "REGISTRADA",
   anuladaEn,
   responsableId,
+  anuladaPorId,
 }) {
   const pedido = await crearPedido({
     usuarioId,
@@ -279,6 +281,7 @@ async function crearVenta({
       pedidoId: pedido.id,
       clienteId: pedido.usuarioId,
       responsableId: responsableId ?? null,
+      anuladaPorId: anuladaPorId ?? null,
       subtotal: pedido.subtotal,
       costoEnvio: pedido.costoEnvio,
       total: pedido.total,

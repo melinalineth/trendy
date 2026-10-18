@@ -180,6 +180,7 @@ describe("GET /api/v1/ventas (RF-042)", () => {
       assert.equal(v.fecha, "2035-03-10T15:00:00.000Z");
       assert.deepEqual(v.cliente, { id: cliente.id, nombre: "Test cliente" });
       assert.deepEqual(v.responsable, { id: admin.id, nombre: "Test admin" });
+      assert.equal(v.anuladaPor, null, "una venta REGISTRADA no tiene quién la anuló");
       assert.strictEqual(v.subtotal, 24690);
       assert.strictEqual(v.costoEnvio, 8000);
       assert.strictEqual(v.total, 32690);
@@ -228,6 +229,78 @@ describe("GET /api/v1/ventas (RF-042)", () => {
         assert.equal(claves.has(prohibida), false, `no debe aparecer la clave ${prohibida}`);
       }
       assert.doesNotMatch(JSON.stringify(r.body), /@trendy\.test|no-se-usa-en-estos-tests/);
+    });
+  });
+
+  // `anuladaPor` es quien ANULÓ la venta (admin/vendedor que canceló el pedido
+  // contra entrega); `responsable` sigue siendo quien la REGISTRÓ.
+  describe("quién anuló la venta (anuladaPor)", () => {
+    let ventaDelPedidoCancelado;
+    let ventaLegada;
+
+    before(async () => {
+      // Contra entrega confirmado por el admin y cancelado por el VENDEDOR por la
+      // API real: la anulación la escribe el flujo, no el test.
+      const { venta, pedido } = await nueva({
+        registradaEn: bogota("2035-04-10T10:00:00.000"),
+        metodoPago: "CONTRA_ENTREGA",
+        estadoPedido: "CONFIRMADO",
+        responsableId: admin.id,
+      });
+      ventaDelPedidoCancelado = venta;
+      const cancelacion = await api("PATCH", `/api/v1/pedidos/${pedido.id}/cancelar`, {
+        token: vendedor.token,
+      });
+      assert.equal(cancelacion.status, 200, JSON.stringify(cancelacion.body));
+
+      // ANULADA legada: anulada antes de que existiera la columna, sin quién.
+      ventaLegada = (
+        await nueva({
+          registradaEn: bogota("2035-04-11T10:00:00.000"),
+          estado: "ANULADA",
+          responsableId: admin.id,
+        })
+      ).venta;
+      // REGISTRADA: nadie la anuló.
+      await nueva({ registradaEn: bogota("2035-04-12T10:00:00.000"), responsableId: admin.id });
+    });
+
+    const dia = (usuario, d) => listar(usuario, `?desde=2035-04-${d}&hasta=2035-04-${d}`);
+
+    it("una venta anulada al cancelar el pedido trae anuladaPor = el vendedor, y responsable sigue siendo el admin", async () => {
+      const r = await dia(admin, "10");
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      const [v] = r.body.ventas;
+      assert.equal(v.id, ventaDelPedidoCancelado.id);
+      assert.equal(v.estado, "ANULADA");
+      assert.deepEqual(v.anuladaPor, { id: vendedor.id, nombre: "Test vendedor" });
+      assert.deepEqual(Object.keys(v.anuladaPor).sort(), ["id", "nombre"]);
+      assert.deepEqual(v.responsable, { id: admin.id, nombre: "Test admin" });
+    });
+
+    it("una venta ANULADA legada (sin quién la anuló) trae anuladaPor: null", async () => {
+      const [v] = (await dia(admin, "11")).body.ventas;
+
+      assert.equal(v.id, ventaLegada.id);
+      assert.equal(v.estado, "ANULADA");
+      assert.equal(v.anuladaPor, null);
+    });
+
+    it("una venta REGISTRADA trae anuladaPor: null; el vendedor ve lo mismo que el admin", async () => {
+      const [v] = (await dia(admin, "12")).body.ventas;
+
+      assert.equal(v.estado, "REGISTRADA");
+      assert.equal(v.anuladaPor, null);
+      assert.deepEqual((await dia(vendedor, "10")).body, (await dia(admin, "10")).body);
+    });
+
+    it("anuladaPor no filtra correo ni otros datos de la persona", async () => {
+      const r = await listar(admin, "?desde=2035-04-01&hasta=2035-04-30");
+      const anulada = r.body.ventas.find((v) => v.id === ventaDelPedidoCancelado.id);
+
+      assert.deepEqual(Object.keys(anulada.anuladaPor), ["id", "nombre"]);
+      assert.doesNotMatch(JSON.stringify(r.body), /@trendy\.test|passwordHash|correo/);
     });
   });
 
