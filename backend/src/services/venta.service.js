@@ -159,22 +159,10 @@ async function anularVentaDePedido(pedidoId, { responsableId = null } = {}, tx) 
 // Presentación del contrato de GET /api/v1/ventas (docs/diseno/ventas-api.md).
 
 // Montos: SIEMPRE por centavos enteros, nunca multiplicando floats. Se parsea
-// el TEXTO del Decimal (toFixed(2)) y se divide al final: "0.10" x 3 = 30
-// centavos exactos. (Copia local y privada de pedido.service.aCentavos: no se
-// importa pedido.service porque éste importa este módulo y se crearía un ciclo.)
-function centavosDeDecimal(valor) {
-  const texto =
-    valor !== null && typeof valor === "object" && typeof valor.toFixed === "function"
-      ? valor.toFixed(2)
-      : String(valor).trim();
-  const partes = /^(\d+)(?:\.(\d{1,2}))?$/.exec(texto);
-
-  if (!partes) {
-    throw new Error(`Monto inválido: ${texto}`);
-  }
-
-  return Number(partes[1]) * 100 + Number((partes[2] ?? "").padEnd(2, "0"));
-}
+// el TEXTO del Decimal (aCentavos) y se divide al final: "0.10" x 3 = 30
+// centavos exactos. aCentavos vive en utils/montos.js (módulo hoja): no se
+// importa pedido.service porque éste importa este módulo y se crearía un ciclo.
+const { aCentavos: centavosDeDecimal } = require("../utils/montos");
 
 // Centavos enteros -> pesos como número JSON (exacto con dos decimales).
 const pesos = (centavos) => centavos / 100;

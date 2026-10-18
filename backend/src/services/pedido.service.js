@@ -135,22 +135,10 @@ class MontoNoEnteroCopError extends Error {
 
 const CENTAVOS_MAXIMOS = 9999999999; // Decimal(10,2)
 
-// Decimal de Prisma, string o Number (p. ej. el costo de calcularCosto) ->
-// centavos enteros. Se parsea el TEXTO con dos decimales (Decimal.toFixed(2))
-// en vez de multiplicar floats: "0.10" * 3 da 30 centavos exactos.
-function aCentavos(valor) {
-  const texto =
-    valor !== null && typeof valor === "object" && typeof valor.toFixed === "function"
-      ? valor.toFixed(2)
-      : String(valor).trim();
-  const partes = /^(\d+)(?:\.(\d{1,2}))?$/.exec(texto);
-
-  if (!partes) {
-    throw new Error(`Monto inválido: ${texto}`);
-  }
-
-  return Number(partes[1]) * 100 + Number((partes[2] ?? "").padEnd(2, "0"));
-}
+// `aCentavos` (Decimal de Prisma, string o Number -> centavos enteros, sin
+// multiplicar floats) vive en utils/montos.js, un módulo hoja compartido con
+// venta.service (los dos se importan en ciclo). Se re-exporta abajo.
+const { aCentavos } = require("../utils/montos");
 
 // Centavos enteros -> string con dos decimales exactos para Decimal(10,2).
 function deCentavos(centavos) {
