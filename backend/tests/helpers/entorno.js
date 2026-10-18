@@ -278,6 +278,15 @@ async function limpiar() {
     OR: [{ id: { in: pedidos } }, { usuarioId: { in: usuarios } }],
   };
   await prisma.pago.deleteMany({ where: { pedido: filtroPedidos } });
+  // El historial de envío referencia a InfoEnvio y a Usuario con RESTRICT: va
+  // antes que ambos. Se borra el de los pedidos y el de los usuarios creados
+  // por los tests (un cambio de un usuario de test sobre un pedido ajeno
+  // también bloquearía borrar a ese usuario).
+  await prisma.historialEstadoEnvio.deleteMany({
+    where: {
+      OR: [{ infoEnvio: { pedido: filtroPedidos } }, { usuarioId: { in: usuarios } }],
+    },
+  });
   await prisma.infoEnvio.deleteMany({ where: { pedido: filtroPedidos } });
   await prisma.detallePedido.deleteMany({ where: { pedido: filtroPedidos } });
   await prisma.pedido.deleteMany({ where: filtroPedidos });

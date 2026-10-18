@@ -153,16 +153,59 @@ async function calcularCosto(direccionId, usuarioId) {
 
 /**
  * Sprint 4 / RF-027: registra la información de envío de un pedido recién
- * creado (dirección, costo congelado y estado EN_PREPARACION). Debe recibir el
- * cliente `tx` de la transacción que crea el pedido, nunca el `prisma` raíz.
+ * creado (dirección, costo congelado y estado EN_PREPARACION) y, en la misma
+ * transacción, la primera fila del historial (RF-028/RF-029: null ->
+ * EN_PREPARACION, hecha por `usuarioId`, el cliente que crea el pedido). Debe
+ * recibir el cliente `tx` de la transacción que crea el pedido, nunca el
+ * `prisma` raíz.
  */
-async function crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, tx) {
-  return envioRepository.crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, tx);
+async function crearInfoEnvio({ pedidoId, direccionId, costoEnvio, usuarioId }, tx) {
+  const info = await envioRepository.crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, tx);
+
+  await envioRepository.crearHistorial(
+    {
+      infoEnvioId: info.id,
+      estadoAnterior: null,
+      estadoNuevo: info.estadoEnvio,
+      usuarioId,
+    },
+    tx
+  );
+
+  return info;
+}
+
+/**
+ * Sprint 4 / RF-028 y RF-029: lleva un InfoEnvio ya leído (`info`) a
+ * `estadoNuevo` y deja la fila anterior -> nuevo con el usuario que lo hizo.
+ * Valida la transición (validarTransicionEstado: un cambio inválido o al mismo
+ * estado lanza ANTES de escribir, así que no deja historial). Debe recibir el
+ * cliente `tx` de la transacción que además cambia Pedido.estado, con el lock
+ * del pedido tomado: el InfoEnvio, su historial y el pedido confirman o
+ * revierten juntos. Devuelve el InfoEnvio actualizado.
+ */
+async function cambiarEstadoEnvio({ pedidoId, info, estadoNuevo, usuarioId }, tx) {
+  validarTransicionEstado(info.estadoEnvio, estadoNuevo);
+
+  const actualizado = await envioRepository.actualizarEstadoEnvio(pedidoId, estadoNuevo, tx);
+
+  await envioRepository.crearHistorial(
+    {
+      infoEnvioId: info.id,
+      estadoAnterior: info.estadoEnvio,
+      estadoNuevo,
+      usuarioId,
+    },
+    tx
+  );
+
+  return actualizado;
 }
 
 module.exports = {
   calcularCosto,
   crearInfoEnvio,
+  cambiarEstadoEnvio,
   validarTransicionEstado,
   ESTADOS_ENVIO,
   TRANSICIONES_ENVIO,

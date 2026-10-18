@@ -42,7 +42,6 @@ const {
   DireccionNoAutorizadaError,
   TransicionEnvioInvalidaError,
   ESTADOS_ENVIO,
-  validarTransicionEstado,
 } = envioService;
 const { StockInsuficienteError } = inventarioService;
 
@@ -438,8 +437,10 @@ async function crearEnTransaccion(tx, { usuarioId, direccionId, metodoPago, cost
 
   // 5. RF-027: InfoEnvio con la dirección y el costo congelados, en
   //    EN_PREPARACION (docs/diseno/info-envio.md).
+  //    Su primera fila de historial (null -> EN_PREPARACION) la hace el cliente
+  //    que crea el pedido (RF-028, RF-029).
   await envioService.crearInfoEnvio(
-    { pedidoId: pedido.id, direccionId, costoEnvio: deCentavos(costoEnvioCentavos) },
+    { pedidoId: pedido.id, direccionId, costoEnvio: deCentavos(costoEnvioCentavos), usuarioId },
     tx
   );
 
@@ -702,8 +703,8 @@ async function listarPedidos(usuario, filtros = {}) {
 
 // Pedido completo visible para `usuario` o PedidoNoEncontradoError (uno
 // ajeno responde igual que uno inexistente, RN-003 / DDS §5.2).
-async function obtenerVisible(pedidoId, usuario) {
-  const pedido = await pedidoRepository.obtenerPorId(pedidoId);
+async function obtenerVisible(pedidoId, usuario, client = prisma) {
+  const pedido = await pedidoRepository.obtenerPorId(pedidoId, client);
 
   if (!pedido || (!esPersonal(usuario) && Number(pedido.usuarioId) !== Number(usuario.id))) {
     throw new PedidoNoEncontradoError();
@@ -797,9 +798,11 @@ function validarTransicionPedido(estadoActual, estadoNuevo, { metodoPago, pago =
 // Lleva InfoEnvio al estado de envío `estadoNuevo`, con el lock del pedido
 // tomado (misma transacción que el cambio de Pedido.estado). EN_PREPARACION
 // es el estado con el que nace el InfoEnvio: entrar en preparación no lo
-// cambia, solo exige que siga ahí. El resto pasa por validarTransicionEstado
-// (sin saltos ni retrocesos, RF-029).
-async function sincronizarEnvio(tx, pedidoId, estadoNuevo) {
+// cambia (y no escribe historial), solo exige que siga ahí. El resto pasa por
+// envioService.cambiarEstadoEnvio: validarTransicionEstado (sin saltos ni
+// retrocesos, RF-029) y la fila de historial con `usuarioId`, quien hace el
+// cambio (RF-028, RF-029).
+async function sincronizarEnvio(tx, pedidoId, estadoNuevo, usuarioId) {
   const info = await envioRepository.obtenerInfoEnvio(pedidoId, tx);
 
   if (!info) {
@@ -815,17 +818,17 @@ async function sincronizarEnvio(tx, pedidoId, estadoNuevo) {
     return info;
   }
 
-  validarTransicionEstado(info.estadoEnvio, estadoNuevo);
-  return envioRepository.actualizarEstadoEnvio(pedidoId, estadoNuevo, tx);
+  return envioService.cambiarEstadoEnvio({ pedidoId, info, estadoNuevo, usuarioId }, tx);
 }
 
 /**
  * PATCH /api/v1/pedidos/:id/estado (admin y vendedor). Bajo el lock del
  * pedido: valida la transición y, si el estado nuevo es de envío, actualiza
- * InfoEnvio en la MISMA transacción (Pedido.estado manda; mientras el pedido
- * está en EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
+ * InfoEnvio y su historial (con `usuario`, quien hace el cambio) en la MISMA
+ * transacción (Pedido.estado manda; mientras el pedido está en
+ * EN_PREPARACION..ENTREGADO, InfoEnvio.estadoEnvio vale lo mismo).
  */
-async function actualizarEstado(pedidoId, estadoNuevo) {
+async function actualizarEstado(pedidoId, estadoNuevo, usuario) {
   await enTransaccion("ACTUALIZAR_ESTADO", async (tx) => {
     const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
@@ -837,7 +840,7 @@ async function actualizarEstado(pedidoId, estadoNuevo) {
     validarTransicionPedido(bloqueado.estado, estadoNuevo, { metodoPago: bloqueado.metodoPago, pago });
 
     if (ESTADOS_ENVIO.includes(estadoNuevo)) {
-      await sincronizarEnvio(tx, pedidoId, estadoNuevo);
+      await sincronizarEnvio(tx, pedidoId, estadoNuevo, Number(usuario.id));
     }
 
     await pedidoRepository.actualizarEstado(pedidoId, estadoNuevo, tx);
@@ -856,9 +859,10 @@ const ESTADOS_PEDIDO_EN_ENVIO = ESTADOS_ENVIO;
 // Forma de la respuesta de seguimiento. `estadoEnvio` solo describe la
 // logística cuando el pedido está en un estado de envío; antes de eso (o si
 // se canceló) vale el EN_PREPARACION del alta y manda `estadoPedido`.
-// Historial de cambios: NO existe todavía (requiere la tabla
-// HistorialEstadoEnvio, ver docs/diseno/info-envio.md §5).
-function presentarSeguimiento(pedido) {
+// `historial` (RF-028): cambios de estado de envío, el más antiguo primero,
+// con fecha y hora; viene de HistorialEstadoEnvio (docs/diseno/info-envio.md
+// §5) y es [] en los envíos anteriores a esa tabla.
+function presentarSeguimiento(pedido, historial) {
   const direccion = pedido.direccion;
 
   return {
@@ -880,17 +884,54 @@ function presentarSeguimiento(pedido) {
           referencia: direccion.referencia,
         }
       : null,
+    historial,
   };
+}
+
+// Historial para la respuesta. El usuario que hizo cada cambio (RF-029) lo ve
+// SOLO el personal, y únicamente { id, nombre }: el cliente dueño ve estados y
+// fechas, nunca la identidad de quien atiende su pedido, y a nadie se le
+// expone correo ni datos sensibles (el repository no los selecciona).
+async function cargarHistorial(infoEnvioId, usuario, client = prisma) {
+  const conUsuario = esPersonal(usuario);
+  const filas = await envioRepository.listarHistorial(infoEnvioId, { conUsuario }, client);
+
+  return filas.map((fila) => ({
+    estadoAnterior: fila.estadoAnterior,
+    estadoNuevo: fila.estadoNuevo,
+    creadoEn: fila.creadoEn,
+    ...(conUsuario ? { usuario: { id: fila.usuario.id, nombre: fila.usuario.nombre } } : {}),
+  }));
+}
+
+// Seguimiento completo (pedido + historial) visible para `usuario`. El pedido
+// y el historial son DOS consultas, así que se leen dentro de una transacción
+// de solo lectura: MySQL/MariaDB (InnoDB) trabaja en REPEATABLE READ por
+// defecto y el snapshot se toma en la primera lectura, de modo que un cambio
+// de envío confirmado entre las dos no se mezcla (estadoEnvio X con un
+// historial que ya termina en Y). Sin locks: no bloquea a quien escribe.
+// Lo comparten GET /seguimiento y la respuesta de PUT /estado-envio.
+async function leerSeguimiento(pedidoId, usuario) {
+  return prisma.$transaction(async (tx) => {
+    const pedido = await obtenerVisible(pedidoId, usuario, tx);
+
+    if (!pedido.infoEnvio) {
+      throw new EnvioNoRegistradoError(404);
+    }
+
+    return presentarSeguimiento(pedido, await cargarHistorial(pedido.infoEnvio.id, usuario, tx));
+  }, OPCIONES_TRANSACCION);
 }
 
 /**
  * PUT /api/v1/pedidos/:id/estado-envio (admin y vendedor, RF-029). Avanza el
  * envío un paso (validarTransicionEstado: sin saltos ni retrocesos) y
  * sincroniza Pedido.estado en la misma transacción, bajo el lock del pedido.
+ * El cambio queda en el historial con `usuario`, quien lo hace (RF-029).
  * Solo si el pedido ya está en preparación o en camino; entrar en
  * preparación es PATCH /estado (CONFIRMADO -> EN_PREPARACION).
  */
-async function actualizarEstadoEnvio(pedidoId, estadoEnvio) {
+async function actualizarEstadoEnvio(pedidoId, estadoEnvio, usuario) {
   await enTransaccion("ACTUALIZAR_ESTADO_ENVIO", async (tx) => {
     const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
@@ -910,28 +951,25 @@ async function actualizarEstadoEnvio(pedidoId, estadoEnvio) {
       throw new EnvioNoRegistradoError();
     }
 
-    validarTransicionEstado(info.estadoEnvio, estadoEnvio);
-
-    await envioRepository.actualizarEstadoEnvio(pedidoId, estadoEnvio, tx);
+    await envioService.cambiarEstadoEnvio(
+      { pedidoId, info, estadoNuevo: estadoEnvio, usuarioId: Number(usuario.id) },
+      tx
+    );
     await pedidoRepository.actualizarEstado(pedidoId, estadoEnvio, tx);
   });
 
-  return presentarSeguimiento(await pedidoRepository.obtenerPorId(pedidoId));
+  return leerSeguimiento(pedidoId, usuario);
 }
 
 /**
  * GET /api/v1/pedidos/:id/seguimiento (RF-028): dueño, admin y vendedor; un
  * pedido ajeno responde 404 como uno inexistente. Estado actual de envío y
- * del pedido, fecha y hora del último cambio y dirección de entrega.
+ * del pedido, fecha y hora del último cambio, dirección de entrega e
+ * historial de cambios de envío (RF-028); admin y vendedor ven además quién
+ * hizo cada cambio (RF-029).
  */
 async function obtenerSeguimiento(pedidoId, usuario) {
-  const pedido = await obtenerVisible(pedidoId, usuario);
-
-  if (!pedido.infoEnvio) {
-    throw new EnvioNoRegistradoError(404);
-  }
-
-  return presentarSeguimiento(pedido);
+  return leerSeguimiento(pedidoId, usuario);
 }
 
 module.exports = {

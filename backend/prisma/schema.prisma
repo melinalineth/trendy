@@ -25,6 +25,7 @@ model Usuario {
   movimientosInventario InventarioMovimiento[]
   carrito              Carrito?
   pedidos              Pedido[]
+  historialEnvios      HistorialEstadoEnvio[]
 }
 
 enum EstadoUsuario {
@@ -215,6 +216,30 @@ model InfoEnvio {
 
   pedido Pedido @relation(fields: [pedidoId], references: [id])
   direccion Direccion @relation(fields: [direccionId], references: [id])
+  historial HistorialEstadoEnvio[]
+}
+
+// Sprint 4 / RF-028 y RF-029: historial de cambios del estado de envío, una
+// fila por cambio (docs/diseno/info-envio.md §5). InfoEnvio sigue guardando
+// solo el estado actual. Se escribe en la misma transacción que el cambio.
+//   - estadoAnterior: NULL en el alta del InfoEnvio (no había estado previo).
+//   - usuarioId: quién hizo el cambio (el cliente en el alta, admin/vendedor
+//     después). Obligatorio: ningún cambio de envío lo dispara el sistema
+//     (cancelar, vencer y el webhook de pagos no tocan InfoEnvio).
+//   - Restrict explícito en ambas FKs: el historial no se borra en cascada ni
+//     deja borrar al InfoEnvio o al usuario que lo respaldan.
+model HistorialEstadoEnvio {
+  id Int @id @default(autoincrement())
+  infoEnvioId Int
+  estadoAnterior EstadoEnvio?
+  estadoNuevo EstadoEnvio
+  usuarioId Int
+  creadoEn DateTime @default(now())
+
+  infoEnvio InfoEnvio @relation(fields: [infoEnvioId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([infoEnvioId, creadoEn])
 }
 
 enum EstadoPedido {

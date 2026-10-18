@@ -81,7 +81,14 @@ Errores: estado fuera del enum -> 400 `VALIDACION_FALLIDA`; transición no permi
 
 `GET /api/v1/pedidos/:id/seguimiento` (dueño, admin y vendedor; ajeno -> 404) devuelve
 `estadoPedido`, `estadoEnvio`, `actualizadoEn` (fecha y hora del último cambio de envío),
-`costoEnvio` y la dirección de entrega (destinatario, teléfono, calle, ciudad...).
+`costoEnvio`, la dirección de entrega (destinatario, teléfono, calle, ciudad...) y `historial`:
+los cambios de estado de envío con su fecha y hora, del más antiguo al más reciente
+(`{ estadoAnterior, estadoNuevo, creadoEn }`; la primera entrada es el alta, con
+`estadoAnterior: null`). Admin y vendedor ven además `usuario: { id, nombre }` de quien hizo cada
+cambio; el cliente no ve la identidad del personal. Cada cambio de envío escribe su fila en la
+misma transacción que `InfoEnvio` y `Pedido.estado` (alta, `PUT /estado-envio` y `PATCH /estado`
+a un estado de envío); cancelar, vencer y el webhook de pagos no tocan el envío. Detalle en
+`info-envio.md` §5.
 
 ## 5. Quién puede qué (ERS §4.1 y §2.8.3)
 
@@ -160,9 +167,10 @@ endpoint periódicamente con un token de admin.
 
 ## 9. Huecos conocidos
 
-- **Historial de envío (RF-028) y usuario de cada cambio (RF-029):** `InfoEnvio` solo guarda el
-  último estado y `actualizadoEn`. Requiere una tabla nueva (propuesta `HistorialEstadoEnvio` en
-  `info-envio.md` §5), fuera de esta fase porque implica cambio de esquema.
+- **Historial de envío (RF-028) y usuario de cada cambio (RF-029): cerrado.** La tabla
+  `HistorialEstadoEnvio` existe y el seguimiento devuelve `historial` (ver `info-envio.md` §5). Los
+  envíos creados antes de la migración no tienen historial (`historial: []`; sin backfill porque no
+  hay datos reales de quién ni cuándo). La notificación al cliente (RF-040) sigue diferida a v2.0.
 - **Reembolsos** y **auditoría** (DDS §6.5) se gestionan a mano a partir de los logs JSON.
 - **Vendedor por asignaciones** (DDS §6.2, ERS §4.1 "✓\*"): no existe un modelo de asignación;
   hoy un vendedor ve y gestiona todos los pedidos.
