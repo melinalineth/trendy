@@ -278,7 +278,10 @@ registrado. Pagás al recibirlo.** El pedido figura como **Pendiente de pago** (
 figura como «Pendiente») hasta que la tienda lo confirme. Pagás el total en mano al recibirlo. Solo
 funciona si la zona de tu dirección tiene habilitado el contra entrega; si no, el pedido **no se
 crea** y aparece: **El pago contra entrega no está disponible en la zona de tu dirección. Elegí
-Mercado Pago o usá otra dirección.**
+Mercado Pago o usá otra dirección.** La opción «Pago contra entrega» se ofrece siempre en el
+checkout; la pantalla no consulta la zona de antemano y el rechazo llega al confirmar. Quien
+administra la tienda puede habilitar el contra entrega de esa zona (ver
+[6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)).
 
 **Qué pasa al confirmar con Mercado Pago.** El pedido se crea y el sistema intenta abrir el checkout
 de Mercado Pago para que pagues. Solo se te redirige si Mercado Pago responde con un enlace válido.
@@ -566,7 +569,8 @@ con su tarifa. La cobertura se resuelve por coincidencia exacta de **Departament
 dirección del cliente (sin distinguir mayúsculas ni tildes).
 
 La tabla muestra **Departamento**, **Ciudad**, **Zona**, **Tarifa activa** (por ejemplo «$8.500» o
-«Sin tarifa activa»), **Estado** («Activa» / «Inactiva») y **Acciones**:
+«Sin tarifa activa»), **Estado** («Activa» / «Inactiva»), **Contra entrega** («Habilitado» / «No
+habilitado» / «Habilitado (zona inactiva)») y **Acciones**:
 
 - **Nueva zona**: pide **Nombre de la zona**, **Departamento**, **Ciudad** y **Costo de envío (COP)**.
   Botón **Crear zona**. Reglas: textos de hasta 100 caracteres y un costo **entero en pesos, mayor que
@@ -577,13 +581,40 @@ La tabla muestra **Departamento**, **Ciudad**, **Zona**, **Tarifa activa** (por 
 - **Desactivar**: pide confirmación («...Los clientes con una dirección en esa ciudad no podrán
   calcular el envío (sin cobertura) hasta que la vuelvas a activar. Las tarifas se conservan.») y se
   confirma con **Desactivar zona**. **Activar** la reactiva.
+- **Habilitar contra entrega** / **Deshabilitar contra entrega**: ver el apartado siguiente.
 
 **Contra entrega por zona.** El pago contra entrega solo está disponible en las zonas donde el
-administrador lo habilitó. **Hoy esa opción no tiene botón en esta pantalla**: la tabla no muestra si
-una zona permite contra entrega ni deja cambiarlo. Una zona nueva nace **sin** contra entrega; se
-habilita con una llamada técnica al servidor (la guía está en el [guion de demo](guion-demo.md), sección
-de preparación). Mientras una zona no lo tenga habilitado, el cliente de esa ciudad solo puede pagar con
-Mercado Pago.
+administrador lo habilitó, y se maneja desde esta pantalla. Una zona nueva nace **sin** contra entrega
+(la columna dice **No habilitado**), así que hasta que alguien lo habilite, el cliente de esa ciudad
+solo puede pagar con Mercado Pago.
+
+- **Habilitar.** En una zona con la columna **No habilitado**, tocá **Habilitar contra entrega**. No
+  pide confirmación: el botón pasa a «Habilitando...», la columna cambia a **Habilitado** y arriba
+  aparece el aviso **Pago contra entrega habilitado en la zona (nombre de la zona).** (con el nombre de
+  la zona, por ejemplo «Bogotá»).
+- **Deshabilitar.** En una zona con la columna **Habilitado**, tocá **Deshabilitar contra entrega**.
+  Esta acción **sí pide confirmación**, en una ventana titulada **Deshabilitar contra entrega**: «¿Deshabilitar el
+  pago contra entrega en la zona (nombre) (ciudad, departamento)? Los clientes con una dirección en esa
+  ciudad ya no podrán pagar así (el sistema rechazará el pedido). Los pedidos contra entrega de la zona
+  que todavía no registraron su pago no podrán registrarlo: quedarán pendientes, reteniendo su stock,
+  hasta que alguien los cancele a mano. Se puede volver a habilitar en cualquier momento.» Se confirma
+  con **Deshabilitar contra entrega**; el foco inicial queda en **Cancelar**. Al terminar, el aviso dice
+  **Pago contra entrega deshabilitado en la zona (nombre de la zona).**
+- **Qué implica deshabilitar.** Además de bloquear los pedidos contra entrega nuevos en esa ciudad,
+  los pedidos contra entrega de la zona que todavía no registraron su pago (ver
+  [4.6](#46-finalizar-compra-checkout)) ya no pueden registrarlo. Esos pedidos quedan **Pendiente de
+  pago**, con el stock reservado, hasta que el personal los cancele a mano: **Cancelar pedidos
+  vencidos** ([6.2](#62-cancelar-pedidos-vencidos)) solo alcanza a los pedidos de Mercado Pago. Conviene
+  revisar los pedidos pendientes de esa ciudad antes de deshabilitar.
+- **Zona inactiva.** Una zona **Inactiva** también puede quedar marcada: la columna dice **Habilitado
+  (zona inactiva)**. Pero una zona inactiva no tiene cobertura de envío, así que el contra entrega
+  **no funciona** en ella (el cliente ve el aviso de falta de cobertura) hasta que se la vuelva a
+  activar con **Activar**.
+- **Si falla** el cambio, aparece arriba **No pudimos actualizar el pago contra entrega de la zona.
+  Intentá de nuevo.** (dentro de la ventana de confirmación, en el caso de deshabilitar).
+- El checkout **siempre ofrece** la opción «Pago contra entrega», sin consultar la zona de antemano: el
+  rechazo (**El pago contra entrega no está disponible en la zona de tu dirección...**) llega recién al
+  confirmar el pedido.
 
 ---
 
@@ -674,8 +705,12 @@ vuelto: confirmá que la recuperás.
 
 ### 8.4 Contra entrega y zonas
 
-El contra entrega solo funciona en las zonas donde el administrador lo habilitó. Si el cliente lo elige
-en otra zona, el pedido no se crea y se le avisa (ver [4.6](#46-finalizar-compra-checkout)).
+El contra entrega solo funciona en las zonas donde el administrador lo habilitó, desde **Zonas de
+cobertura** (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)). Si el cliente lo elige en otra
+zona, el pedido no se crea y se le avisa (ver [4.6](#46-finalizar-compra-checkout)). Si el
+administrador lo deshabilita después, los pedidos contra entrega de esa zona que todavía no habían
+registrado su pago ya no pueden registrarlo y quedan pendientes, con su stock reservado, hasta que el
+personal los cancele a mano.
 
 ### 8.5 Pesos enteros
 
@@ -714,7 +749,7 @@ particulares se leyeron en el código y no se reprodujeron en pantalla.
 | **No tenemos cobertura de envío para (tu ciudad)** | Esa ciudad no tiene zona activa. Elegí otra dirección o consultá a la tienda. |
 | **Solo quedan N unidades disponibles. Ajustá la cantidad.** | Alguien compró antes que vos. Bajá la cantidad (el primer − te deja en el máximo) o eliminá la línea. |
 | **No hay stock suficiente de ... Ajustá la cantidad en tu carrito para continuar.** | Igual que el anterior, detectado al confirmar. El pedido no se creó. |
-| **El pago contra entrega no está disponible en la zona de tu dirección. Elegí Mercado Pago o usá otra dirección.** | La zona no tiene contra entrega habilitado. El pedido no se creó. |
+| **El pago contra entrega no está disponible en la zona de tu dirección. Elegí Mercado Pago o usá otra dirección.** | La zona no tiene contra entrega habilitado. El pedido no se creó. Si sos administrador, habilitalo en **Zonas de cobertura** (`/admin/envios`, botón **Habilitar contra entrega**; ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)) y pedile al cliente que confirme de nuevo; si no, elegí Mercado Pago u otra dirección. |
 | **Tu pedido PED-... quedó registrado, pero no pudimos iniciar el pago. El pago online no está disponible por ahora...** | Mercado Pago no está disponible o configurado. El pedido existe y reserva stock; usá **Pagar con Mercado Pago** más tarde o pedí a la tienda que lo cancele. |
 | **El plazo para pagar este pedido venció...** | Pasó la vigencia del pago. Hacé una compra nueva; el administrador cancela los vencidos. |
 | **No pudimos confirmar si tu pedido se registró: puede que sí.** | Se cortó la conexión. Mirá **Mis pedidos** antes de volver a intentar. |
@@ -767,7 +802,9 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
   encabezado, tampoco.
 - Las direcciones no se pueden editar ni eliminar.
 - **Roles y permisos** no tiene permisos configurados y no gobierna nada.
-- **Contra entrega por zona**: no hay botón para habilitarlo (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)).
+- **Contra entrega por zona**: el checkout siempre ofrece la opción y el rechazo llega recién al
+  confirmar; y deshabilitar una zona deja sus pedidos contra entrega sin pago registrado pendientes
+  hasta que el personal los cancele a mano (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)).
 - **No se pueden crear vendedores ni administradores desde la aplicación** (los crea el equipo técnico
   con un script).
 - El tablero de inicio de cada rol (dashboards) todavía no está conectado.
