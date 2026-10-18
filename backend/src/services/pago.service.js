@@ -50,6 +50,7 @@ const prisma = require("../config/prisma");
 const pedidoRepository = require("../repositories/pedido.repository");
 const pagoRepository = require("../repositories/pago.repository");
 const envioRepository = require("../repositories/envio.repository");
+const ventaService = require("./venta.service");
 
 const {
   MercadoPagoConfig,
@@ -661,6 +662,15 @@ async function procesarWebhook(payload, firma) {
       // Registrar el estado intermedio y luego confirmar el pedido.
       await pedidoRepository.actualizarEstado(pedidoId, "PAGO_APROBADO", tx);
       await pedidoRepository.actualizarEstado(pedidoId, "CONFIRMADO", tx);
+
+      // RF-041: la venta nace cuando el pedido queda confirmado, en ESTA
+      // transacción y con el lock del pedido tomado. Sin responsable (lo
+      // dispara Mercado Pago, no un usuario). Idempotente (RN-009): la
+      // barrera de arriba (Pago ya APROBADO) corta los webhooks repetidos y
+      // el unique de Venta.pedidoId es la segunda. Si falla, se revierte todo
+      // (el Pago no queda APROBADO sin su venta), el webhook responde 500 y
+      // Mercado Pago reintenta: no se atrapa el error.
+      await ventaService.registrarVentaDePedido(pedidoId, { responsableId: null }, tx);
 
       // El inventario se descontó al crear el pedido.
       // NO volver a descontarlo aquí.
