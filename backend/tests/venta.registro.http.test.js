@@ -554,6 +554,37 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
           pedidoId: pedido.id,
           responsableId: admin.id,
         });
+        assert.ok(!lineas.some((l) => l.includes("VENTA_NO_ENCONTRADA_AL_CANCELAR")));
+      });
+    }
+
+    // Hueco conocido (pedidos-estados.md §9): un pedido confirmado sin venta, p. ej.
+    // confirmado entre la migración y el servicio. Cancelarlo funciona igual, pero
+    // no puede pasar en silencio: queda el log VENTA_NO_ENCONTRADA_AL_CANCELAR.
+    for (const estado of ["CONFIRMADO", "EN_PREPARACION", "ENVIADO", "EN_TRANSITO"]) {
+      it(`desde ${estado} SIN venta: se cancela bien, repone el stock una vez, no registra VENTA_ANULADA y deja el log de la venta faltante`, async () => {
+        const { pedido, variante } = await contraEntregaEn(estado);
+        await prisma.venta.delete({ where: { pedidoId: pedido.id } });
+        assert.equal(await ventasDe(pedido.id), 0);
+
+        const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, vendedor));
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.yaCancelado, false);
+        assert.equal(await estadoDe(pedido.id), "CANCELADO");
+        assert.equal(await stockDe(variante.id), 10);
+        assert.equal((await entradasDe(variante.id)).length, 1);
+        assert.equal(await ventasDe(pedido.id), 0, "no se inventa una venta al cancelar");
+        assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")), JSON.stringify(lineas));
+        const linea = lineas.find((l) => l.includes("VENTA_NO_ENCONTRADA_AL_CANCELAR"));
+        assert.ok(linea, JSON.stringify(lineas));
+        assert.ok(!linea.includes("\n"));
+        assert.deepEqual(JSON.parse(linea), {
+          evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR",
+          pedidoId: pedido.id,
+          estado,
+          responsableId: vendedor.id,
+        });
       });
     }
 
@@ -763,6 +794,8 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
           assert.equal(await stockDe(variante.id), 10);
           assert.equal(await ventasDe(pedido.id), 0, metodoPago);
           assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")));
+          // Un pendiente nunca tuvo venta: tampoco es una venta "faltante".
+          assert.ok(!lineas.some((l) => l.includes("VENTA_NO_ENCONTRADA_AL_CANCELAR")));
         }
       });
 

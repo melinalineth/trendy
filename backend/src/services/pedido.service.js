@@ -576,8 +576,9 @@ function logEvento(evento) {
 //   - responsableId: quien cancela, para la anulación de la venta (RF-041).
 // Si el pedido estaba confirmado (contra entrega), su venta se ANULA en la
 // misma transacción; el InfoEnvio y su historial NO se tocan (quedan como
-// registro de lo ocurrido). Devuelve { yaCancelado, ventaAnulada } o
-// { omitido: true }.
+// registro de lo ocurrido. Devuelve { yaCancelado, ventaAnulada, ventaFaltante,
+// estado } o { omitido: true }: `ventaFaltante` es que el pedido contaba como
+// venta (estaba confirmado) y la anulación no encontró ninguna REGISTRADA.
 async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null, responsableId = null }) {
   const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
@@ -643,15 +644,17 @@ async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null, resp
   // RF-041: un pedido confirmado tenía venta; se anula (nunca se borra) en esta
   // misma transacción. Un pedido pendiente nunca tuvo venta: no se toca.
   let ventaAnulada = false;
+  let ventaFaltante = false;
   if (ventaService.ESTADOS_QUE_CUENTAN.includes(bloqueado.estado)) {
     ({ anulada: ventaAnulada } = await ventaService.anularVentaDePedido(
       pedidoId,
       { responsableId },
       tx
     ));
+    ventaFaltante = !ventaAnulada;
   }
 
-  return { yaCancelado: false, ventaAnulada };
+  return { yaCancelado: false, ventaAnulada, ventaFaltante, estado: bloqueado.estado };
 }
 
 /**
@@ -670,14 +673,22 @@ async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null, resp
 async function cancelarPedido(pedidoId, usuario) {
   const responsableId = usuario?.id === undefined ? null : Number(usuario.id);
 
-  const { yaCancelado, ventaAnulada } = await enTransaccion("CANCELAR_PEDIDO", (tx) =>
-    cancelarBajoLock(tx, pedidoId, { motivo: MOTIVO_CANCELACION, responsableId })
+  const { yaCancelado, ventaAnulada, ventaFaltante, estado } = await enTransaccion(
+    "CANCELAR_PEDIDO",
+    (tx) => cancelarBajoLock(tx, pedidoId, { motivo: MOTIVO_CANCELACION, responsableId })
   );
 
   // Recién con la transacción confirmada: un log antes del commit podría
   // describir una anulación que después se revierte.
   if (ventaAnulada) {
     logEvento({ evento: "VENTA_ANULADA", pedidoId, responsableId });
+  }
+
+  // Un pedido confirmado SIN venta (el hueco de pedidos-estados.md §9) se
+  // cancela igual, pero la cancelación no puede pasar sin dejar rastro de que no
+  // había venta que anular: queda para reconciliar a mano.
+  if (ventaFaltante) {
+    logEvento({ evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR", pedidoId, estado, responsableId });
   }
 
   return {
