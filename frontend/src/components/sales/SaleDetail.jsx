@@ -8,7 +8,7 @@ import {
   formatearFecha,
   formatearPrecio,
 } from "../orders/pedidoEstados";
-import { badgeEstadoVenta, etiquetaEstadoVenta } from "./ventaEstados";
+import { badgeEstadoVenta, etiquetaEstadoVenta, textoAnuladaPor } from "./ventaEstados";
 import "./SaleDetail.css";
 
 // Quién registró la venta. El webhook de Mercado Pago la registra sin una
@@ -80,10 +80,16 @@ export default function SaleDetail({ venta }) {
           <dd>{formatearFecha(venta.fecha)}</dd>
         </div>
         {anulada && (
-          <div>
-            <dt>Fecha de anulación</dt>
-            <dd>{formatearFecha(venta.anuladaEn)}</dd>
-          </div>
+          <>
+            <div>
+              <dt>Fecha de anulación</dt>
+              <dd>{formatearFecha(venta.anuladaEn)}</dd>
+            </div>
+            <div>
+              <dt>Anulada por</dt>
+              <dd>{textoAnuladaPor(venta)}</dd>
+            </div>
+          </>
         )}
         <div>
           <dt>Cliente</dt>
