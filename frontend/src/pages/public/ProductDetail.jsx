@@ -36,10 +36,14 @@ function obtenerImagenesOrdenadas(producto) {
     .map((imagen) => imagen.url);
 }
 
+// El backend serializa el precio (Decimal) como texto ("89900"): se convierte a
+// número antes de darle formato. Si no es un número válido se muestra tal cual.
 function formatearPrecio(precio) {
-  if (typeof precio !== "number") return precio;
+  const numero = Number(precio);
 
-  return precio.toLocaleString("es-CO");
+  if (!Number.isFinite(numero)) return precio;
+
+  return numero.toLocaleString("es-CO");
 }
 
 // Detalle de producto público (RF-012): trae el producto por el id de la

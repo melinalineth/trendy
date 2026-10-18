@@ -5,6 +5,9 @@ function Modal({
   onClose,
   title,
   children,
+  // Texto del botón del pie. "Cancelar" sirve a los formularios y las
+  // confirmaciones; un modal de solo lectura pasa "Cerrar".
+  closeText = "Cancelar",
 }) {
   if (!isOpen) {
     return null;
@@ -42,7 +45,7 @@ function Modal({
             className="modal__button modal__button--cancel"
             onClick={onClose}
           >
-            Cancelar
+            {closeText}
           </button>
         </div>
       </div>
