@@ -185,7 +185,12 @@ ignoró).
 - **Quién anuló la venta**: `Venta.responsableId` es quien la **registró** y no se pisa; el modelo no
   tiene un campo "anulada por" y no se agregó una migración. Queda en el log JSON `VENTA_ANULADA`,
   que se escribe después de confirmar la transacción. Por eso `anularVentaDePedido` acepta
-  `responsableId` pero no lo persiste.
+  `responsableId` pero no lo persiste. **Pendiente recomendado antes de producción:** migración
+  `anuladaPorId` en `Venta` (decisión del equipo: queda fuera de este PR); mientras tanto ese
+  dato solo existe en un log a stderr, no durable.
+- **Cancelar un confirmado sin venta** (el hueco de abajo) funciona igual, pero deja el log
+  `VENTA_NO_ENCONTRADA_AL_CANCELAR` (`{ evento, pedidoId, estado, responsableId }`) en vez de
+  anular en silencio.
 - **Solo `CONFIRMADO` registra la venta en `PATCH /estado`** (no toda transición a un estado de
   `ESTADOS_QUE_CUENTAN`, como decía la tarjeta 02-04). Registrar al avanzar atribuiría al usuario
   equivocado una venta confirmada por otro. A cambio queda un hueco (ver "No se verificó").

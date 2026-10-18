@@ -175,6 +175,9 @@ Al cancelar, en **una sola transacción** y bajo el lock del pedido:
    no se borra ni se reescribe (montos, cliente y `responsableId`, que es quien la **registró**, se
    conservan). `Venta` no guarda quién la anuló: eso queda en el log JSON `VENTA_ANULADA`
    (`{ evento, pedidoId, responsableId }`), que se escribe recién con la transacción confirmada.
+   Si el pedido estaba confirmado pero **no tenía venta** (el hueco de §9), se cancela igual y,
+   en lugar de `VENTA_ANULADA`, se escribe `VENTA_NO_ENCONTRADA_AL_CANCELAR`
+   (`{ evento, pedidoId, estado, responsableId }`) para reconciliarlo a mano.
 
 Si algo falla (p. ej. la anulación de la venta), se revierte todo: el pedido sigue como estaba.
 **`InfoEnvio` y su historial no se tocan** (ver §1). Un pedido cancelado ya no se puede avanzar
@@ -267,10 +270,13 @@ endpoint periódicamente con un token de admin.
     `estadoEnvio: ENVIADO`. El seguimiento devuelve ambos y el frontend debe priorizar
     `estadoPedido`.
   - **Quién anuló la venta** solo queda en el log `VENTA_ANULADA` (no hay campo en `Venta`;
-    agregarlo requeriría una migración).
+    agregarlo requeriría una migración). **Pendiente recomendado antes de producción:** una
+    migración con `anuladaPorId` (FK a `Usuario`, `RESTRICT`). Hoy ese dato vive solo en un log a
+    stderr, que no es durable ni consultable.
   - **Hueco conocido:** solo la transición a `CONFIRMADO` registra la venta. Un pedido que ya
     estuviera confirmado sin venta (p. ej. confirmado entre la migración y el servicio) no la
-    obtiene al avanzar a `EN_PREPARACION`; habría que registrarla con un script puntual.
+    obtiene al avanzar a `EN_PREPARACION`; habría que registrarla con un script puntual. Si ese
+    pedido (contra entrega) se cancela, queda el log `VENTA_NO_ENCONTRADA_AL_CANCELAR`.
 - **Momento del descuento de stock**: se descuenta al **crear** el pedido, lo que se desvía del
   DDS §7.2 (descuento al aprobar el pago, paso 13). Es coherente con `pago.service` (el webhook no
   descuenta) y con la política vigente "un rechazo de pago no repone stock": el stock queda
