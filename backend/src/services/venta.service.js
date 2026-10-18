@@ -140,15 +140,14 @@ async function registrarVentaDePedido(pedidoId, { responsableId = null } = {}, t
  * tuvo venta (se canceló antes de confirmarse), no es un error: devuelve
  * { anulada: false }.
  *
- * `responsableId` (quien cancela) NO se guarda en la venta: `Venta.responsableId`
- * es quien la REGISTRÓ y no se pisa, y el modelo no tiene un campo de "anulada
- * por" (agregarlo requiere una migración). Se acepta para que el llamador tenga
- * una firma simétrica con registrarVentaDePedido; quien cancela
- * (pedido.service) deja constancia en el log una vez confirmada la transacción.
+ * `anuladaPorId` es quien ANULA (el admin/vendedor que cancela el pedido) y se
+ * guarda en `Venta.anuladaPorId` junto con `anuladaEn`; puede ser null (una
+ * anulación sin usuario, p. ej. un proceso automático futuro). NO es
+ * `Venta.responsableId`, que sigue siendo quien la REGISTRÓ y no se pisa. Una
+ * segunda anulación no sobrescribe ni la fecha ni quién anuló primero.
  */
-async function anularVentaDePedido(pedidoId, { responsableId = null } = {}, tx) {
-  void responsableId;
-  const anuladas = await ventaRepository.anular(pedidoId, { tx });
+async function anularVentaDePedido(pedidoId, { anuladaPorId = null } = {}, tx) {
+  const anuladas = await ventaRepository.anular(pedidoId, { tx, anuladaPorId });
 
   return { anulada: anuladas > 0 };
 }

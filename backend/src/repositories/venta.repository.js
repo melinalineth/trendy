@@ -66,10 +66,14 @@ const crear = async (
   });
 };
 
-// REGISTRADA -> ANULADA con `anuladaEn`. Devuelve cuántas ventas anuló (0 o 1).
+// REGISTRADA -> ANULADA con `anuladaEn` y `anuladaPorId` (quien anula: puede ser
+// null si la anulación no tiene usuario; NO es `responsableId`, que sigue siendo
+// quien registró la venta). Devuelve cuántas ventas anuló (0 o 1).
 // `updateMany` a propósito: si el pedido no tiene venta o ya está anulada es un
-// no-op en vez de un error (idempotente) y no pisa la primera `anuladaEn`.
-const anular = async (pedidoId, { tx } = {}) => {
+// no-op en vez de un error (idempotente) y no pisa la primera `anuladaEn` ni el
+// primer `anuladaPorId`: los tres campos se escriben en la MISMA sentencia, con
+// la guarda `estado: REGISTRADA`.
+const anular = async (pedidoId, { tx, anuladaPorId = null } = {}) => {
   const db = tx ?? prisma;
 
   const resultado = await db.venta.updateMany({
@@ -80,6 +84,7 @@ const anular = async (pedidoId, { tx } = {}) => {
     data: {
       estado: "ANULADA",
       anuladaEn: new Date(),
+      anuladaPorId,
     },
   });
 

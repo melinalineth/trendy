@@ -349,17 +349,60 @@ describe("Service de ventas (RF-041)", () => {
       });
 
       const resultado = await ventaService.anularVentaDePedido(pedido.id, {
-        responsableId: vendedor.id,
+        anuladaPorId: vendedor.id,
       });
 
       assert.deepEqual(resultado, { anulada: true });
       const despues = await prisma.venta.findUnique({ where: { id: venta.id } });
       assert.equal(despues.estado, "ANULADA");
       assert.ok(despues.anuladaEn instanceof Date);
-      // La anulación no pisa los montos ni a quien la registró.
+      // Guarda QUIÉN anuló, y la anulación no pisa los montos ni a quien la
+      // registró.
+      assert.equal(despues.anuladaPorId, vendedor.id);
       assert.equal(despues.total.toFixed(2), "32690.00");
       assert.equal(despues.responsableId, admin.id);
       assert.equal(await ventasDe(pedido.id), 1);
+    });
+
+    it("sin anuladaPorId (anulación sin usuario) anula igual y deja anuladaPorId en NULL", async () => {
+      const pedido = await pedidoDe();
+      await ventaService.registrarVentaDePedido(pedido.id, { responsableId: admin.id });
+
+      assert.deepEqual(await ventaService.anularVentaDePedido(pedido.id), { anulada: true });
+
+      const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(despues.estado, "ANULADA");
+      assert.equal(despues.anuladaPorId, null);
+      assert.equal(despues.responsableId, admin.id);
+    });
+
+    // `responsableId` es quien REGISTRÓ: pasarlo a la anulación no se confunde
+    // con quien anula (el parámetro se llama anuladaPorId a propósito).
+    it("un responsableId en las opciones de anular NO se guarda como quien anuló", async () => {
+      const pedido = await pedidoDe();
+      await ventaService.registrarVentaDePedido(pedido.id);
+
+      await ventaService.anularVentaDePedido(pedido.id, { responsableId: vendedor.id });
+
+      const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(despues.anuladaPorId, null);
+      assert.equal(despues.responsableId, null);
+    });
+
+    it("la segunda anulación (por otro usuario) devuelve { anulada: false } y conserva quién anuló primero", async () => {
+      const pedido = await pedidoDe();
+      await ventaService.registrarVentaDePedido(pedido.id);
+      await ventaService.anularVentaDePedido(pedido.id, { anuladaPorId: vendedor.id });
+      const primera = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+
+      const resultado = await ventaService.anularVentaDePedido(pedido.id, {
+        anuladaPorId: admin.id,
+      });
+
+      assert.deepEqual(resultado, { anulada: false });
+      const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(despues.anuladaPorId, vendedor.id);
+      assert.equal(despues.anuladaEn.getTime(), primera.anuladaEn.getTime());
     });
 
     it("es idempotente: la segunda anulación devuelve { anulada: false }, no lanza y conserva la primera anuladaEn", async () => {
@@ -388,7 +431,11 @@ describe("Service de ventas (RF-041)", () => {
 
       await assert.rejects(
         prisma.$transaction(async (tx) => {
-          const { anulada } = await ventaService.anularVentaDePedido(pedido.id, {}, tx);
+          const { anulada } = await ventaService.anularVentaDePedido(
+            pedido.id,
+            { anuladaPorId: vendedor.id },
+            tx
+          );
           assert.equal(anulada, true);
           throw new Error("falla posterior");
         }),
@@ -398,6 +445,7 @@ describe("Service de ventas (RF-041)", () => {
       const venta = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
       assert.equal(venta.estado, "REGISTRADA");
       assert.equal(venta.anuladaEn, null);
+      assert.equal(venta.anuladaPorId, null);
     });
   });
 });

@@ -17,9 +17,10 @@ a 05), ni frontend.
 - Se agregó el enum `EstadoVenta` (`REGISTRADA`, `ANULADA`).
 - Se agregó el modelo `Venta`: `pedidoId @unique`, `clienteId`, `responsableId?`, `subtotal`,
   `costoEnvio`, `total` (`Decimal(10,2)`), `metodoPago`, `estado` (default `REGISTRADA`),
-  `registradaEn`, `anuladaEn?`, con los índices `(registradaEn)` y `(estado, registradaEn)`.
+  `registradaEn`, `anuladaEn?`, con los índices `(registradaEn)` y `(estado, registradaEn)`
+  (ahora también `anuladaPorId?`: se sumó en la sesión 3).
 - Se agregaron las relaciones inversas `Pedido.venta`, `Usuario.ventasComoCliente` y
-  `Usuario.ventasGestionadas`. No se modificó nada más del esquema existente (el diff de
+  `Usuario.ventasGestionadas` (ahora también `Usuario.ventasAnuladas`, sesión 3). No se modificó nada más del esquema existente (el diff de
   `schema.prisma` son solo adiciones).
 - Dos migraciones, en este orden:
   1. `20261017220145_add_venta`: **solo DDL** (tabla, índices y FKs). Su SQL es el que genera
@@ -44,7 +45,8 @@ reescribir.
   recalcula. Los productos, cantidades y valores por línea **no se duplican**: salen de
   `DetallePedido`.
 - `pedidoId @unique` es la garantía, a nivel de base, de que una venta no se registra dos veces.
-- Una venta **nunca se borra**. Los tres FK (`pedido`, `cliente`, `responsable`) son `RESTRICT`: no
+- Una venta **nunca se borra**. Los tres FK (`pedido`, `cliente`, `responsable`; ahora cuatro: se sumó
+  `anuladaPorId` en la sesión 3) son `RESTRICT`: no
   se puede borrar un pedido ni un usuario con ventas, aunque la venta esté `ANULADA`. Se eligió
   `RESTRICT` también para `responsable` (la columna sí es opcional) para proteger la historia y la
   atribución: con `SET NULL`, borrar al responsable modificaría la venta en silencio.
@@ -116,7 +118,8 @@ La lista coincide con la de la tarjeta; se contrastó con el enum `EstadoPedido`
 - Migraciones reales sobre una base con datos (manual, ver abajo): se aplicaron las migraciones
   hasta antes de `add_venta`, se insertaron por SQL pedidos `CONFIRMADO`, `ENTREGADO`, `PENDIENTE` y
   `CANCELADO`, se hizo `migrate deploy` y solo el confirmado y el entregado quedaron con venta, con
-  montos, método y fecha copiados y los tres FK en `RESTRICT`.
+  montos, método y fecha copiados y los tres FK en `RESTRICT` (ahora cuatro: se sumó
+  `anuladaPorId` en la sesión 3).
 
 ## No se verificó
 
@@ -152,7 +155,8 @@ ignoró).
 - **Repository** (`venta.repository.js`): se trajo con `cherry-pick` el trabajo de Valentina Ortiz
   (conserva su autoría) y se ajustó en un commit aparte (ver "Defecto corregido").
 - **Service** (`venta.service.js`): `registrarVentaDePedido(pedidoId, { responsableId }, tx)` y
-  `anularVentaDePedido(pedidoId, { responsableId }, tx)`. Idempotentes; errores con
+  `anularVentaDePedido(pedidoId, { anuladaPorId }, tx)` (en esta sesión se llamaba `responsableId`
+  y no se persistía; ver la sesión 3). Idempotentes; errores con
   `status`/`codigo`/`detalles` (`PEDIDO_NO_ENCONTRADO` 404, `PEDIDO_NO_CONFIRMADO` 409).
 - **Webhook de Mercado Pago** (`pago.service.procesarWebhook`): al aprobarse el pago, la venta se
   registra en la misma transacción que confirma el pedido, con `responsableId` NULL.
@@ -182,14 +186,13 @@ ignoró).
   la ampliación está en `ESTADOS_CANCELABLES` / `ESTADOS_CANCELABLES_CONTRA_ENTREGA` / `esCancelable`.
 - **`InfoEnvio` y su historial no se tocan al cancelar**: quedan como registro de lo ocurrido. Un
   pedido `CANCELADO` puede mostrar `estadoEnvio: ENVIADO`; el frontend debe priorizar `estadoPedido`.
-- **Quién anuló la venta**: `Venta.responsableId` es quien la **registró** y no se pisa; el modelo no
-  tiene un campo "anulada por" y no se agregó una migración. Queda en el log JSON `VENTA_ANULADA`,
-  que se escribe después de confirmar la transacción. Por eso `anularVentaDePedido` acepta
-  `responsableId` pero no lo persiste. **Pendiente recomendado antes de producción:** migración
-  `anuladaPorId` en `Venta` (decisión del equipo: queda fuera de este PR); mientras tanto ese
-  dato solo existe en un log a stderr, no durable.
+- **Quién anuló la venta**: `Venta.responsableId` es quien la **registró** y no se pisa. En esta
+  sesión no se persistía quién anulaba (solo iba al log JSON `VENTA_ANULADA`); **se cerró en la
+  sesión 3** con la columna `Venta.anuladaPorId` (ver más abajo). Lo que sigue describe el estado
+  de esta sesión.
 - **Cancelar un confirmado sin venta** (el hueco de abajo) funciona igual, pero deja el log
-  `VENTA_NO_ENCONTRADA_AL_CANCELAR` (`{ evento, pedidoId, estado, responsableId }`) en vez de
+  `VENTA_NO_ENCONTRADA_AL_CANCELAR` (`{ evento, pedidoId, estado, anuladaPorId }`; en la sesión 2
+  la última clave se llamaba `responsableId`, renombrada en la sesión 3) en vez de
   anular en silencio.
 - **Solo `CONFIRMADO` registra la venta en `PATCH /estado`** (no toda transición a un estado de
   `ESTADOS_QUE_CUENTAN`, como decía la tarjeta 02-04). Registrar al avanzar atribuiría al usuario
@@ -232,3 +235,45 @@ con default `null`.
 - **Frontend**: nada de esto se mostró en pantalla; el consumo de `estadoPedido: CANCELADO` con
   `estadoEnvio` distinto de `EN_PREPARACION` queda para la tarjeta de frontend.
 - Endpoints de consulta de ventas (`GET /api/v1/ventas`): son el siguiente PR.
+
+---
+
+# Sesión 3: quién anula la venta (`Venta.anuladaPorId`, RF-041)
+
+## Fecha
+18/10/2026
+
+## Contexto
+La anulación de la sesión 2 no dejaba rastro durable de **quién** anuló: solo el log JSON a stderr.
+Ambos jueces independientes lo marcaron como pendiente antes de producción (ERS 4.12: "usuario
+responsable cuando corresponda"; riesgo: un vendedor puede anular un contra entrega ya cobrado sin
+constancia). El usuario decidió sumar la columna.
+
+## Trabajo realizado
+- **Esquema**: `Venta.anuladaPorId Int?` con FK a `Usuario` (`ON DELETE RESTRICT ON UPDATE CASCADE`,
+  relación `anuladaPor` / `Usuario.ventasAnuladas`). Migración
+  `20261018130000_add_venta_anulada_por` (SQL idéntico al que genera `prisma migrate diff`; solo
+  adiciones en `schema.prisma` más los comentarios que afirmaban lo contrario).
+- **Sin backfill**: las ventas ya `ANULADA` en bases de desarrollo quedan con `anuladaPorId` NULL;
+  no hay dato histórico fiable (solo existía el log).
+- **Escritura**: `ventaRepository.anular(pedidoId, { tx, anuladaPorId })` guarda `anuladaPorId` en el
+  mismo `updateMany` que setea `ANULADA` y `anuladaEn`, con la guarda `estado: REGISTRADA`: una
+  segunda anulación no pisa ni la fecha ni quién anuló primero.
+- **Firma cambiada**: `anularVentaDePedido(pedidoId, { anuladaPorId }, tx)` (antes `responsableId`,
+  que engañaba: es quien **registró**). `cancelarBajoLock` recibe `anuladaPorId`; `cancelarPedido` le
+  pasa el admin/vendedor autenticado. Puede ser NULL (anulación sin usuario).
+- **Log**: `VENTA_ANULADA` sigue existiendo y ahora lleva `anuladaPorId` (antes `responsableId`).
+  `VENTA_NO_ENCONTRADA_AL_CANCELAR` también pasó de `responsableId` a `anuladaPorId` (quien canceló;
+  mismo nombre y significado que en `VENTA_ANULADA`).
+- **Tests**: esquema (columna nullable, FK RESTRICT, relaciones), repository, service y HTTP (cancelar
+  como vendedor y como admin deja `anuladaPorId` = quien cancela y `responsableId` sin cambios;
+  atomicidad y concurrencia). `limpiar()` de `tests/helpers/entorno.js` borra también las ventas con
+  `anuladaPorId` en usuarios de test (FK RESTRICT).
+- **Fuera de alcance**: exponer `anuladaPor` en `GET /api/v1/ventas` y en el frontend (la consulta
+  está en otra rama).
+
+## Verificación
+- `prisma validate`, `migrate status` (9 migraciones, al día) y `migrate diff` sin diferencias.
+- Suite completa: 688 tests (673 + 15 nuevos), 0 fallos.
+- Mutación temporal (revertida): quitar `anuladaPorId` del `updateMany` hace fallar 10 tests HTTP,
+  entre ellos el del vendedor.

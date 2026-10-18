@@ -226,6 +226,68 @@ describe("Repository de ventas (RF-041)", () => {
       assert.equal(despues.registradaEn.getTime(), venta.registradaEn.getTime());
     });
 
+    it("persiste anuladaPorId junto con anuladaEn y no pisa responsableId (quien la registró)", async () => {
+      const quienAnula = await crearUsuario("vendedor");
+      const pedido = await pedidoDe();
+      await ventaRepository.crear(datosDe(pedido, { responsableId: admin.id }));
+
+      const anuladas = await ventaRepository.anular(pedido.id, { anuladaPorId: quienAnula.id });
+
+      assert.equal(anuladas, 1);
+      const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(despues.estado, "ANULADA");
+      assert.ok(despues.anuladaEn instanceof Date);
+      assert.equal(despues.anuladaPorId, quienAnula.id);
+      assert.equal(despues.responsableId, admin.id);
+    });
+
+    it("sin anuladaPorId (o con null) anula igual y deja anuladaPorId en NULL", async () => {
+      const sinOpcion = await pedidoDe();
+      const conNull = await pedidoDe();
+      await ventaRepository.crear(datosDe(sinOpcion));
+      await ventaRepository.crear(datosDe(conNull));
+
+      assert.equal(await ventaRepository.anular(sinOpcion.id), 1);
+      assert.equal(await ventaRepository.anular(conNull.id, { anuladaPorId: null }), 1);
+
+      for (const pedido of [sinOpcion, conNull]) {
+        const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+        assert.equal(despues.estado, "ANULADA");
+        assert.ok(despues.anuladaEn instanceof Date);
+        assert.equal(despues.anuladaPorId, null);
+      }
+    });
+
+    it("una segunda anulación (por otro usuario) devuelve 0 y NO pisa ni anuladaEn ni anuladaPorId", async () => {
+      const primero = await crearUsuario("vendedor");
+      const segundo = await crearUsuario("admin");
+      const pedido = await pedidoDe();
+      await ventaRepository.crear(datosDe(pedido));
+      await ventaRepository.anular(pedido.id, { anuladaPorId: primero.id });
+      const primera = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+
+      const anuladas = await ventaRepository.anular(pedido.id, { anuladaPorId: segundo.id });
+
+      assert.equal(anuladas, 0);
+      const despues = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(despues.anuladaPorId, primero.id);
+      assert.equal(despues.anuladaEn.getTime(), primera.anuladaEn.getTime());
+    });
+
+    it("un anuladaPorId inexistente falla por la FK (P2003) y la venta sigue REGISTRADA", async () => {
+      const pedido = await pedidoDe();
+      await ventaRepository.crear(datosDe(pedido));
+
+      const codigo = await codigoDeError(
+        ventaRepository.anular(pedido.id, { anuladaPorId: ID_INEXISTENTE })
+      );
+
+      assert.equal(codigo, "P2003");
+      const venta = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(venta.estado, "REGISTRADA");
+      assert.equal(venta.anuladaPorId, null);
+    });
+
     it("es idempotente: la segunda anulación devuelve 0 y conserva la primera anuladaEn", async () => {
       const pedido = await pedidoDe();
       await ventaRepository.crear(datosDe(pedido));
@@ -272,6 +334,24 @@ describe("Repository de ventas (RF-041)", () => {
       const venta = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
       assert.equal(venta.estado, "REGISTRADA");
       assert.equal(venta.anuladaEn, null);
+    });
+
+    it("con tx y anuladaPorId: si se revierte, tampoco queda quién la anuló", async () => {
+      const quienAnula = await crearUsuario("vendedor");
+      const pedido = await pedidoDe();
+      await ventaRepository.crear(datosDe(pedido));
+
+      await assert.rejects(
+        prisma.$transaction(async (tx) => {
+          assert.equal(await ventaRepository.anular(pedido.id, { tx, anuladaPorId: quienAnula.id }), 1);
+          throw new Error("falla posterior en la misma transacción");
+        }),
+        /falla posterior/
+      );
+
+      const venta = await prisma.venta.findUnique({ where: { pedidoId: pedido.id } });
+      assert.equal(venta.estado, "REGISTRADA");
+      assert.equal(venta.anuladaPorId, null);
     });
   });
 });

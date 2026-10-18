@@ -492,18 +492,19 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
     const AVANCE = ["EN_PREPARACION", "ENVIADO", "EN_TRANSITO", "ENTREGADO"];
 
     // Contra entrega creado por el flujo real, con su pago registrado,
-    // confirmado por el personal (nace la venta) y avanzado hasta `estado`.
-    async function contraEntregaEn(estado = "CONFIRMADO") {
+    // confirmado por `confirma` (el vendedor por defecto; nace la venta, a su
+    // nombre) y avanzado hasta `estado`.
+    async function contraEntregaEn(estado = "CONFIRMADO", confirma = vendedor) {
       const real = await pedidoReal({ metodoPago: "CONTRA_ENTREGA" });
       const registro = await api("POST", "/api/v1/pagos/contra-entrega", {
         token: real.cliente.token,
         body: { pedidoId: real.pedido.id },
       });
       assert.equal(registro.status, 201, JSON.stringify(registro.body));
-      assert.equal((await cambiarEstado(real.pedido.id, "CONFIRMADO", vendedor)).status, 200);
+      assert.equal((await cambiarEstado(real.pedido.id, "CONFIRMADO", confirma)).status, 200);
       const pasos = estado === "CONFIRMADO" ? [] : AVANCE.slice(0, AVANCE.indexOf(estado) + 1);
       for (const siguiente of pasos) {
-        const r = await cambiarEstado(real.pedido.id, siguiente, vendedor);
+        const r = await cambiarEstado(real.pedido.id, siguiente, confirma);
         assert.equal(r.status, 200, JSON.stringify(r.body));
       }
       assert.equal(await estadoDe(real.pedido.id), estado);
@@ -539,6 +540,8 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
         assert.ok(ventaDespues.anuladaEn instanceof Date);
         assert.ok(Math.abs(ventaDespues.anuladaEn.getTime() - Date.now()) < 60_000);
         assert.equal(ventaDespues.responsableId, vendedor.id, "responsable = quien la REGISTRÓ");
+        assert.equal(ventaAntes.anuladaPorId, null);
+        assert.equal(ventaDespues.anuladaPorId, admin.id, "anuladaPorId = quien la ANULÓ");
         assert.equal(ventaDespues.total.toFixed(2), ventaAntes.total.toFixed(2));
         assert.equal(ventaDespues.registradaEn.getTime(), ventaAntes.registradaEn.getTime());
         // El pago contra entrega que no se va a cobrar queda CANCELADO.
@@ -546,13 +549,13 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
         // InfoEnvio y su historial NO se tocan: quedan como registro de lo ocurrido.
         assert.deepEqual(await infoEnvioDe(pedido.id), envioAntes);
         assert.deepEqual(await historialDe(pedido.id), historialAntes);
-        // Quedó constancia de quién anuló (la venta no guarda ese dato).
+        // Quién anuló queda en la venta (arriba) Y en el log, que sigue existiendo.
         const linea = lineas.find((l) => l.includes("VENTA_ANULADA"));
         assert.ok(linea, JSON.stringify(lineas));
         assert.deepEqual(JSON.parse(linea), {
           evento: "VENTA_ANULADA",
           pedidoId: pedido.id,
-          responsableId: admin.id,
+          anuladaPorId: admin.id,
         });
         assert.ok(!lineas.some((l) => l.includes("VENTA_NO_ENCONTRADA_AL_CANCELAR")));
       });
@@ -583,7 +586,7 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
           evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR",
           pedidoId: pedido.id,
           estado,
-          responsableId: vendedor.id,
+          anuladaPorId: vendedor.id,
         });
       });
     }
@@ -596,6 +599,51 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
       assert.equal((await entradasDe(variante.id))[0].usuarioId, cliente.id);
+    });
+
+    // El caso de auditoría que motivó la columna: un vendedor anula un contra
+    // entrega que registró OTRO (admin). La venta guarda a los dos por separado.
+    it("un VENDEDOR cancela un contra entrega confirmado por el admin: anuladaPorId = vendedor y responsableId sigue siendo el admin", async () => {
+      const { pedido } = await contraEntregaEn("EN_PREPARACION", admin);
+      const antes = await ventaDe(pedido.id);
+      assert.equal(antes.responsableId, admin.id);
+      assert.equal(antes.anuladaPorId, null);
+
+      const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, vendedor));
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      const despues = await ventaDe(pedido.id);
+      assert.equal(despues.estado, "ANULADA");
+      assert.equal(despues.anuladaPorId, vendedor.id);
+      assert.equal(despues.responsableId, admin.id, "quien la registró no se pisa");
+      assert.equal(
+        JSON.parse(lineas.find((l) => l.includes("VENTA_ANULADA"))).anuladaPorId,
+        vendedor.id
+      );
+    });
+
+    it("un ADMIN cancela un contra entrega confirmado por un vendedor: anuladaPorId = admin y responsableId sigue siendo el vendedor", async () => {
+      const { pedido } = await contraEntregaEn("CONFIRMADO", vendedor);
+
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id, admin));
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      const despues = await ventaDe(pedido.id);
+      assert.equal(despues.anuladaPorId, admin.id);
+      assert.equal(despues.responsableId, vendedor.id);
+    });
+
+    it("quien anuló es navegable desde la venta (include anuladaPor), distinto de quien la registró", async () => {
+      const { pedido } = await contraEntregaEn("ENVIADO", admin);
+      await conLogs(() => cancelar(pedido.id, vendedor));
+
+      const venta = await prisma.venta.findUnique({
+        where: { pedidoId: pedido.id },
+        include: { anuladaPor: true, responsable: true },
+      });
+
+      assert.equal(venta.anuladaPor.id, vendedor.id);
+      assert.equal(venta.responsable.id, admin.id);
     });
 
     it("RN-008: la venta anulada conserva sus montos aunque después cambie el precio del producto", async () => {
@@ -747,7 +795,11 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal(r.body.yaCancelado, true);
       assert.equal(await stockDe(variante.id), 10);
       assert.equal((await entradasDe(variante.id)).length, 1);
-      assert.equal((await ventaDe(pedido.id)).anuladaEn.getTime(), anulada.anuladaEn.getTime());
+      const despues = await ventaDe(pedido.id);
+      assert.equal(despues.anuladaEn.getTime(), anulada.anuladaEn.getTime());
+      // La repetición (del vendedor) no pisa a quien anuló primero (el admin).
+      assert.equal(anulada.anuladaPorId, admin.id);
+      assert.equal(despues.anuladaPorId, admin.id);
       assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")));
     });
 
@@ -767,8 +819,13 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal(await stockDe(variante.id), 10);
       assert.equal((await entradasDe(variante.id)).length, 1);
       assert.equal(await ventasDe(pedido.id), 1);
-      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
-      assert.equal(lineas.filter((l) => l.includes("VENTA_ANULADA")).length, 1);
+      const venta = await ventaDe(pedido.id);
+      assert.equal(venta.estado, "ANULADA");
+      const anuladas = lineas.filter((l) => l.includes("VENTA_ANULADA"));
+      assert.equal(anuladas.length, 1);
+      // El que ganó la carrera es quien quedó en la venta y en el log.
+      assert.ok([admin.id, vendedor.id].includes(venta.anuladaPorId));
+      assert.equal(JSON.parse(anuladas[0]).anuladaPorId, venta.anuladaPorId);
     });
 
     it("cancelar y avanzar el estado SIMULTÁNEOS: siempre termina CANCELADO con la venta ANULADA y el stock repuesto una vez", async () => {
@@ -825,12 +882,16 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal((await pagoDe(pedido.id)).estado, "PENDIENTE");
       assert.equal(await stockDe(variante.id), 8);
       assert.deepEqual(await entradasDe(variante.id), []);
-      assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+      const intacta = await ventaDe(pedido.id);
+      assert.equal(intacta.estado, "REGISTRADA");
+      assert.equal(intacta.anuladaPorId, null);
 
       // Sin la falla, la cancelación se completa.
       const { resultado: r } = await conLogs(() => cancelar(pedido.id));
       assert.equal(r.status, 200, JSON.stringify(r.body));
-      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+      const anulada = await ventaDe(pedido.id);
+      assert.equal(anulada.estado, "ANULADA");
+      assert.equal(anulada.anuladaPorId, admin.id);
       assert.equal(await stockDe(variante.id), 10);
     });
 
