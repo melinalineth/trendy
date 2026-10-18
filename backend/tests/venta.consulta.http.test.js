@@ -297,6 +297,8 @@ describe("GET /api/v1/ventas (RF-042)", () => {
     const casos = [
       ["desde con formato inválido", "?desde=31-12-2035", /desde/],
       ["hasta con fecha inexistente", "?hasta=2035-02-30", /hasta/],
+      ["hasta con año fuera de 2000..2100", "?hasta=9999-12-31", /hasta.*2000.*2100/],
+      ["desde con año de tres cifras", "?desde=0100-01-01", /desde.*2000.*2100/],
       ["desde posterior a hasta", "?desde=2035-05-02&hasta=2035-05-01", /desde no puede ser posterior/],
       ["rango mayor a 366 días", "?desde=2035-01-01&hasta=2036-01-02", /366/],
       ["estado desconocido", "?estado=PENDIENTE", /estado/],

@@ -124,6 +124,27 @@ describe("DTO de filtros de ventas (RF-042)", () => {
       );
     });
 
+    // Años absurdos: antes producían "Invalid Date" (templates sin padStart) que
+    // llegaba a Prisma. Se aceptan solo años 2000..2100.
+    it("rechaza años fuera de 2000..2100 con un detalle claro (sin Invalid Date)", () => {
+      for (const valor of ["9999-12-31", "0100-01-01", "1999-12-31", "2101-01-01"]) {
+        assertFiltrosInvalidos({ desde: valor }, /desde.*2000.*2100/);
+        assertFiltrosInvalidos({ hasta: valor }, /hasta.*2000.*2100/);
+      }
+    });
+
+    it("acepta los bordes de años: 2000-01-01 y 2100-12-31, con instantes válidos", () => {
+      const { desde } = validarFiltrosVentas({ desde: "2000-01-01" });
+      assert.equal(desde.toISOString(), "2000-01-01T05:00:00.000Z");
+
+      const { hastaExclusivo } = validarFiltrosVentas({ hasta: "2100-12-31" });
+      assert.equal(hastaExclusivo.toISOString(), "2101-01-01T05:00:00.000Z");
+
+      const ambos = validarFiltrosVentas({ desde: "2100-01-01", hasta: "2100-12-31" });
+      assert.ok(!Number.isNaN(ambos.desde.getTime()));
+      assert.ok(!Number.isNaN(ambos.hastaExclusivo.getTime()));
+    });
+
     it("con una sola de las dos fechas no hay límite de rango", () => {
       assert.doesNotThrow(() => validarFiltrosVentas({ desde: "2000-01-01" }));
       assert.doesNotThrow(() => validarFiltrosVentas({ hasta: "2099-12-31" }));

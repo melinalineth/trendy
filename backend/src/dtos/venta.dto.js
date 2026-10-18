@@ -9,6 +9,11 @@ const LIMITE_POR_DEFECTO = 50;
 const LIMITE_MAXIMO = 100;
 // Tope de página: evita un OFFSET fuera del rango entero seguro de Prisma.
 const PAGINA_MAXIMA = 100000;
+// Años aceptados en desde/hasta: evita fechas absurdas (9999-12-31, 0100-01-01).
+const ANIO_MINIMO = 2000;
+const ANIO_MAXIMO = 2100;
+// Bogotá es UTC-5 todo el año (sin horario de verano): su medianoche es 05:00Z.
+const DESFASE_BOGOTA_HORAS = 5;
 
 const crearErrorValidacion = (detalles) => {
   const error = new Error("Los filtros de consulta de ventas no son válidos");
@@ -27,6 +32,13 @@ const validarFechaCalendario = (valor, campo, detalles) => {
   }
 
   const [anio, mes, dia] = valor.split("-").map(Number);
+
+  // Antes del calendario: Date.UTC trata los años 0..99 como 1900..1999.
+  if (anio < ANIO_MINIMO || anio > ANIO_MAXIMO) {
+    detalles.push(`${campo} debe estar entre los años ${ANIO_MINIMO} y ${ANIO_MAXIMO}.`);
+    return null;
+  }
+
   const fecha = new Date(Date.UTC(anio, mes - 1, dia));
 
   if (
@@ -83,7 +95,9 @@ const validarFiltrosVentas = (query) => {
     );
 
     if (fechaDesde) {
-      desde = new Date(`${desdeRaw}T00:00:00-05:00`);
+      desde = new Date(
+        Date.UTC(fechaDesde.anio, fechaDesde.mes - 1, fechaDesde.dia, DESFASE_BOGOTA_HORAS)
+      );
     }
   }
 
@@ -96,20 +110,14 @@ const validarFiltrosVentas = (query) => {
 
     if (fechaHasta) {
       // El límite es exclusivo: medianoche de Bogotá del día siguiente.
-      const siguienteDia = new Date(
+      // Date.UTC normaliza el desborde de día/mes/año (31/12 -> 01/01).
+      hastaExclusivo = new Date(
         Date.UTC(
           fechaHasta.anio,
           fechaHasta.mes - 1,
-          fechaHasta.dia + 1
+          fechaHasta.dia + 1,
+          DESFASE_BOGOTA_HORAS
         )
-      );
-
-      const anio = siguienteDia.getUTCFullYear();
-      const mes = String(siguienteDia.getUTCMonth() + 1).padStart(2, "0");
-      const dia = String(siguienteDia.getUTCDate()).padStart(2, "0");
-
-      hastaExclusivo = new Date(
-        `${anio}-${mes}-${dia}T00:00:00-05:00`
       );
     }
   }
