@@ -20,6 +20,7 @@ import {
   formatearPrecio,
   mensajeErrorContraEntrega,
   mensajeErrorPreferencia,
+  sePuedeReintentarPago,
 } from "../../components/orders/pedidoEstados";
 import "./OrderDetail.css";
 
@@ -149,6 +150,10 @@ function DetallePedidoCliente({ id }) {
   const [aviso, setAviso] = useState(() => location.state?.aviso ?? null);
   const [avisoAccion, setAvisoAccion] = useState(null);
   const [vencido, setVencido] = useState(false);
+  // El último intento de pago falló con un error que reintentar no arregla
+  // (ver sePuedeReintentarPago): se oculta el botón para no ofrecer un clic
+  // que va a devolver el mismo error.
+  const [pagoSinSalida, setPagoSinSalida] = useState(false);
 
   useEffect(() => {
     if (location.state?.aviso) {
@@ -194,6 +199,7 @@ function DetallePedidoCliente({ id }) {
     }
 
     if (resultado.error?.codigo === "PEDIDO_VENCIDO") setVencido(true);
+    else if (!sePuedeReintentarPago(resultado.error)) setPagoSinSalida(true);
     setAvisoAccion({ tipo: "error", mensaje: mensajeErrorPreferencia(resultado.error) });
   }
 
@@ -252,7 +258,7 @@ function DetallePedidoCliente({ id }) {
   const lineas = pedido.detalles ?? [];
   const esMercadoPago = pedido.metodoPago === "MERCADO_PAGO";
   const pago = pedido.pago ?? null;
-  const puedePagar = esperandoPagoMercadoPago;
+  const puedePagar = esperandoPagoMercadoPago && !pagoSinSalida;
   const puedeRegistrarContraEntrega =
     pedido.estado === "PENDIENTE" && !esMercadoPago && !pago;
   const direccion = seguimiento?.direccion ?? pedido.direccion ?? null;
