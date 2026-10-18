@@ -162,8 +162,8 @@ ignoró).
   controller pasa `req.usuario`): el personal puede cancelar un pedido **contra entrega**
   confirmado. Repone el stock y anula la venta en la misma transacción. Detalle y tabla de estados
   en `docs/diseno/pedidos-estados.md` §6 y §9.
-- **Tests**: `venta.repository.test.js` (16), `venta.service.test.js` (29) y
-  `venta.registro.http.test.js` (35).
+- **Tests**: `venta.repository.test.js` (16), `venta.service.test.js` (29),
+  `venta.registro.http.test.js` (41) y `pedido.cancelabilidad.test.js` (16, reglas puras).
 
 ## Decisiones
 
@@ -211,7 +211,7 @@ con default `null`.
 
 - `prisma validate` y `prisma migrate status` ("al día", 8 migraciones, base scratch). No hay
   cambios de esquema ni migraciones nuevas.
-- Suite completa dos veces: **651 tests, 0 fallos** (571 de base + 80 nuevos).
+- Suite completa dos veces: **673 tests, 0 fallos** (571 de base + 102 nuevos).
 - Mutaciones temporales (revertidas, no commiteadas) para comprobar que los tests detectan el
   defecto: (1) relectura del `P2002` sin lock -> falla el test de foto vieja; (2) `esUniqueDePedido`
   siempre `false` -> fallan 3 tests de concurrencia; (3) registro de la venta fuera de la
