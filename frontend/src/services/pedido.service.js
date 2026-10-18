@@ -88,8 +88,11 @@ function actualizarEstado(id, estado) {
 }
 
 // PATCH /pedidos/:id/cancelar (SOLO admin y vendedor: el cliente recibe 403).
-// Repone el stock una sola vez. Responde { mensaje, yaCancelado, pedido };
-// 409 PEDIDO_NO_CANCELABLE si ya avanzó o tiene un pago aprobado.
+// Repone el stock una sola vez y, si el pedido ya tenía venta (contra entrega
+// confirmado), la anula. Responde { mensaje, yaCancelado, pedido }; 409
+// PEDIDO_NO_CANCELABLE si no es cancelable según método, estado y pago: se
+// cancela un pedido pendiente de pago o uno CONTRA_ENTREGA que todavía no se
+// entregó, siempre que su pago no esté aprobado.
 function cancelarPedido(id) {
   return api
     .patch(`/pedidos/${id}/cancelar`)
