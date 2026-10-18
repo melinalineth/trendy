@@ -1,9 +1,11 @@
 # Guion de demo de Trendy (12 a 15 minutos)
 
 Guía para quien presenta. Cada paso dice **qué hago**, **qué digo**, **qué debe pasar** y **plan B si
-falla**. Todo lo que figura acá se recorrió de punta a punta en la aplicación real (ver
-[Cómo se ensayó](#cómo-se-ensayó)); los textos de pantalla están copiados tal cual. Para el detalle de
-cada pantalla, el [manual de usuario](manual-usuario.md).
+falla**. El relato de los bloques 0 a 7 con la opción A (desarrollo local) se recorrió de punta a
+punta en la aplicación real, con los textos de pantalla copiados tal cual. **No** se ensayó la opción B
+(Docker), el equivalente en PowerShell del paso 3.4, ni el plan B de cancelar desde «Confirmado»
+saltando el envío (ver la nota del bloque 3); el detalle está en [Cómo se
+ensayó](#cómo-se-ensayó). Para el detalle de cada pantalla, el [manual de usuario](manual-usuario.md).
 
 ## 1. Objetivo y público
 
@@ -33,7 +35,8 @@ totales → un error legible (precio con centavos).
 | | **Total** | | **13:30** |
 
 Sobran 1 a 1:30 de colchón. Si vas justo de tiempo, **cortá el bloque 6** (se explica de palabra) y,
-en el bloque 3, saltá directo de «Confirmado» a «Cancelar pedido». Las preguntas van aparte
+en el bloque 3, saltá directo de «Confirmado» a «Cancelar pedido» (con los textos distintos que
+indica la nota del bloque 3). Las preguntas van aparte
 (sección 7).
 
 ## 3. Preparación (15 minutos antes)
@@ -45,17 +48,29 @@ en el bloque 3, saltá directo de «Confirmado» a «Cancelar pedido». Las preg
 - **Opción B, staging con Docker:** Trendy completo (nginx + backend + MySQL) con Docker Compose, según
   [docs/despliegue/staging.md](../despliegue/staging.md) (comandos `docker compose -p trendy-staging
   --env-file .env.staging up -d --build`, abrir `http://localhost:8080`). **No se probó para este
-  guion**; la guía allí describe cómo crear el admin (`SEED_ADMIN_*`) y dice que el vendedor se crea
-  a mano en la base; con el script de la sección 3.3 también se puede crear dentro del contenedor
-  (no probado).
+  guion**; la guía allí describe cómo crear el admin (`SEED_ADMIN_*`) y aclara que crear el vendedor
+  en ese staging no está cubierto: `scripts/crear-usuario.js` **no** se puede usar dentro del
+  contenedor (la imagen del backend no incluye `scripts/`) ni llega a la base, que no se publica al
+  host. El cliente de la demo se puede registrar desde `/registro`; sin vendedor, las acciones de los
+  bloques 3 a 5 se harían con el admin y se pierde el contraste entre «Responsable» y «Anulada por».
+  **Ojo con los puertos y las direcciones:** en la opción B todo entra por `http://localhost:8080`
+  (nginx), la API está en `http://localhost:8080/api/v1` y **no** existen `:3000` ni `:5173`. Donde
+  este guion dice `http://localhost:3000/api/v1` (3.2, 3.4, 3.7) o `API=...`, usá esa dirección; el
+  correo del admin es el que pusiste en `SEED_ADMIN_CORREO` y el id de Bogotá puede ser otro.
 
 ### 3.2 Levantar la opción A
 
 Usá una **base de datos solo para la demo** (por ejemplo `trendy_demo`), nunca la de desarrollo con
-datos reales. Desde la raíz del repositorio (comandos de [README.md](../../README.md)):
+datos reales. **Primero creala vacía**, junto con un usuario de MySQL con permisos sobre ella (es el
+paso «1. Base de datos» del [README](../../README.md#desarrollo-local)); por ejemplo, desde un cliente
+MySQL con un usuario administrador: `CREATE DATABASE trendy_demo;`. Sin ese paso, `prisma migrate
+deploy` falla porque la base no existe (las migraciones no la crean).
+
+Después, **todos los comandos se corren desde la raíz del repositorio** (comandos de
+[README.md](../../README.md)); la segunda terminal también arranca en la raíz:
 
 ```bash
-# 1. Backend
+# 1. Backend (terminal 1, desde la raíz del repositorio)
 cd backend
 npm ci
 cp .env.example .env        # completá DATABASE_URL (la base de demo), JWT_SECRET, etc.
@@ -63,7 +78,7 @@ npx prisma migrate deploy --config prisma7.config.ts
 npx prisma db seed --config prisma7.config.ts     # roles, categorías, 20 productos, 4 zonas
 npm run dev                 # http://localhost:3000
 
-# 2. Frontend (otra terminal)
+# 2. Frontend (terminal 2, también desde la raíz del repositorio: NO desde backend/)
 cd frontend
 npm ci
 echo "VITE_API_URL=http://localhost:3000/api/v1" > .env.local
@@ -71,8 +86,20 @@ npm run dev                 # http://localhost:5173
 ```
 
 Comprobá que `http://localhost:3000/api/v1/health` responde `{"estado":"ok"}` y que
-`http://localhost:5173/catalogo` muestra los productos. **No dejes configurado Mercado Pago** (sin
-`MERCADOPAGO_ACCESS_TOKEN`): el aviso del bloque 6 depende de eso.
+`http://localhost:5173/catalogo` muestra los productos.
+
+**Verificación previa para el bloque 6 (Mercado Pago sin configurar).** El aviso del bloque 6 (error
+`CONFIGURACION_PAGOS_INCOMPLETA`, HTTP 503) solo aparece si `MERCADOPAGO_ACCESS_TOKEN` está **vacía o
+ausente** en `backend/.env`. Comprobalo sin imprimir su valor (desde la raíz del repositorio):
+
+```bash
+rg -q "^MERCADOPAGO_ACCESS_TOKEN=\s*\S" backend/.env && echo "CONFIGURADA: vaciala" || echo "vacía o ausente: bien"
+```
+
+Tampoco tiene que estar exportada en la terminal donde corre el backend (una variable del shell
+pisa al archivo). Reiniciá `npm run dev` después de cambiarla. Si queda configurada, en el paso 6.1
+no verás el aviso: se abrirá Mercado Pago, o fallará de otra forma; en ese caso saltá el bloque 6 y
+explicalo de palabra.
 
 ### 3.3 Crear los usuarios de demo
 
@@ -99,7 +126,11 @@ sirve de ensayo.)
 Las zonas del seed nacen **sin** contra entrega y **la pantalla de zonas no tiene botón para
 habilitarlo**. Sin este paso, el cliente de la demo no podrá pagar contra entrega. Se activa con una
 llamada a la API autenticada como administrador (el id de Bogotá en un seed limpio es 1; verificalo con
-el `GET` de la segunda línea):
+el `GET` de la tercera línea de comandos del bloque, el que lista las zonas). **Usá la misma terminal
+donde definiste `NUEVO_USUARIO_PASSWORD` en el paso 3.3**: si abrís otra, la variable no existe, el
+login responde 401 y `TOKEN` queda vacío.
+
+**Git Bash / Linux / macOS** (usa `curl`):
 
 ```bash
 API=http://localhost:3000/api/v1
@@ -110,6 +141,18 @@ curl -s $API/zonas-cobertura -H "Authorization: Bearer $TOKEN"        # buscá e
 curl -s -X PATCH $API/zonas-cobertura/1/contra-entrega \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"permiteContraEntrega":true}'                                  # responde la zona con "permiteContraEntrega":true
+```
+
+**PowerShell** (equivalente con `Invoke-RestMethod`; no se ensayó):
+
+```powershell
+$API = "http://localhost:3000/api/v1"
+$login = @{ correo = "demo-admin@trendy.test"; password = $env:NUEVO_USUARIO_PASSWORD } | ConvertTo-Json
+$TOKEN = (Invoke-RestMethod -Method Post -Uri "$API/auth/login" -ContentType "application/json" -Body $login).token
+$headers = @{ Authorization = "Bearer $TOKEN" }
+Invoke-RestMethod -Uri "$API/zonas-cobertura" -Headers $headers       # buscá el id de Bogotá
+Invoke-RestMethod -Method Patch -Uri "$API/zonas-cobertura/1/contra-entrega" -Headers $headers `
+  -ContentType "application/json" -Body '{"permiteContraEntrega":true}'   # responde la zona con permiteContraEntrega en True
 ```
 
 ### 3.5 Datos que dejar listos
@@ -156,7 +199,8 @@ andá a las pestañas preparadas.
 ### 3.7 Checklist final (marcar antes de empezar)
 
 - [ ] `http://localhost:3000/api/v1/health` responde `ok` y `http://localhost:5173/catalogo` carga.
-- [ ] Mercado Pago **sin** configurar (para el bloque 6).
+- [ ] Mercado Pago **sin** configurar (para el bloque 6): `MERCADOPAGO_ACCESS_TOKEN` vacía o ausente en
+  `backend/.env` y no exportada en la terminal (verificación de 3.2).
 - [ ] Tres usuarios creados y tres ventanas iniciadas (A, B, C).
 - [ ] Bogotá con contra entrega habilitado; cliente con dirección principal en Bogotá.
 - [ ] Carrito del cliente vacío; panel de ventas con al menos una venta registrada y una anulada.
@@ -173,7 +217,7 @@ andá a las pestañas preparadas.
 | --- | --- |
 | **Qué hago** | Ventana A en `/catalogo`, sin tocar nada. |
 | **Qué digo** | «Trendy es una tienda de ropa en línea: catálogo público, carrito, pedidos, pago contra entrega o con Mercado Pago, seguimiento del envío y registro de ventas, con paneles para vendedores y administradores. Les voy a mostrar el ciclo completo de una venta con tres personas: una clienta, una administradora y un vendedor. Y al final, con franqueza, qué está probado y qué no.» |
-| **Qué debe pasar** | Se ve **Catálogo de productos**, «Encontrá las últimas tendencias para vos.» y «21 productos» (o la cantidad de tu base). |
+| **Qué debe pasar** | Se ve **Catálogo de productos**, «Encontrá las últimas tendencias para vos.» y «20 productos» (con el seed limpio; o la cantidad de tu base). |
 | **Plan B** | Si no carga: revisá que el backend esté en `:3000` y `VITE_API_URL` en `frontend/.env.local`; reiniciá `npm run dev`. |
 
 ### Bloque 1. El cliente compra con pago contra entrega (3:30)
@@ -203,11 +247,26 @@ andá a las pestañas preparadas.
 | Paso | Qué hago | Qué digo | Qué debe pasar | Plan B |
 | --- | --- | --- | --- | --- |
 | 3.1 | Ventana C, `/vendedor/pedidos`. Filtro por **Número de pedido** (pego el `PED-...`), **Filtrar**, **Ver**. | «El vendedor ve los mismos pedidos que el administrador: en esta versión no hay pedidos asignados.» | El pedido en estado **Confirmado**. | Si la lista no lo muestra, **Limpiar filtros**. |
-| 3.2 | Toco **Pasar a «En preparación»** y **Sí, cambiar estado**; después **Marcar envío como «Enviado»** y **Sí, actualizar envío**. | «Con el envío, el estado del pedido avanza junto.» | Pedido **Enviado** y en la fila **Envío**: «Enviado (actualizado ...)». | Para ganar tiempo, saltá este paso y cancelá desde «Confirmado». |
+| 3.2 | Toco **Pasar a «En preparación»** y **Sí, cambiar estado**; después **Marcar envío como «Enviado»** y **Sí, actualizar envío**. | «Con el envío, el estado del pedido avanza junto.» | Pedido **Enviado** y en la fila **Envío**: «Enviado (actualizado ...)». | Para ganar tiempo, saltá este paso y cancelá desde «Confirmado»: **cambian los textos de 3.3, 3.4 y 3.6** (ver la nota debajo de la tabla). |
 | 3.3 | Toco **Cancelar pedido** y **leo en voz alta** la ventana de confirmación. | «Si el cliente rechaza el pedido en la puerta, la tienda lo puede cancelar. Fíjense lo que avisa el sistema: repone las unidades al stock, advierte que, como ya salió, hay que confirmar que la mercadería vuelve, y que la venta se anula.» | «¿Cancelar el pedido PED-...? Las 2 unidades reservadas vuelven al stock... Como el pedido ya salió de la tienda... La venta registrada de este pedido se anula. El pago contra entrega registrado también se cancela. Esta acción no se puede deshacer.» | |
 | 3.4 | Toco **Sí, cancelar pedido**. | «No se borra nada: la venta queda anulada.» | Aviso **Pedido PED-... cancelado. El stock se repuso en el sistema, pero la mercadería puede no haber vuelto todavía. La venta quedó anulada.** y «No hay acciones disponibles para un pedido «Cancelado».» | |
 | 3.5 | Toco **Ventas** y **Ver detalle** de la venta. | «La venta anulada conserva todo y registra **quién** la anuló: Vendedor Demo. El responsable que la registró sigue siendo el administrador.» | **Estado de la venta: Anulada**, **Fecha de anulación**, **Anulada por: Vendedor Demo**, **Responsable: Admin Demo**. La tarjeta **Ventas anuladas** suma el importe. | |
 | 3.6 | (Opcional, 20 s) Ventana A, `/pedidos`, abro el pedido. | «El cliente lo ve cancelado.» | Estado **Cancelado** y «El pedido ya había salido de la tienda cuando se canceló. Comunicate con la tienda para coordinar la devolución.» | |
+
+**Nota: si salteás el paso 3.2 y cancelás desde «Confirmado»** (plan B de tiempo; los textos de este
+camino se tomaron del código, no se vieron en pantalla), lo que está escrito en 3.3, 3.4 y 3.6 **no**
+coincide, porque el pedido nunca salió de la tienda:
+
+- **3.3 (ventana de confirmación):** no aparece el aviso «Como el pedido ya salió de la tienda...» (solo
+  sale desde «Enviado» o «En tránsito»). Leé: «¿Cancelar el pedido PED-...? Las 2 unidades reservadas
+  vuelven al stock y quedan disponibles para la venta. La venta registrada de este pedido se anula. El
+  pago contra entrega registrado también se cancela. Esta acción no se puede deshacer.» Y no digas lo de
+  «como ya salió».
+- **3.4 (aviso de éxito):** **Pedido PED-... cancelado. Su stock volvió a estar disponible. La venta
+  quedó anulada.** (sin la frase de «la mercadería puede no haber vuelto todavía»).
+- **3.6 (vista del cliente):** **Este pedido se canceló antes de salir de la tienda.** (sin el texto de
+  coordinar la devolución).
+- **3.5 y el bloque 4** no cambian: la venta queda «Anulada» y «Anulada por: Vendedor Demo» igual.
 
 ### Bloque 4. Panel de ventas: filtros y totales (1:30)
 
@@ -238,7 +297,7 @@ disponible. Decilo antes de empezar.
 
 | Paso | Qué hago | Qué digo | Qué debe pasar | Plan B |
 | --- | --- | --- | --- | --- |
-| 6.1 | Ventana A: agrego 1 producto, voy a **Continuar compra**, dejo **Mercado Pago** y **Confirmar pedido**. | «Importante: Mercado Pago real nunca se probó. El sistema está probado con una simulación porque el aviso de pago necesita una dirección pública y el entorno es local. Lo que sí se probó es qué hace Trendy cuando la pasarela no responde.» | Llega al detalle con **Tu pedido PED-... quedó registrado, pero no pudimos iniciar el pago. El pago online no está disponible por ahora. Probá de nuevo más tarde; en tus próximas compras también podés elegir pago contra entrega. Podés reintentarlo desde acá.** y el botón **Pagar con Mercado Pago**. | Si en cambio se abre Mercado Pago, hay credenciales configuradas: volvé al paso 3.2 y quitá `MERCADOPAGO_ACCESS_TOKEN`. |
+| 6.1 | Ventana A: agrego 1 producto, voy a **Continuar compra**, dejo **Mercado Pago** y **Confirmar pedido**. | «Importante: Mercado Pago real nunca se probó. El sistema está probado con una simulación porque el aviso de pago necesita una dirección pública y el entorno es local. Lo que sí se probó es qué hace Trendy cuando la pasarela no responde.» | Llega al detalle con **Tu pedido PED-... quedó registrado, pero no pudimos iniciar el pago. El pago online no está disponible por ahora. Probá de nuevo más tarde; en tus próximas compras también podés elegir pago contra entrega. Podés reintentarlo desde acá.** y el botón **Pagar con Mercado Pago**. | Si en cambio se abre Mercado Pago, hay credenciales configuradas: volvé a la verificación previa de 3.2, vaciá `MERCADOPAGO_ACCESS_TOKEN` en `backend/.env` y reiniciá el backend. |
 | 6.2 | Hablo con la pantalla a la vista. | «El pedido existe y el stock está reservado. Si nadie paga, el administrador lo cancela con "Cancelar pedidos vencidos" pasadas 24 horas.» | | Luego, como administrador, cancelá ese pedido (**Cancelar pedido**) para devolver el stock. |
 
 ### Bloque 7. Cierre (1:00)
@@ -356,7 +415,9 @@ romper a propósito un bloqueo o la reposición de stock hace fallar los tests (
 No es el caso del frontend.
 
 **10. ¿Qué tan segura es?**
-Las contraseñas se guardan con bcrypt (costo 12), las sesiones son JWT de 1 hora y cada ruta valida el rol.
+Las contraseñas se guardan con bcrypt (costo 12), las sesiones son JWT de 1 hora y las rutas protegidas validan el rol que viene en el token (hay rutas
+públicas, como el catálogo). Un límite que hay que decir: el sistema no vuelve a consultar al usuario en la base en cada
+petición, así que si se desactiva una cuenta, la sesión ya abierta sigue funcionando hasta que el token vence (1 hora).
 Lo pendiente está declarado: CORS abierto, sin límite de intentos en el login, sin HTTPS en el staging local
 y un manejador de errores que puede devolver texto interno en un error 5xx (deuda punto 4; docs/despliegue/staging.md,
 «Limitaciones»).
@@ -400,5 +461,6 @@ contra entrega con aviso, la confirmación y la venta, la cancelación con «Anu
 totales, los errores de precio y de stock y el aviso de Mercado Pago. Las pantallas cargaron en torno a
 un segundo. Los tiempos de la sección 2 son **estimados** a ritmo de presentación (cantidad de clics y
 de texto a decir), no medidos con una persona presentando: ensayalo una vez con cronómetro. Lo que **no**
-se ensayó: la opción B (staging con Docker), la creación de usuarios dentro del contenedor, otros
-navegadores que no sean Chromium y pantallas de celular.
+se ensayó: la opción B (staging con Docker), el equivalente en PowerShell del paso 3.4, el plan B de
+cancelar desde «Confirmado» sin pasar por «Enviado» (los textos de ese camino se tomaron del código,
+no de la pantalla), otros navegadores que no sean Chromium y pantallas de celular.

@@ -85,7 +85,7 @@ node scripts/smoke-staging.js
 | --- | --- |
 | admin | El que defines en `SEED_ADMIN_CORREO` / `SEED_ADMIN_PASSWORD`. Es el **único** camino para tener un admin: la API no tiene endpoint para crearlo. Si ese correo ya existía, el seed no lo modifica y lo avisa en el log. |
 | cliente | Registrarse desde la web o `POST /api/v1/auth/register`. |
-| vendedor | No hay forma de crearlo desde la app (el registro siempre da rol cliente y no existe un endpoint que cambie el rol). Hay que insertarlo en la base a mano. |
+| vendedor | No hay forma de crearlo desde la app (el registro siempre da rol cliente y no existe un endpoint que cambie el rol). Para desarrollo local, o cualquier base a la que llegues desde tu máquina, está `scripts/crear-usuario.js` (ver el [README](../../README.md#cómo-crear-un-vendedor-o-un-administrador)). **Para este staging con Docker no está cubierto**: el script no viene en la imagen del backend (la imagen se construye solo con `backend/`) y resuelve las dependencias desde `../backend`, y MySQL no se publica al host, así que el script no llega a esa base tal como está levantado el compose. |
 
 Las variables (incluidos `SEED_ADMIN_PASSWORD` y los secretos) quedan en el entorno de los
 contenedores y se ven con `docker inspect`. Es aceptable en un staging local; no lo es en un

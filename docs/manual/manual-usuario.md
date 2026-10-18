@@ -65,16 +65,19 @@ continuación de la dirección del sitio:
 | Mis direcciones | `/direcciones` | Cliente |
 | Finalizar compra | `/checkout` | Cliente |
 | Mis pedidos | `/pedidos` (o el enlace **Mis pedidos**) | Cliente |
-| Productos | `/vendedor/productos` o `/admin/productos` | Vendedor / Administrador |
-| Inventario | `/vendedor/inventario` o `/admin/inventario` | Vendedor / Administrador |
-| Gestión de pedidos | `/vendedor/pedidos` o `/admin/pedidos` | Vendedor / Administrador |
-| Ventas | `/vendedor/ventas` o `/admin/ventas` (o el enlace **Ventas**) | Vendedor / Administrador |
+| Productos | `/vendedor/productos` (vendedor) o `/admin/productos` (administrador) | Vendedor / Administrador |
+| Inventario | `/vendedor/inventario` (vendedor) o `/admin/inventario` (administrador) | Vendedor / Administrador |
+| Gestión de pedidos | `/vendedor/pedidos` (vendedor) o `/admin/pedidos` (administrador) | Vendedor / Administrador |
+| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o el enlace **Ventas** | Vendedor / Administrador |
 | Vendedores | `/admin/vendedores` | Administrador |
 | Usuarios | `/admin/usuarios` | Administrador |
 | Roles y permisos | `/admin/roles` | Administrador |
 | Zonas de cobertura y tarifas de envío | `/admin/envios` | Administrador |
 
-Si entrás a una pantalla que no es de tu rol, te devuelve a la página de inicio sin ningún aviso. Si
+Las direcciones que empiezan con `/vendedor/` son solo para el vendedor y las que empiezan con
+`/admin/` solo para el administrador: **el administrador no entra a `/vendedor/...` ni el vendedor a
+`/admin/...`**, cada uno usa las de su rol. Si entrás a una pantalla que no es de tu rol, te devuelve a
+la página de inicio sin ningún aviso. Si
 entrás a una pantalla de cliente o de personal sin haber iniciado sesión, te lleva a **Iniciar
 sesión**.
 
@@ -104,9 +107,11 @@ Qué puede pasar:
 - Todo bien: aparece **Cuenta creada con éxito. Te llevamos al login...** y a los pocos segundos
   pasás solo a **Iniciar sesión**. La cuenta nace con rol cliente.
 - El correo ya existe: **Ese correo ya está registrado.**
-- Cualquier otro problema (por ejemplo una contraseña de menos de 8 caracteres o un correo mal
-  escrito): **No pudimos completar el registro. Revisá los datos e intentá de nuevo.** El mensaje no
-  dice cuál es el campo con el problema; revisá los tres.
+- Un correo sin arroba («@»): lo frena el propio navegador con su aviso nativo, antes de enviar nada
+  al servidor (lo mismo pasa en **Iniciar sesión** y en **Recuperar contraseña**).
+- Cualquier otro problema (por ejemplo una contraseña de menos de 8 caracteres o un correo que el
+  navegador acepta pero el sistema no): **No pudimos completar el registro. Revisá los datos e
+  intentá de nuevo.** El mensaje no dice cuál es el campo con el problema; revisá los tres.
 
 ### 3.2 Iniciar sesión (`/login`)
 
@@ -126,10 +131,11 @@ cuenta**.
 2. En **Recuperar contraseña** escribí tu correo y tocá **Enviar instrucciones**.
 3. Siempre aparece el mismo mensaje, exista o no el correo: **Si el correo ingresado existe en
    nuestro sistema, vas a recibir un email con instrucciones para restablecer tu contraseña.**
-4. **Importante: hoy Trendy no envía correos.** El enlace de recuperación no te llega por email: lo
-   genera el servidor y queda escrito en su registro (consola). Quien administra el servidor te lo
-   tiene que pasar. El enlace tiene la forma `/restablecer-password/<código largo>` y **vence a los 30
-   minutos**; solo sirve una vez.
+4. **Importante: hoy Trendy no envía correos.** El enlace de recuperación no te llega por email: el
+   servidor genera un código largo y lo escribe en su consola (solo el código, no un enlace: una línea
+   `[recuperar-password] token generado para <correo>: <código>`). Quien administra el servidor te lo
+   tiene que pasar y el enlace se arma así: `<dirección del sitio>/restablecer-password/<código>`. El
+   enlace **vence a los 30 minutos**; solo sirve una vez.
 5. Al abrir el enlace aparece **Restablecer contraseña** con **Nueva contraseña** y **Confirmar
    contraseña**. Tocá **Guardar nueva contraseña**.
 
@@ -143,7 +149,9 @@ Mensajes:
   del enlace inválido aunque el enlace sea bueno (es un defecto de la pantalla; el enlace no se gasta
   y podés volver a intentar con una clave más larga).
 
-Los tres enlaces **Volver al login** de estas pantallas te llevan a **Iniciar sesión**.
+El enlace **Volver al login** de **Recuperar contraseña** y el de **Restablecer contraseña** te llevan
+a **Iniciar sesión**; en **Crear cuenta** el enlace equivalente dice **¿Ya tenés cuenta? Iniciá
+sesión**. La pantalla de **Iniciar sesión** no tiene ninguno.
 
 ---
 
@@ -158,7 +166,7 @@ pedido** → detalle del pedido → **Mis pedidos**.
 ### 4.2 Catálogo: buscar y filtrar
 
 Abrí `/catalogo`. La pantalla se llama **Catálogo de productos** («Encontrá las últimas tendencias
-para vos.») y arriba a la derecha dice cuántos productos hay, por ejemplo «21 productos».
+para vos.») y arriba a la derecha dice cuántos productos hay, por ejemplo «20 productos».
 
 A la izquierda está el panel **Filtros**:
 
@@ -169,7 +177,9 @@ A la izquierda está el panel **Filtros**:
 - **Talla**: «Todas las tallas», XS, S, M, L, XL. Muestra los productos que tengan esa talla con stock
   (las tallas numéricas, como 30 o 32 de los jeans, no están en esta lista).
 - **Precio**: dos casillas, «Mín.» y «Máx.» (en pesos).
-- **Limpiar filtros** borra todo.
+- **Limpiar filtros** borra todos los filtros del panel, pero **no** el texto que hayas escrito en las
+  barras «Buscar productos...» (la de debajo del título y la del encabezado): ese texto queda a la vista
+  aunque ya no filtre. Para vaciarlo, borralo a mano o recargá la página.
 
 Los filtros se combinan entre sí. Los productos aparecen en tarjetas de 8 por página, con paginación
 abajo (← 1 2 3 →). Si nada coincide: **No encontramos productos con esos filtros.**
@@ -362,14 +372,18 @@ Pantalla **Productos** con el botón **Nuevo producto** y una tabla: **Nombre**,
 pasa a modo edición («Editar nombre») y muestra dos secciones más para el mismo producto:
 
 - **Imágenes**: pegá la **URL de una imagen ya subida** (`https://...`) y tocá **Agregar imagen**. No
-  hay carga de archivos. La URL debe terminar en `.jpg`, `.jpeg`, `.png` o `.webp`; una dirección con
-  parámetros al final (por ejemplo `...?w=800`) se rechaza con **No pudimos agregar la imagen. Verificá
-  la URL e intentá de nuevo.**
+  hay carga de archivos. Antes de los parámetros (lo que sigue a un `?` o a un `#`), la dirección tiene
+  que terminar en `.jpg`, `.jpeg`, `.png` o `.webp`: `https://sitio.com/foto.jpg?w=800` se acepta,
+  pero una dirección cuya ruta no termina en una de esas extensiones (por ejemplo
+  `https://images.unsplash.com/photo-123?w=800`) se rechaza con **No pudimos agregar la imagen.
+  Verificá la URL e intentá de nuevo.** (el sistema solo mira la extensión: no comprueba que la imagen
+  exista).
 - **Variantes (talla, color y stock)**: completá **SKU**, **Talla**, **Color (opcional)** y **Stock** y
   tocá **Agregar variante**. Cada producto necesita al menos una variante para poder comprarse.
   Mensajes: **SKU, talla y stock son obligatorios.**, **El stock debe ser un número mayor o igual a
-  0.** y, si repetís la combinación, **Ya existe una variante con esa combinación de talla y color
-  para este producto**.
+  0.**, si repetís la combinación, **Ya existe una variante con esa combinación de talla y color
+  para este producto** y, si el SKU ya lo usa cualquier otra variante, **Ya existe una variante con
+  ese SKU**. El SKU es único en **todo el catálogo**, no solo dentro del producto.
 
 **Regla de precios:** el precio es en **pesos colombianos (COP) enteros, sin centavos**, mayor que 0 y
 **no puede superar 99.999.999**. Si no se cumple, el formulario avisa:
@@ -378,6 +392,16 @@ pasa a modo edición («Editar nombre») y muestra dos secciones más para el mi
 - **El precio debe ser mayor a 0.**
 - **El precio no puede superar 99999999 (COP).**
 - También: **El nombre es obligatorio.** y **Elegí una categoría.**
+
+**La descripción es obligatoria**, pero el formulario no lo valida: si la dejás vacía, el servidor
+rechaza el producto y la pantalla muestra el aviso genérico **No pudimos guardar el producto. Intentá
+de nuevo.** (sin decir que falta la descripción).
+
+**Activar un producto exige al menos una imagen.** Si intentás pasar a «Activo» un producto sin
+imágenes, el servidor lo rechaza. Desde el botón **Activar** de la tabla la pantalla muestra el aviso
+genérico **No pudimos actualizar el estado del producto. Intentá de nuevo.**; desde el campo
+**Estado** del formulario de edición, **El producto se guardó, pero no pudimos actualizar su estado.
+Intentá cambiarlo de nuevo desde la tabla.** En ambos casos, agregá primero una imagen.
 
 Se exige sin centavos porque Mercado Pago no acepta montos con centavos en pesos colombianos.
 
@@ -472,7 +496,10 @@ del pedido que se confirmó; nunca se borra.
 
 - **Filtros**: **Desde**, **Hasta**, **Estado** (Todos los estados, Registrada, Anulada), **Filtrar** y
   **Limpiar filtros**. Las fechas se interpretan en hora de Bogotá, de 00:00 a 23:59 de cada día.
-  Si «desde» es posterior a «hasta»: «La fecha «desde» no puede ser posterior a «hasta».»
+  Si «desde» es posterior a «hasta»: «La fecha «desde» no puede ser posterior a «hasta».» El rango
+  puede abarcar **como máximo 366 días**: la pantalla no lo valida (solo controla que «desde» no sea
+  posterior a «hasta»), pero el servidor rechaza un rango más largo con **El rango de fechas no puede
+  superar 366 días**.
 - **Totales** (dos tarjetas): **Ventas registradas** y **Ventas anuladas**, cada una con el importe y
   la cantidad («$ 33.400 · 1 venta»). Los totales cubren **todas** las ventas del período elegido
   (**Desde**/**Hasta**), no solo la página que ves, y **no cambian con el filtro Estado**: ese filtro
@@ -504,7 +531,8 @@ pedidos y ventas, con las direcciones que empiezan con `/admin/`) y además lo s
 - **Usuarios**: tabla con **Nombre**, **Correo**, **Rol**, **Estado** («ACTIVO» / «INACTIVO») y el
   botón **Desactivar** / **Activar**. Un usuario desactivado no puede iniciar sesión (ve «Correo o
   contraseña incorrectos.»).
-- **Vendedores**: la misma tabla, pero solo con los usuarios de rol vendedor, y con el mismo botón.
+- **Vendedores**: una tabla parecida pero sin la columna **Rol** (**Nombre**, **Correo**, **Estado** y
+  el botón **Desactivar** / **Activar**), solo con los usuarios de rol vendedor.
   Si falla el cambio: **No pudimos actualizar el estado del vendedor. Intentá de nuevo.** (en Usuarios:
   «...del usuario...»).
 - **Estas pantallas no permiten crear usuarios ni cambiar el rol de nadie.** Un cliente nuevo se
@@ -656,8 +684,11 @@ las tarifas de envío (hasta 1.000.000) no pueden tener centavos.
 
 ### 8.6 El precio queda fijo
 
-El precio de cada producto queda fijo al **confirmar el pedido**: si después cambia en el catálogo, el
-pedido y la venta conservan el precio de ese momento.
+El precio de cada producto queda fijo cuando el pedido **se crea**, es decir, cuando el cliente toca
+**Confirmar pedido** en el checkout (no cuando el pedido pasa al estado «Confirmado»). Si después
+cambia en el catálogo, el pedido conserva el precio de ese momento. La venta, que nace cuando el pedido
+pasa a «Confirmado», copia los importes del pedido (subtotal, envío y total), así que también conserva
+ese precio.
 
 ### 8.7 Vendedores y administradores ven todo
 
@@ -668,14 +699,15 @@ administrador ven todos los pedidos, todas las ventas y los mismos totales.
 
 ## 9. Problemas frecuentes
 
-Los mensajes de esta tabla se vieron en la aplicación.
+Los mensajes de esta tabla salen de la aplicación; los que dicen «poco comunes» o dependen de datos
+particulares se leyeron en el código y no se reprodujeron en pantalla.
 
 | Lo que ves | Qué pasó y qué hacer |
 | --- | --- |
 | **Correo o contraseña incorrectos.** | Revisá el correo y la clave. También sale si la cuenta está desactivada: pedile al administrador que la active. |
 | **Ese correo ya está registrado.** | Ya hay una cuenta con ese correo: iniciá sesión o usá **¿Olvidaste tu contraseña?**. |
-| **No pudimos completar el registro. Revisá los datos e intentá de nuevo.** | Falta o está mal algún dato; la contraseña necesita al menos 8 caracteres. |
-| No me llega el correo de recuperación | Hoy Trendy no envía correos; el enlace sale en el registro del servidor. Pedíselo a quien administra el sistema. |
+| **No pudimos completar el registro. Revisá los datos e intentá de nuevo.** | Falta o está mal algún dato; la contraseña necesita al menos 8 caracteres. Si al correo le falta la arroba («@»), el navegador lo frena antes con su propio aviso. |
+| No me llega el correo de recuperación | Hoy Trendy no envía correos; en la consola del servidor sale solo un código. Pedíselo a quien administra el sistema: el enlace es `<dirección del sitio>/restablecer-password/<código>`. |
 | **El enlace es inválido o ya venció. Solicitá uno nuevo desde 'Recuperar contraseña'.** | El enlace venció (30 minutos), ya se usó, o la clave nueva tiene menos de 8 caracteres. Probá con una clave más larga o pedí otro enlace. |
 | Entré a una dirección y volví a la página de inicio | Esa pantalla es de otro rol. Si no iniciaste sesión te lleva a **Iniciar sesión**. |
 | Mi sesión se cerró sola | La sesión dura 1 hora. Volvé a iniciar sesión. |
@@ -688,15 +720,20 @@ Los mensajes de esta tabla se vieron en la aplicación.
 | **No pudimos confirmar si tu pedido se registró: puede que sí.** | Se cortó la conexión. Mirá **Mis pedidos** antes de volver a intentar. |
 | **El precio debe ser un valor entero en pesos (COP), sin centavos.** | Quitá los centavos del precio (o del costo de envío). |
 | **El precio no puede superar 99999999 (COP).** | Bajá el precio: el tope es 99.999.999. |
-| **No pudimos agregar la imagen. Verificá la URL e intentá de nuevo.** | La URL no es válida o no termina en jpg, jpeg, png o webp. Usá una dirección directa a la imagen sin parámetros. |
+| **No pudimos agregar la imagen. Verificá la URL e intentá de nuevo.** | La ruta de la URL no termina en jpg, jpeg, png o webp (los parámetros después de un `?` o `#` no cuentan: `foto.jpg?w=800` sirve, `photo-123?w=800` no). Usá una dirección directa a la imagen. |
 | **Ya existe una variante con esa combinación de talla y color para este producto** | Esa talla y color ya están cargados; ajustá su stock en **Inventario**. |
+| **Ya existe una variante con ese SKU** | Otra variante (de este u otro producto) ya usa ese SKU: el SKU es único en todo el catálogo. Elegí otro. |
+| **No pudimos guardar el producto. Intentá de nuevo.** | Puede faltar la **Descripción**, que es obligatoria aunque el formulario no lo avise. Completala y guardá de nuevo. |
+| **No pudimos actualizar el estado del producto. Intentá de nuevo.** | Al activar un producto sin imágenes el servidor lo rechaza: agregá antes al menos una imagen. |
 | **El ajuste dejaría el stock en negativo** | Estás retirando más unidades de las que hay. Bajá la cantidad. |
 | **El motivo es obligatorio para un ajuste manual.** | Explicá por qué corregís el stock. |
-| «El pedido tiene un pago aprobado: no se puede cancelar desde el sistema» | Ya se cobró (o Mercado Pago lo aprobó). El reembolso se gestiona manualmente. |
+| «El pedido tiene un pago aprobado: no se puede cancelar desde el sistema» | Ya se cobró (o Mercado Pago lo aprobó). Es lo que ve el personal en un pedido confirmado de Mercado Pago con el pago aprobado. El reembolso se gestiona manualmente. |
+| «Un pedido de Mercado Pago ya pagado no se puede cancelar desde el sistema (el reembolso se gestiona manualmente).» | Un pedido de Mercado Pago que ya salió de «Pendiente de pago» no se cancela desde el sistema (si su pago figura como aprobado, sale el aviso de la fila anterior). |
 | «Un pedido ya entregado no se puede cancelar.» | Correcto: un pedido entregado no se cancela. |
-| «Solo se pueden cancelar los pedidos pendientes de pago y los contra entrega que todavía no se entregaron.» | Un pedido de Mercado Pago confirmado no se cancela desde el sistema. |
+| «Solo se pueden cancelar los pedidos pendientes de pago y los contra entrega que todavía no se entregaron.» | Aparece solo en casos poco comunes, con un pedido en un estado heredado de versiones anteriores (ver [7.1](#71-estado-del-pedido)) que no encaja en ninguno de los motivos anteriores. |
 | «El cliente todavía no registró su pago contra entrega: el pedido no se puede confirmar hasta entonces.» | Pedile al cliente que, en el detalle de su pedido, toque **Registrar pago contra entrega**. |
 | **La fecha «desde» no puede ser posterior a «hasta».** | Corregí el rango de fechas del filtro. |
+| **El rango de fechas no puede superar 366 días** | En **Ventas**, achicá el período entre **Desde** y **Hasta**. |
 | La pantalla no se actualiza | Tocá **Actualizar**. |
 
 ---
