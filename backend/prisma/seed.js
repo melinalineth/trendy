@@ -10,6 +10,7 @@
 // Uso: npx prisma db seed (requiere DATABASE_URL apuntando a una base viva).
 
 const prisma = require("../src/config/prisma");
+const { hashPassword } = require("../src/utils/hash");
 
 const ROLES = ["cliente", "vendedor", "admin"];
 
@@ -350,6 +351,38 @@ async function main() {
       create: { nombre },
     });
     console.log(`Rol listo: ${rol.nombre} (id=${rol.id})`);
+  }
+
+  // --------------------------------------------------
+  // 1b. Admin inicial (OPCIONAL, pensado para staging)
+  // --------------------------------------------------
+  // La API no tiene ningún camino para crear el primer admin (el registro
+  // siempre da rol cliente y solo un admin puede gestionar usuarios), así que
+  // sin esto un entorno nuevo queda sin administrador. Solo se crea si vienen
+  // SEED_ADMIN_CORREO y SEED_ADMIN_PASSWORD; upsert con update vacío: si el
+  // admin ya existe NO se le pisa la contraseña. Nunca se loguea la contraseña.
+  const adminCorreo = process.env.SEED_ADMIN_CORREO?.trim();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (adminCorreo && adminPassword) {
+    if (adminPassword.length < 8) {
+      throw new Error("SEED_ADMIN_PASSWORD debe tener al menos 8 caracteres.");
+    }
+
+    const rolAdmin = await prisma.rol.findUnique({ where: { nombre: "admin" } });
+
+    await prisma.usuario.upsert({
+      where: { correo: adminCorreo },
+      update: {},
+      create: {
+        nombre: process.env.SEED_ADMIN_NOMBRE?.trim() || "Administrador",
+        correo: adminCorreo,
+        passwordHash: await hashPassword(adminPassword),
+        rolId: rolAdmin.id,
+      },
+    });
+
+    console.log(`Admin inicial listo: ${adminCorreo}`);
   }
 
   // --------------------------------------------------
