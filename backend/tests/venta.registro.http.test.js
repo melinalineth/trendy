@@ -246,7 +246,7 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
 
       const { resultado: r } = await conLogs(() => webhook(81011));
 
-      assert.ok(r.status >= 400, JSON.stringify(r.body));
+      assertErrorEstandar(r, 409, "MONTO_NO_COINCIDE");
       assert.equal(await ventasDe(pedido.id), 0);
       assert.equal(await estadoDe(pedido.id), "PENDIENTE");
     });
