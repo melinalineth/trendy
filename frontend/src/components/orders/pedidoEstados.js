@@ -87,19 +87,36 @@ export const TRANSICIONES_PEDIDO = Object.freeze({
   PAGO_PENDIENTE: Object.freeze([]),
 });
 
-// Estados desde los que el backend permite cancelar (ESTADOS_CANCELABLES de
-// pedido.service.js), siempre que el pago no esté APROBADO.
+// Copia de las reglas de cancelación de backend/src/services/pedido.service.js
+// (ESTADOS_CANCELABLES, ESTADOS_CANCELABLES_CONTRA_ENTREGA, esCancelable;
+// docs/diseno/pedidos-estados.md §6). Cualquier pedido se cancela mientras
+// está pendiente de pago:
 export const ESTADOS_CANCELABLES = Object.freeze([
   "PENDIENTE",
   "PAGO_PENDIENTE",
   "PAGO_RECHAZADO",
 ]);
 
+// Además, un pedido CONTRA_ENTREGA se cancela mientras no se haya entregado
+// (caso típico: el cliente lo rechaza en la puerta). ENTREGADO queda fuera, y
+// un pedido de Mercado Pago confirmado también: ya está pagado y el reembolso
+// se gestiona a mano.
+export const ESTADOS_CANCELABLES_CONTRA_ENTREGA = Object.freeze([
+  "CONFIRMADO",
+  "EN_PREPARACION",
+  "ENVIADO",
+  "EN_TRANSITO",
+]);
+
+// En ambos casos un Pago APROBADO bloquea la cancelación (dinero cobrado). El
+// backend sigue siendo quien valida (409 PEDIDO_NO_CANCELABLE).
 export function sePuedeCancelar(pedido) {
-  return (
-    ESTADOS_CANCELABLES.includes(pedido?.estado) &&
-    pedido?.pago?.estado !== "APROBADO"
-  );
+  const cancelablePorEstado =
+    ESTADOS_CANCELABLES.includes(pedido?.estado) ||
+    (pedido?.metodoPago === "CONTRA_ENTREGA" &&
+      ESTADOS_CANCELABLES_CONTRA_ENTREGA.includes(pedido?.estado));
+
+  return cancelablePorEstado && pedido?.pago?.estado !== "APROBADO";
 }
 
 // ---------------------------------------------------------------------------
@@ -108,9 +125,11 @@ export function sePuedeCancelar(pedido) {
 
 // Pasos del envío en orden (ESTADOS_ENVIO de envio.service.js). Mientras el
 // pedido está en uno de estos estados, Pedido.estado e InfoEnvio.estadoEnvio
-// valen lo mismo; antes (PENDIENTE, CONFIRMADO) o si se canceló, estadoEnvio
-// queda en EN_PREPARACION y NO significa que se esté preparando: manda el
-// estado del pedido (pedidos-estados.md §1).
+// valen lo mismo; antes (PENDIENTE, CONFIRMADO) estadoEnvio queda en
+// EN_PREPARACION y NO significa que se esté preparando: manda el estado del
+// pedido (pedidos-estados.md §1). Al cancelar, el InfoEnvio NO se toca: un
+// pedido CANCELADO puede tener estadoEnvio ENVIADO o EN_TRANSITO (un contra
+// entrega rechazado en la puerta) y manda estadoPedido = CANCELADO.
 export const PASOS_ENVIO = Object.freeze([
   { estado: "EN_PREPARACION", etiqueta: "En preparación" },
   { estado: "ENVIADO", etiqueta: "Enviado" },
