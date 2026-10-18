@@ -33,10 +33,14 @@ function obtenerImagen(producto) {
   return typeof primera === "string" ? primera : primera.url;
 }
 
+// El backend serializa el precio (Decimal) como texto ("89900"): se convierte a
+// número antes de darle formato. Si no es un número válido se muestra tal cual.
 function formatearPrecio(precio) {
-  if (typeof precio !== "number") return precio;
+  const numero = Number(precio);
 
-  return precio.toLocaleString("es-CO");
+  if (!Number.isFinite(numero)) return precio;
+
+  return numero.toLocaleString("es-CO");
 }
 
 // Catálogo público (RF-008 a RF-011): combina búsqueda de texto, filtros

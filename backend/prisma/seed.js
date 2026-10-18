@@ -10,6 +10,8 @@
 // Uso: npx prisma db seed (requiere DATABASE_URL apuntando a una base viva).
 
 const prisma = require("../src/config/prisma");
+const { hashPassword } = require("../src/utils/hash");
+const { loginSchema } = require("../src/dtos/auth.dto");
 
 const ROLES = ["cliente", "vendedor", "admin"];
 
@@ -350,6 +352,60 @@ async function main() {
       create: { nombre },
     });
     console.log(`Rol listo: ${rol.nombre} (id=${rol.id})`);
+  }
+
+  // --------------------------------------------------
+  // 1b. Admin inicial (OPCIONAL, pensado para staging)
+  // --------------------------------------------------
+  // La API no tiene ningún camino para crear el primer admin (el registro
+  // siempre da rol cliente y solo un admin puede gestionar usuarios), así que
+  // sin esto un entorno nuevo queda sin administrador. Solo se crea si vienen
+  // SEED_ADMIN_CORREO y SEED_ADMIN_PASSWORD. Si ese correo ya existe NO se
+  // modifica nada (ni la contraseña ni el rol): solo se informa. Nunca se
+  // loguea la contraseña.
+  const adminCorreo = process.env.SEED_ADMIN_CORREO?.trim();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!adminCorreo && !adminPassword) {
+    console.log("Admin inicial omitido (opcional): SEED_ADMIN_CORREO y SEED_ADMIN_PASSWORD no están definidas.");
+  } else if (!adminCorreo || !adminPassword) {
+    console.warn(
+      `⚠️  Admin inicial NO creado: falta ${adminCorreo ? "SEED_ADMIN_PASSWORD" : "SEED_ADMIN_CORREO"} ` +
+        "(hay que definir las dos variables)."
+    );
+  } else {
+    // Mismo criterio de correo que el login (auth.dto.js: zod .email()).
+    if (!loginSchema.shape.correo.safeParse(adminCorreo).success) {
+      throw new Error("SEED_ADMIN_CORREO no tiene formato de correo válido; el admin inicial no se crea.");
+    }
+
+    if (adminPassword.length < 8) {
+      throw new Error("SEED_ADMIN_PASSWORD debe tener al menos 8 caracteres.");
+    }
+
+    const existente = await prisma.usuario.findUnique({
+      where: { correo: adminCorreo },
+      include: { rol: true },
+    });
+
+    if (existente) {
+      console.log(
+        `El usuario ${adminCorreo} ya existía con rol ${existente.rol.nombre}; no se modificó.`
+      );
+    } else {
+      const rolAdmin = await prisma.rol.findUnique({ where: { nombre: "admin" } });
+
+      await prisma.usuario.create({
+        data: {
+          nombre: process.env.SEED_ADMIN_NOMBRE?.trim() || "Administrador",
+          correo: adminCorreo,
+          passwordHash: await hashPassword(adminPassword),
+          rolId: rolAdmin.id,
+        },
+      });
+
+      console.log(`Admin inicial creado: ${adminCorreo}`);
+    }
   }
 
   // --------------------------------------------------

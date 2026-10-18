@@ -12,7 +12,14 @@
 //   - un pedido con Pago APROBADO nunca se cancela (409, el reembolso es
 //     manual) y un "approved" que llega después de cancelar responde
 //     requiereReembolso (pago.service);
+//   - un pedido de MERCADO_PAGO confirmado o en su ciclo de envío no se
+//     cancela (409);
 //   - vencidos: solo MERCADO_PAGO PENDIENTE viejos sin pago aprobado.
+//
+// La cancelación de un pedido CONTRA ENTREGA ya confirmado (CONFIRMADO ..
+// EN_TRANSITO), que repone el stock y anula la venta, y sus 409 (ENTREGADO,
+// Pago APROBADO, Mercado Pago) están en venta.registro.http.test.js; las reglas
+// puras, en pedido.cancelabilidad.test.js.
 //
 // El SDK de Mercado Pago se mockea (ningún test sale a la red); la firma del
 // webhook se calcula con el HMAC real que valida el SDK.
@@ -299,7 +306,7 @@ describe("Cancelación de pedidos y pedidos vencidos", () => {
       });
     });
 
-    it("pedido ya confirmado o en su ciclo de envío -> 409 PEDIDO_NO_CANCELABLE sin reponer", async () => {
+    it("pedido de Mercado Pago ya confirmado o en su ciclo de envío -> 409 PEDIDO_NO_CANCELABLE sin reponer", async () => {
       const cliente = await clienteConDireccion();
       for (const estado of [
         "PAGO_APROBADO",

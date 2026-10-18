@@ -243,6 +243,58 @@ async function crearPedido({
   return pedido;
 }
 
+// Venta creada DIRECTO con prisma sobre un pedido nuevo (RF-041/RF-042), para
+// los tests de consulta de ventas. Crea el pedido con `crearPedido` (mismas
+// opciones de líneas / costoEnvio / metodoPago) y copia sus montos a la venta,
+// como lo hace el registro real. No pasa por el service de registro.
+//   - estadoPedido: estado del pedido (por defecto CONFIRMADO).
+//   - registradaEn (opcional): fecha de la venta (Date); por defecto "ahora".
+//   - estado: REGISTRADA (por defecto) o ANULADA; una ANULADA lleva anuladaEn
+//     (el dado o "ahora").
+//   - responsableId (opcional): usuario que la registró (NULL = webhook).
+//   - anuladaPorId (opcional): usuario que la anuló (NULL = sin dato / sin usuario).
+// Devuelve { venta, pedido }. `limpiar` borra la venta antes que el pedido.
+async function crearVenta({
+  usuarioId,
+  direccionId,
+  lineas,
+  costoEnvio = 0,
+  metodoPago = "MERCADO_PAGO",
+  estadoPedido = "CONFIRMADO",
+  registradaEn,
+  estado = "REGISTRADA",
+  anuladaEn,
+  responsableId,
+  anuladaPorId,
+}) {
+  const pedido = await crearPedido({
+    usuarioId,
+    direccionId,
+    lineas,
+    costoEnvio,
+    metodoPago,
+    estado: estadoPedido,
+  });
+
+  const venta = await prisma.venta.create({
+    data: {
+      pedidoId: pedido.id,
+      clienteId: pedido.usuarioId,
+      responsableId: responsableId ?? null,
+      anuladaPorId: anuladaPorId ?? null,
+      subtotal: pedido.subtotal,
+      costoEnvio: pedido.costoEnvio,
+      total: pedido.total,
+      metodoPago: pedido.metodoPago,
+      estado,
+      ...(registradaEn ? { registradaEn } : {}),
+      ...(estado === "ANULADA" ? { anuladaEn: anuladaEn ?? new Date() } : {}),
+    },
+  });
+
+  return { venta, pedido };
+}
+
 // Agrega una línea al carrito del usuario directo con prisma (crea el carrito
 // si no existe). Para tests de pedidos: el carrito se prueba en su propio
 // archivo.
@@ -277,6 +329,19 @@ async function limpiar() {
   const filtroPedidos = {
     OR: [{ id: { in: pedidos } }, { usuarioId: { in: usuarios } }],
   };
+  // La Venta (FK RESTRICT a Pedido y a Usuario: cliente, quien la registró y
+  // quien la anuló) va primero: un pedido o un usuario con venta no se puede
+  // borrar.
+  await prisma.venta.deleteMany({
+    where: {
+      OR: [
+        { pedido: filtroPedidos },
+        { clienteId: { in: usuarios } },
+        { responsableId: { in: usuarios } },
+        { anuladaPorId: { in: usuarios } },
+      ],
+    },
+  });
   await prisma.pago.deleteMany({ where: { pedido: filtroPedidos } });
   // El historial de envío referencia a InfoEnvio y a Usuario con RESTRICT: va
   // antes que ambos. Se borra el de los pedidos y el de los usuarios creados
@@ -329,6 +394,7 @@ module.exports = {
   registrarZona,
   crearDireccion,
   crearPedido,
+  crearVenta,
   agregarAlCarrito,
   itemsDelCarrito,
   sufijo,

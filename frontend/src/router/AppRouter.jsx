@@ -23,6 +23,8 @@ import CustomerOrders from "../pages/customer/Orders";
 import OrderDetail from "../pages/customer/OrderDetail";
 import AdminOrders from "../pages/admin/Orders";
 import SellerOrders from "../pages/seller/Orders";
+import AdminSales from "../pages/admin/Sales";
+import SellerSales from "../pages/seller/Sales";
 
 function AppRoutes() {
   return (
@@ -158,6 +160,24 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["vendedor"]}>
             <SellerOrders />
+          </RoleGuard>
+        }
+      />
+      {/* Sprint 5: consulta de ventas (RF-042). En v1.0 admin y vendedor ven
+          todas las ventas desde el mismo panel compartido. */}
+      <Route
+        path="/admin/ventas"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <AdminSales />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/vendedor/ventas"
+        element={
+          <RoleGuard roles={["vendedor"]}>
+            <SellerSales />
           </RoleGuard>
         }
       />

@@ -1,0 +1,12 @@
+# Nada de esto entra al contexto del build del frontend.
+node_modules
+dist
+npm-debug.log
+
+# Variables locales de Vite (la URL de la API se pasa como build arg).
+.env
+.env.*
+
+README.md
+Dockerfile
+.dockerignore

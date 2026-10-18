@@ -23,7 +23,7 @@
   opacity: 0.9;
 }
 
-/* Acceso a "Mis pedidos" (solo cliente) */
+/* Accesos de texto: "Mis pedidos" (solo cliente) y "Ventas" (admin y vendedor) */
 .header__link {
   color: var(--color-text-inverse);
   font-size: var(--text-sm);

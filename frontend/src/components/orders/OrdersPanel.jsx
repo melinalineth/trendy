@@ -10,6 +10,7 @@ import Pagination from "../common/Pagination";
 import Table from "../common/Table";
 import { useGestionPedidos } from "../../hooks/useGestionPedidos";
 import {
+  ESTADOS_CANCELABLES_CONTRA_ENTREGA,
   ESTADOS_ENVIO,
   ESTADOS_PEDIDO,
   TRANSICIONES_PEDIDO,
@@ -87,6 +88,46 @@ function accionDeAvance(pedido) {
   };
 }
 
+// Por qué un pedido (que no está CANCELADO) no se puede cancelar; las mismas
+// causas que el 409 del backend (cancelarBajoLock / mensajeNoCancelable).
+function motivoNoCancelable(pedido) {
+  if (pedido.estado === "ENTREGADO") {
+    return "Un pedido ya entregado no se puede cancelar.";
+  }
+
+  if (pedido.pago?.estado === "APROBADO") {
+    return "El pedido tiene un pago aprobado: no se puede cancelar desde el sistema (el reembolso se gestiona manualmente).";
+  }
+
+  if (pedido.metodoPago === "MERCADO_PAGO" && pedido.estado !== "PENDIENTE") {
+    return "Un pedido de Mercado Pago ya pagado no se puede cancelar desde el sistema (el reembolso se gestiona manualmente).";
+  }
+
+  return "Solo se pueden cancelar los pedidos pendientes de pago y los contra entrega que todavía no se entregaron.";
+}
+
+// Texto de la fila «Envío» del detalle. Un pedido CANCELADO conserva su
+// InfoEnvio (el paquete pudo haber salido): se muestra el estado real del
+// envío aclarando que el pedido se canceló. EN_PREPARACION en un cancelado no
+// dice nada (es el valor de arranque), solo que no salió de la tienda.
+function textoEnvio(pedido) {
+  const info = pedido.infoEnvio;
+
+  if (pedido.estado === "CANCELADO") {
+    if (!info || info.estadoEnvio === "EN_PREPARACION") {
+      return "No salió de la tienda (pedido cancelado)";
+    }
+
+    return `${etiquetaEstadoEnvio(info.estadoEnvio)} (pedido cancelado)`;
+  }
+
+  if (ESTADOS_ENVIO.includes(pedido.estado) && info) {
+    return `${etiquetaEstadoEnvio(info.estadoEnvio)} (actualizado ${formatearFecha(info.actualizadoEn)})`;
+  }
+
+  return "Todavía no empezó";
+}
+
 // Foco inicial en "Cancelar" (footer del Modal común) para que un Enter
 // accidental no confirme una acción irreversible. Mismo criterio que
 // ZonasCobertura.
@@ -125,7 +166,18 @@ function textoConfirmacion(confirmacion) {
           ? "La unidad reservada vuelve al stock y queda disponible para la venta."
           : `Las ${textoUnidades(unidades)} reservadas vuelven al stock y quedan disponibles para la venta.`;
 
-      return `¿Cancelar el pedido ${numero}? ${reposicion}${pagoContraEntrega} Esta acción no se puede deshacer.`;
+      // Un contra entrega confirmado ya tenía venta registrada: se anula.
+      const anulaVenta = ESTADOS_CANCELABLES_CONTRA_ENTREGA.includes(pedido.estado)
+        ? " La venta registrada de este pedido se anula."
+        : "";
+
+      // Desde ENVIADO / EN_TRANSITO el backend asume que la mercadería vuelve,
+      // pero puede no haber vuelto todavía.
+      const yaSalio = ["ENVIADO", "EN_TRANSITO"].includes(pedido.estado)
+        ? " Como el pedido ya salió de la tienda, el stock se repone aunque la mercadería todavía pueda no haber vuelto: confirmá que la recuperás."
+        : "";
+
+      return `¿Cancelar el pedido ${numero}? ${reposicion}${yaSalio}${anulaVenta}${pagoContraEntrega} Esta acción no se puede deshacer.`;
     }
     case "vencidos":
       return "Se cancelan los pedidos de Mercado Pago que siguen pendientes de pago después de su plazo de vigencia (configurado en el servidor) y su stock vuelve a estar disponible. Los pedidos contra entrega y los que tienen el pago aprobado no se tocan.";
@@ -282,11 +334,7 @@ function DetallePedido({ detalle, procesando, onVolver, onReintentar, onAccion }
               </div>
               <div>
                 <dt>Envío</dt>
-                <dd>
-                  {ESTADOS_ENVIO.includes(pedido.estado) && pedido.infoEnvio
-                    ? `${etiquetaEstadoEnvio(pedido.infoEnvio.estadoEnvio)} (actualizado ${formatearFecha(pedido.infoEnvio.actualizadoEn)})`
-                    : "Todavía no empezó"}
-                </dd>
+                <dd>{textoEnvio(pedido)}</dd>
               </div>
             </dl>
           </section>
@@ -375,9 +423,7 @@ function DetallePedido({ detalle, procesando, onVolver, onReintentar, onAccion }
           )}
 
           {pedido.estado !== "CANCELADO" && !puedeCancelar && (
-            <p className="orders-panel__muted">
-              Solo se pueden cancelar pedidos pendientes de pago y sin un pago aprobado.
-            </p>
+            <p className="orders-panel__muted">{motivoNoCancelable(pedido)}</p>
           )}
         </section>
       </>
@@ -419,10 +465,22 @@ function mensajeExito(confirmacion, datos) {
       return `Pedido ${numero}: envío «${etiquetaEstadoEnvio(destino)}».`;
     case "cobro":
       return `Registramos el cobro contra entrega del pedido ${numero}.`;
-    case "cancelar":
-      return datos?.yaCancelado
-        ? `El pedido ${numero} ya estaba cancelado.`
-        : `Pedido ${numero} cancelado. Su stock volvió a estar disponible.`;
+    case "cancelar": {
+      if (datos?.yaCancelado) return `El pedido ${numero} ya estaba cancelado.`;
+
+      // Mismo criterio que el modal de confirmación: un contra entrega
+      // confirmado tenía venta (se anula) y, desde ENVIADO / EN_TRANSITO, el
+      // stock se repone en el sistema aunque la mercadería pueda no haber
+      // vuelto todavía.
+      const anulaVenta = ESTADOS_CANCELABLES_CONTRA_ENTREGA.includes(pedido?.estado);
+      const yaSalio = ["ENVIADO", "EN_TRANSITO"].includes(pedido?.estado);
+
+      const stock = yaSalio
+        ? "El stock se repuso en el sistema, pero la mercadería puede no haber vuelto todavía."
+        : "Su stock volvió a estar disponible.";
+
+      return `Pedido ${numero} cancelado. ${stock}${anulaVenta ? " La venta quedó anulada." : ""}`;
+    }
     case "vencidos": {
       const cancelados = datos?.cancelados ?? [];
       const omitidos = datos?.omitidos ?? [];

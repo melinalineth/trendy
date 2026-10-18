@@ -25,6 +25,9 @@ model Usuario {
   movimientosInventario InventarioMovimiento[]
   carrito              Carrito?
   pedidos              Pedido[]
+  ventasComoCliente    Venta[]               @relation("VentaCliente")
+  ventasGestionadas    Venta[]               @relation("VentaResponsable")
+  ventasAnuladas       Venta[]               @relation("VentaAnuladaPor")
   historialEnvios      HistorialEstadoEnvio[]
 }
 
@@ -181,6 +184,7 @@ model Pedido {
   detalles DetallePedido[]
   pago Pago?
   infoEnvio InfoEnvio?
+  venta Venta?
 }
 
 model DetallePedido {
@@ -272,6 +276,56 @@ enum EstadoEnvio {
   ENVIADO
   EN_TRANSITO
   ENTREGADO
+}
+
+// Sprint 5 / MOD-09 (RF-041, RN-008, ERS 4.12): registro de venta. Una venta
+// nace cuando un pedido queda CONFIRMADO. subtotal, costoEnvio y total se
+// COPIAN del pedido (historial, no se recalculan); productos, cantidades y
+// valores NO se duplican: salen de DetallePedido. pedidoId @unique es la
+// garantía a nivel de base de que una venta no se registra dos veces. Una
+// venta nunca se borra: se ANULA (estado ANULADA con anuladaEn). Hoy la anula
+// la cancelación de un pedido CONTRA_ENTREGA ya confirmado (CONFIRMADO,
+// EN_PREPARACION, ENVIADO o EN_TRANSITO; pedido.service.cancelarPedido), en la
+// misma transacción que repone el stock. Un pedido de MERCADO_PAGO pagado no se
+// cancela (el reembolso está fuera de alcance). Quién la anuló queda en
+// anuladaPorId (el admin/vendedor que canceló el pedido; NULL si la anulación
+// no tuvo usuario, o si es una venta anulada antes de existir la columna: no
+// hay backfill, no hay dato histórico fiable). responsableId es SIEMPRE quien
+// la REGISTRÓ y la anulación no lo pisa.
+// responsableId es NULL cuando la dispara el webhook de Mercado Pago (sin
+// usuario) y guarda al admin/vendedor en un cambio manual de estado.
+// Decisión v1.0: admin y vendedores ven TODAS las ventas; las "ventas
+// asignadas" a un vendedor quedan para una versión posterior (por eso no hay
+// modelo de asignaciones). Los cuatro FK son RESTRICT: no se puede borrar un
+// pedido ni un usuario (cliente, responsable o quien anuló) con ventas, para
+// proteger la historia y la atribución (responsableId y anuladaPorId sí son
+// opcionales).
+enum EstadoVenta {
+  REGISTRADA
+  ANULADA
+}
+
+model Venta {
+  id            Int         @id @default(autoincrement())
+  pedidoId      Int         @unique
+  clienteId     Int
+  responsableId Int?
+  subtotal      Decimal     @db.Decimal(10,2)
+  costoEnvio    Decimal     @db.Decimal(10,2)
+  total         Decimal     @db.Decimal(10,2)
+  metodoPago    MetodoPago
+  estado        EstadoVenta @default(REGISTRADA)
+  registradaEn  DateTime    @default(now())
+  anuladaEn     DateTime?
+  anuladaPorId  Int?
+
+  pedido      Pedido   @relation(fields: [pedidoId], references: [id])
+  cliente     Usuario  @relation("VentaCliente", fields: [clienteId], references: [id])
+  responsable Usuario? @relation("VentaResponsable", fields: [responsableId], references: [id], onDelete: Restrict)
+  anuladaPor  Usuario? @relation("VentaAnuladaPor", fields: [anuladaPorId], references: [id], onDelete: Restrict)
+
+  @@index([registradaEn])
+  @@index([estado, registradaEn])
 }
 
 // Sprint 3 / MOD-04 (RF-018, RF-021): carrito de compras. Un usuario tiene
