@@ -4,6 +4,7 @@ const {
   validarCrearZonaCobertura,
   validarCambiarTarifa,
   validarCambiarEstado,
+  validarCambiarContraEntrega,
 } = require("../dtos/zonaCobertura.dto");
 
 // RF-026 (DDS §3 MOD-05): administración de zonas de cobertura y tarifas.
@@ -51,6 +52,7 @@ function presentarZona(zona) {
     departamento: zona.departamento,
     ciudad: zona.ciudad,
     estado: zona.estado,
+    permiteContraEntrega: zona.permiteContraEntrega,
     tarifaActiva: tarifa
       ? { id: tarifa.id, costo: Number(tarifa.costo), estado: tarifa.estado }
       : null,
@@ -119,11 +121,28 @@ async function cambiarEstado(zonaId, body) {
   return presentarZona(await zonaRepository.obtenerZona(zonaId));
 }
 
+// RF-037 / RN-006: el pago contra entrega solo está disponible en las zonas
+// que el admin habilite (default false). Mismo patrón que cambiarEstado.
+async function cambiarContraEntrega(zonaId, body) {
+  const { permiteContraEntrega } = validarCambiarContraEntrega(body);
+
+  await prisma.$transaction(async (tx) => {
+    if (!(await zonaRepository.bloquearZona(zonaId, tx))) {
+      throw new ZonaNoEncontradaError();
+    }
+
+    await zonaRepository.cambiarContraEntregaZona(zonaId, permiteContraEntrega, tx);
+  });
+
+  return presentarZona(await zonaRepository.obtenerZona(zonaId));
+}
+
 module.exports = {
   listar,
   crear,
   cambiarTarifa,
   cambiarEstado,
+  cambiarContraEntrega,
   ZonaDuplicadaError,
   ZonaNoEncontradaError,
 };

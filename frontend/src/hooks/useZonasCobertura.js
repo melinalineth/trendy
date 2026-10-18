@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import zonaCoberturaService, {
-  obtenerErrorApi,
-} from "../services/zonaCobertura.service";
+import zonaCoberturaService from "../services/zonaCobertura.service";
+import { obtenerErrorApi } from "../services/apiError";
 
 const MENSAJE_ERROR_LISTAR =
   "No pudimos cargar las zonas de cobertura. Intentá de nuevo.";

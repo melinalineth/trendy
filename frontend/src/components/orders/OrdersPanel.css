@@ -1,0 +1,305 @@
+/* Gestión de pedidos para admin y vendedor (RF-032). Mismo criterio visual
+   que ZonasCobertura.css. */
+
+.orders-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.orders-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.orders-panel__header h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  color: var(--color-text);
+}
+
+.orders-panel__header p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.orders-panel__header-acciones,
+.orders-panel__acciones,
+.orders-panel__filtros-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.orders-panel .alert {
+  max-width: none;
+  margin: 0;
+}
+
+.orders-panel__avisos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Variantes del Button común (.btn.<clase>: misma especificidad que
+   .btn:disabled pero cargadas después; disabled con opacidad para no sumar
+   un gris nuevo). */
+.btn.orders-panel__btn--secundario {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn.orders-panel__btn--secundario:hover {
+  background-color: var(--color-brand-50);
+}
+
+.btn.orders-panel__btn--peligro {
+  background-color: var(--color-danger-500);
+  color: var(--color-text-inverse);
+}
+
+.btn.orders-panel__btn--peligro:hover {
+  background-color: var(--color-danger-500);
+  opacity: 0.85;
+}
+
+.btn.orders-panel__btn--secundario:disabled,
+.btn.orders-panel__btn--peligro:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Filtros */
+
+.orders-panel__filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+.orders-panel__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.orders-panel__campo .input-task,
+.orders-panel__select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.orders-panel__select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.orders-panel__select:focus {
+  outline: none;
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-focus-brand);
+}
+
+.orders-panel__error-campo {
+  margin: 0;
+  color: var(--color-danger-500);
+  font-size: var(--text-sm);
+}
+
+.orders-panel__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* Tabla */
+
+.orders-panel__cliente {
+  display: flex;
+  flex-direction: column;
+}
+
+.orders-panel__muted {
+  display: block;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.orders-panel__count {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.orders-panel__paginacion {
+  display: flex;
+  justify-content: center;
+}
+
+/* Detalle */
+
+.orders-panel__detalle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.orders-panel__detalle-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.orders-panel__detalle-header h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.orders-panel__detalle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.orders-panel__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+
+.orders-panel__card h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.orders-panel__datos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.orders-panel__datos dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.orders-panel__datos dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+.orders-panel__direccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-style: normal;
+}
+
+.orders-panel__totales {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+  margin: 0 0 0 auto;
+}
+
+.orders-panel__totales div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.orders-panel__totales dt,
+.orders-panel__totales dd {
+  margin: 0;
+}
+
+.orders-panel__totales .orders-panel__total {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+/* Modal de confirmación */
+
+.orders-panel__confirmacion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  color: var(--color-text);
+}
+
+.orders-panel__confirmacion p {
+  margin: 0;
+}
+
+.orders-panel__confirmacion .alert {
+  max-width: none;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .orders-panel__detalle-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .orders-panel {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .orders-panel__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orders-panel__totales {
+    max-width: none;
+  }
+}

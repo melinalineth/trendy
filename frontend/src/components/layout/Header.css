@@ -23,6 +23,19 @@
   opacity: 0.9;
 }
 
+/* Acceso a "Mis pedidos" (solo cliente) */
+.header__link {
+  color: var(--color-text-inverse);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.header__link:hover,
+.header__link:focus-visible {
+  text-decoration: underline;
+}
+
 /* Acceso al carrito con contador de líneas */
 .header__cart {
   display: inline-flex;

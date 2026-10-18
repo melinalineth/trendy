@@ -8,9 +8,6 @@
 // Tope razonable para un costo de envío y límite de los textos (las columnas
 // son VARCHAR(191); se exige menos para no aceptar basura).
 const COSTO_MAXIMO = 1000000;
-// Unidad mínima de DECIMAL(10, 2): por debajo, MySQL redondearía a 0.00 y la
-// tarifa quedaría en cero aunque el valor enviado fuera "mayor que cero".
-const COSTO_MINIMO = 0.01;
 const LARGO_MAXIMO_TEXTO = 100;
 const ID_MAXIMO = 2147483647; // INT de MySQL
 
@@ -44,8 +41,14 @@ function validarTexto(valor, campo, obligatorio, errores) {
 }
 
 // RF-026 "no se permitirá activar una tarifa con valores inválidos": el costo
-// es un número JSON (no string), finito, mayor que cero, con hasta 2 decimales
-// (la columna es DECIMAL(10, 2)) y por debajo de un tope razonable.
+// es un número JSON (no string), finito, ENTERO (pesos COP, sin centavos),
+// mayor o igual que 1 y por debajo de un tope razonable. Regla "COP en pesos
+// enteros" (docs/diseno/montos-cop.md): Mercado Pago solo acepta montos
+// enteros en COP. La columna sigue siendo DECIMAL(10, 2).
+// "Entero >= 1" cierra por construcción el bypass que antes frenaba un mínimo
+// de 0.01: un valor positivo minúsculo (1e-8) pasaba la tolerancia de
+// decimales y MySQL lo guardaba como 0.00 (tarifa en cero). Ya no pasa el
+// chequeo de entero; se conserva su test de regresión.
 function validarCosto(costo, campo, errores) {
   if (costo === undefined || costo === null || costo === "") {
     errores.push(`${campo} es obligatorio`);
@@ -57,13 +60,8 @@ function validarCosto(costo, campo, errores) {
     return null;
   }
 
-  if (costo < COSTO_MINIMO) {
-    errores.push(`${campo} debe ser como mínimo ${COSTO_MINIMO}`);
-    return null;
-  }
-
-  if (Math.abs(Math.round(costo * 100) - costo * 100) > 1e-6) {
-    errores.push(`${campo} admite como máximo 2 decimales`);
+  if (!Number.isInteger(costo)) {
+    errores.push(`${campo} debe ser un valor entero en pesos (COP), sin centavos`);
     return null;
   }
 
@@ -127,6 +125,35 @@ function validarCambiarEstado(body) {
   return { estado };
 }
 
+// Body de PATCH /zonas-cobertura/:id/contra-entrega (RF-037, RN-006):
+// { permiteContraEntrega: true | false }. Boolean JSON estricto: "true" o 1
+// no se aceptan, para no habilitar un método de pago por una conversión
+// implícita.
+function validarCambiarContraEntrega(body) {
+  const { permiteContraEntrega } = body || {};
+  const errores = [];
+
+  if (typeof permiteContraEntrega !== "boolean") {
+    errores.push("permiteContraEntrega es obligatorio y debe ser true o false");
+  }
+
+  // Estricto (como pago.dto.js): un campo de más se rechaza en vez de
+  // ignorarse en silencio.
+  const extras =
+    body && typeof body === "object"
+      ? Object.keys(body).filter((clave) => clave !== "permiteContraEntrega")
+      : [];
+  if (extras.length > 0) {
+    errores.push(`Campos no permitidos: ${extras.join(", ")}`);
+  }
+
+  if (errores.length > 0) {
+    lanzarValidacion(errores);
+  }
+
+  return { permiteContraEntrega };
+}
+
 // Param :id de las rutas /zonas-cobertura/:id/...; devuelve un Number.
 function validarZonaId(valor) {
   const texto = typeof valor === "string" ? valor.trim() : "";
@@ -142,5 +169,6 @@ module.exports = {
   validarCrearZonaCobertura,
   validarCambiarTarifa,
   validarCambiarEstado,
+  validarCambiarContraEntrega,
   validarZonaId,
 };

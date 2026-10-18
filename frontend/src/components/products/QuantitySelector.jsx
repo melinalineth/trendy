@@ -1,4 +1,3 @@
-import React from "react";
 import "./QuantitySelector.css";
 
 // `disabled` bloquea ambos botones (ej. mientras hay una request en curso) y

@@ -1,5 +1,10 @@
 const productoRepository = require("../repositories/producto.repository");
 const imagenRepository = require("../repositories/imagen.repository");
+const {
+  PRECIO_MAXIMO,
+  MENSAJE_PRECIO_ENTERO,
+  MENSAJE_PRECIO_MAXIMO,
+} = require("../dtos/producto.dto");
 
 class ProductoNoEncontradoError extends Error {}
 class ProductoSinImagenError extends Error {}
@@ -36,15 +41,28 @@ async function obtenerDetallePorId(id) {
   };
 }
 
-// RF-013: precio > 0. El DTO (crearProductoSchema/actualizarProductoSchema
+// RF-013: precio > 0, entero (pesos COP, sin centavos: docs/diseno/montos-cop.md)
+// y con tope (DECIMAL(10, 2)). El DTO (crearProductoSchema/actualizarProductoSchema
 // en producto.dto.js) ya lo valida con zod antes de llegar acá — este
 // chequeo es defensa en profundidad, por si en el futuro algún otro caller
 // invoca el service sin pasar por el DTO (mismo criterio que
 // vendedor.service, que revalida el estado del usuario objetivo aunque el
 // controller ya haya filtrado casos obvios).
 function validarPrecio(precio) {
-  if (precio !== undefined && !(precio > 0)) {
+  if (precio === undefined) {
+    return;
+  }
+
+  if (!(precio > 0)) {
     throw new Error("El precio debe ser mayor a 0");
+  }
+
+  if (!Number.isInteger(precio)) {
+    throw new Error(MENSAJE_PRECIO_ENTERO);
+  }
+
+  if (precio > PRECIO_MAXIMO) {
+    throw new Error(MENSAJE_PRECIO_MAXIMO);
   }
 }
 

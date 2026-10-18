@@ -35,6 +35,66 @@ const envioRepository = {
       },
     });
   },
+
+  /**
+   * Sprint 4 / RF-027: crea el InfoEnvio de un pedido. `estadoEnvio` no
+   * tiene default en el schema: el alta lo setea explícitamente en
+   * EN_PREPARACION (docs/diseno/info-envio.md). `client` es la transacción
+   * que crea el pedido (pedido e InfoEnvio confirman o revierten juntos).
+   */
+  async crearInfoEnvio({ pedidoId, direccionId, costoEnvio }, client = prisma) {
+    return client.infoEnvio.create({
+      data: {
+        pedidoId,
+        direccionId,
+        costoEnvio,
+        estadoEnvio: "EN_PREPARACION",
+      },
+    });
+  },
+
+  // InfoEnvio de un pedido (o null). `client` para leerlo bajo el lock del
+  // pedido.
+  async obtenerInfoEnvio(pedidoId, client = prisma) {
+    return client.infoEnvio.findUnique({
+      where: { pedidoId },
+    });
+  },
+
+  // Cambia el estado de envío. Lo invoca pedido.service con el lock del
+  // pedido tomado y la transición ya validada (validarTransicionEstado).
+  async actualizarEstadoEnvio(pedidoId, estadoEnvio, client = prisma) {
+    return client.infoEnvio.update({
+      where: { pedidoId },
+      data: { estadoEnvio },
+    });
+  },
+
+  /**
+   * Sprint 4 / RF-028 y RF-029: agrega una fila al historial de estados de
+   * envío (docs/diseno/info-envio.md §5). `estadoAnterior` es null en el alta.
+   * `client` es la transacción que cambia el InfoEnvio: el cambio y su fila
+   * confirman o revierten juntos.
+   */
+  async crearHistorial({ infoEnvioId, estadoAnterior, estadoNuevo, usuarioId }, client = prisma) {
+    return client.historialEstadoEnvio.create({
+      data: { infoEnvioId, estadoAnterior, estadoNuevo, usuarioId },
+    });
+  },
+
+  /**
+   * Historial de un InfoEnvio, cronológico: más antiguo primero y, si dos
+   * cambios comparten el instante (DATETIME(3)), por id (orden de inserción).
+   * Con `conUsuario` trae quién hizo cada cambio, SOLO id y nombre (nunca
+   * correo ni passwordHash).
+   */
+  async listarHistorial(infoEnvioId, { conUsuario = false } = {}, client = prisma) {
+    return client.historialEstadoEnvio.findMany({
+      where: { infoEnvioId },
+      orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
+      ...(conUsuario ? { include: { usuario: { select: { id: true, nombre: true } } } } : {}),
+    });
+  },
 };
 
 module.exports = envioRepository;
