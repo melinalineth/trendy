@@ -1,10 +1,19 @@
 
+// Sprint 5 / RF-042: filtros de GET /api/v1/ventas. Contrato completo en
+// docs/diseno/ventas-api.md. Borrador original de Valentina Linares; ajustado
+// al contrato (código FILTROS_INVALIDOS, defaults, parámetros desconocidos,
+// tope de página).
 const ESTADOS_VENTA = ["REGISTRADA", "ANULADA"];
+const CAMPOS_PERMITIDOS = ["desde", "hasta", "estado", "pagina", "limite"];
+const LIMITE_POR_DEFECTO = 50;
+const LIMITE_MAXIMO = 100;
+// Tope de página: evita un OFFSET fuera del rango entero seguro de Prisma.
+const PAGINA_MAXIMA = 100000;
 
 const crearErrorValidacion = (detalles) => {
-  const error = new Error("Datos inválidos");
+  const error = new Error("Los filtros de consulta de ventas no son válidos");
   error.status = 400;
-  error.codigo = "VALIDACION_FALLIDA";
+  error.codigo = "FILTROS_INVALIDOS";
   error.detalles = detalles;
 
   return error;
@@ -35,30 +44,30 @@ const validarFechaCalendario = (valor, campo, detalles) => {
 const validarFiltrosVentas = (query) => {
   const detalles = [];
 
-  const campos = [
-    "desde",
-    "hasta",
-    "estado",
-    "pagina",
-    "limite",
-  ];
+  const desconocidos = Object.keys(query).filter(
+    (campo) => !CAMPOS_PERMITIDOS.includes(campo)
+  );
 
-  // Express puede entregar arrays si un parámetro se repite.
-  for (const campo of campos) {
+  if (desconocidos.length > 0) {
+    detalles.push(`Parámetros no permitidos: ${desconocidos.join(", ")}.`);
+  }
+
+  // Express puede entregar arrays si un parámetro se repite: se informa y no
+  // se vuelve a validar ese campo (para no duplicar el mensaje).
+  const valorDe = (campo) => {
     if (Array.isArray(query[campo])) {
       detalles.push(`El parámetro ${campo} no puede repetirse.`);
+      return undefined;
     }
-  }
 
-  if (detalles.length > 0) {
-    throw crearErrorValidacion(detalles);
-  }
+    return query[campo];
+  };
 
-  const desdeRaw = query.desde;
-  const hastaRaw = query.hasta;
-  const estadoRaw = query.estado;
-  const paginaRaw = query.pagina;
-  const limiteRaw = query.limite;
+  const desdeRaw = valorDe("desde");
+  const hastaRaw = valorDe("hasta");
+  const estadoRaw = valorDe("estado");
+  const paginaRaw = valorDe("pagina");
+  const limiteRaw = valorDe("limite");
 
   let desde;
   let hastaExclusivo;
@@ -153,7 +162,7 @@ const validarFiltrosVentas = (query) => {
       return predeterminado;
     }
 
-    if (!/^\d+$/.test(valor)) {
+    if (typeof valor !== "string" || !/^\d+$/.test(valor)) {
       detalles.push(`${campo} debe ser un número entero.`);
       return undefined;
     }
@@ -180,15 +189,16 @@ const validarFiltrosVentas = (query) => {
     paginaRaw,
     "pagina",
     1,
-    1
+    1,
+    PAGINA_MAXIMA
   );
 
   const limite = validarEntero(
     limiteRaw,
     "limite",
-    20,
+    LIMITE_POR_DEFECTO,
     1,
-    100
+    LIMITE_MAXIMO
   );
 
   if (detalles.length > 0) {
@@ -206,4 +216,6 @@ const validarFiltrosVentas = (query) => {
 
 module.exports = {
   validarFiltrosVentas,
+  LIMITE_POR_DEFECTO,
+  LIMITE_MAXIMO,
 };
