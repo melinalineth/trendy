@@ -35,13 +35,20 @@ const REFRESCOS_AUTOMATICOS = 8;
 // guardado todavía, así que solo el paso actual muestra su fecha.
 function SeguimientoEnvio({ pedido, seguimiento }) {
   // Un contra entrega se puede cancelar aun después de salir de la tienda (por
-  // ejemplo, si lo rechazás en la puerta), así que un pedido cancelado pudo
-  // haber tenido envío: no se afirma lo contrario ni se muestran los pasos.
+  // ejemplo, si lo rechazás en la puerta) y el InfoEnvio no se toca al
+  // cancelar: ENVIADO / EN_TRANSITO en un pedido cancelado significa que el
+  // paquete ya había salido. No se muestran los pasos. El pedido de contacto
+  // va solo acá (descripcionEstadoPedido no lo repite para contra entrega).
   if (pedido.estado === "CANCELADO") {
+    const estadoEnvioReal =
+      seguimiento?.estadoEnvio ?? pedido.infoEnvio?.estadoEnvio;
+    const yaHabiaSalido = ["ENVIADO", "EN_TRANSITO"].includes(estadoEnvioReal);
+
     return (
       <p className="order-detail__nota">
-        Este pedido fue cancelado. Si ya lo habías recibido o estaba en camino,
-        comunicate con la tienda.
+        {yaHabiaSalido
+          ? "El pedido ya había salido de la tienda cuando se canceló. Comunicate con la tienda para coordinar la devolución."
+          : "Este pedido se canceló antes de salir de la tienda."}
       </p>
     );
   }

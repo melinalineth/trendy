@@ -55,9 +55,11 @@ export function descripcionEstadoPedido(estado, metodoPago) {
     case "ENTREGADO":
       return "Tu pedido fue entregado. ¡Que lo disfrutes!";
     case "CANCELADO":
-      // Contra entrega: nunca hubo un pago aprobado (con uno no se cancela).
+      // Contra entrega: nunca hubo un pago aprobado (con uno no se cancela) y,
+      // si el paquete ya había salido, el detalle del cliente (seguimiento del
+      // envío) ya pide comunicarse con la tienda: no se repite el pedido.
       return metodoPago === "CONTRA_ENTREGA"
-        ? "Este pedido fue cancelado. Si tenés dudas, comunicate con la tienda."
+        ? "Este pedido fue cancelado."
         : "Este pedido fue cancelado. Si ya habías pagado, comunicate con la tienda.";
     case "PAGO_RECHAZADO":
       return "El pago de este pedido fue rechazado.";
