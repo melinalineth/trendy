@@ -151,7 +151,7 @@ Nunca commitees `.env`; los reales están en `.gitignore`.
 | Rol | Qué hace |
 | --- | --- |
 | Visitante | Registrarse, iniciar sesión, recuperar contraseña, ver el catálogo (filtros y búsqueda) y el detalle de producto |
-| Cliente | Direcciones, carrito, checkout, pedidos propios con seguimiento de envío y su historial, pago con Mercado Pago o contra entrega |
+| Cliente | Direcciones, carrito, checkout, pedidos propios con seguimiento del paso actual del envío (la API entrega el historial, pero la pantalla no lo dibuja), pago con Mercado Pago o contra entrega |
 | Vendedor | Productos, imágenes y variantes, inventario, gestión de pedidos y del envío, consulta de ventas (ve todas) |
 | Administrador | Todo lo del vendedor, más usuarios, activación de vendedores, roles y permisos, zonas de cobertura y tarifas, contra entrega por zona y cancelación de pedidos vencidos |
 
@@ -183,7 +183,7 @@ frecuentes y limitaciones: [docs/despliegue/staging.md](docs/despliegue/staging.
 Verificado:
 
 - Revisión y QA manual de los Sprints 1, 3 y 4 (ver `docs/bitacora/`).
-- Sprint 5: registro y consulta de ventas, anulación con `anuladaPorId` (la API todavía no lo expone).
+- Sprint 5: registro y consulta de ventas, anulación con `anuladaPorId`, expuesto como `anuladaPor` en la API y en el detalle de la venta.
 - El staging local levanta desde cero (migraciones + seed + admin) y el smoke test pasa con compra
   contra entrega, venta registrada, cancelación y venta anulada (verificado en corridas locales con
   Docker Desktop; no es una garantía para otros entornos).
@@ -195,9 +195,10 @@ No verificado / pendiente:
 - No hay despliegue en un servidor real, HTTPS ni respaldos (ver la guía de staging).
 - No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
   crean con `scripts/crear-usuario.js`, ver arriba).
-- Pendiente: exponer y mostrar quién anuló una venta (`anuladaPor`) en la API y el frontend, y
-  completar la navegación (según las bitácoras de los Sprints 3 y 4, algunos paneles no tienen
-  enlace en el menú y se entra por URL; no se revisó de nuevo para este README).
+- Pendiente: completar la navegación y otros huecos de uso (no hay menú ni botón para cerrar
+  sesión, la página de inicio está vacía y no hay pantalla para activar el contra entrega de una
+  zona). Están documentados en la sección «Límites conocidos» de
+  [`docs/manual/manual-usuario.md`](docs/manual/manual-usuario.md).
 
 ## Documentación
 
