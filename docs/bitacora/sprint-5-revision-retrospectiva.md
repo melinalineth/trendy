@@ -56,7 +56,7 @@ Cada PR de código, salvo los dos indicados abajo, pasó por una revisión en co
 7. **Staging**: el `Dockerfile` existente **no arrancaba** (la CLI `prisma` es una devDependency y la imagen usaba `--omit=dev`), el compose usaba el `.env` de desarrollo, el seed no creaba ningún usuario, y la plantilla traía credenciales conocidas con nginx publicado en `0.0.0.0`. Ahora el backend se niega a arrancar con secretos de ejemplo y nginx escucha solo en `127.0.0.1`.
 8. **Tests**: uno que fallaría apenas existiera otra migración, uno de privacidad que podía pasar en vacío y aislamientos por año que no toleraban restos de una corrida cortada.
 
-**Sin revisión independiente en contexto fresco:** el PR #41 (`anuladaPor` en la API y el detalle) y el #43 (precio con separador de miles y botón «Cerrar»). Son cambios de pocas líneas que repiten un patrón existente; quedó dicho en el cuerpo de cada PR.
+**Sin revisión independiente en contexto fresco:** el PR #41 (`anuladaPor` en la API y el detalle), el #43 (precio con separador de miles y botón «Cerrar») y el #44 (test de integración del flujo de compra). Son cambios chicos que repiten un patrón existente o agregan solo un test; quedó dicho en el cuerpo de cada PR. Tampoco tuvo revisión el PR #35, que solo integra `main` en `sprint-5-base` sin código nuevo.
 
 ## Qué funcionó
 
@@ -118,3 +118,7 @@ Cada PR de código, salvo los dos indicados abajo, pasó por una revisión en co
 ## Cierre de rama
 
 El merge de `sprint-5-base` a `main` va por Pull Request revisado (tarjeta «[Sprint 5 - 11]»); según el Plan de Trabajo §2.1 necesita la aprobación de Melina o de Valentina (no se puede auto-aprobar). Mergear con «Create a merge commit» para conservar la autoría de Valentina Ortiz y Valentina Linares. Antes de abrirlo conviene que el equipo lea los puntos 1 a 3 de «Deuda» y acepte explícitamente las excepciones. Al mergear: `git tag sprint-5-done` y `git push origin sprint-5-done`.
+
+## Actualización 18/10/2026
+
+**Tarjeta 06-01** (PR #44, solo agrega un test): una historia de punta a punta por HTTP — carrito, pedido contra entrega, pago, confirmación, venta, cambio de precio posterior (RN-008), cancelación por un segundo admin, venta anulada, cancelación repetida — con **9 casos**. Con ese PR la suite completa queda en **807/807** (798 + 9), corrida dos veces. Se probó que discrimina con dos mutaciones temporales (sacar el registro de la venta al confirmar y sacar la reposición de stock en la cancelación) y no se encontraron bugs de producción. Es una cadena contra entrega: el equivalente con Mercado Pago real sigue sin probarse. Este PR, como el #41 y el #43, no pasó por una revisión independiente en contexto fresco.
