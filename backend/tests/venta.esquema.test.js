@@ -100,6 +100,7 @@ describe("Esquema de Venta (RF-041)", () => {
       assert.ok(Math.abs(venta.registradaEn.getTime() - Date.now()) < 60_000);
       assert.equal(venta.anuladaEn, null);
       assert.equal(venta.responsableId, null);
+      assert.equal(venta.anuladaPorId, null);
       assert.equal(venta.metodoPago, "MERCADO_PAGO");
       // 2 x 12345.00 = 24690.00 ; + 8000.00 de envío = 32690.00
       assert.equal(venta.subtotal.toFixed(2), "24690.00");
@@ -151,6 +152,54 @@ describe("Esquema de Venta (RF-041)", () => {
       const otro = await pedidoDe();
       const conVendedor = await ventaDe(otro, { responsableId: vendedor.id });
       assert.equal(conVendedor.responsableId, vendedor.id);
+    });
+
+    // `anuladaPorId` es QUIEN ANULÓ la venta (distinto de `responsableId`, quien
+    // la registró). Opcional: una anulación sin usuario (proceso automático) o
+    // una venta anulada antes de que existiera la columna quedan en NULL.
+    it("anuladaPorId inexistente falla por FK (P2003); uno válido se guarda sin tocar responsableId", async () => {
+      const pedido = await pedidoDe();
+      assert.equal(
+        await codigoDeError(ventaDe(pedido, { anuladaPorId: ID_INEXISTENTE })),
+        "P2003"
+      );
+      assert.equal(await prisma.venta.count({ where: { pedidoId: pedido.id } }), 0);
+
+      const venta = await ventaDe(pedido, {
+        responsableId: admin.id,
+        estado: "ANULADA",
+        anuladaEn: new Date(),
+        anuladaPorId: vendedor.id,
+      });
+
+      assert.equal(venta.anuladaPorId, vendedor.id);
+      assert.equal(venta.responsableId, admin.id);
+    });
+
+    it("la columna anuladaPorId es nullable y su FK a Usuario es ON DELETE RESTRICT ON UPDATE CASCADE", async () => {
+      const [columna] = await prisma.$queryRaw`
+        SELECT IS_NULLABLE AS nullable, COLUMN_TYPE AS tipo
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'Venta' AND column_name = 'anuladaPorId'`;
+      assert.ok(columna, "no existe la columna Venta.anuladaPorId");
+      assert.equal(columna.nullable, "YES");
+      assert.match(columna.tipo, /^int/i);
+
+      const [fk] = await prisma.$queryRaw`
+        SELECT rc.DELETE_RULE AS borrado, rc.UPDATE_RULE AS actualizacion,
+               kcu.REFERENCED_TABLE_NAME AS tabla, kcu.REFERENCED_COLUMN_NAME AS destino
+        FROM information_schema.referential_constraints rc
+        JOIN information_schema.key_column_usage kcu
+          ON kcu.constraint_schema = rc.constraint_schema
+         AND kcu.constraint_name = rc.constraint_name
+        WHERE rc.constraint_schema = DATABASE()
+          AND rc.constraint_name = 'Venta_anuladaPorId_fkey'`;
+      assert.ok(fk, "no existe la FK Venta_anuladaPorId_fkey");
+      assert.equal(fk.borrado, "RESTRICT");
+      assert.equal(fk.actualizacion, "CASCADE");
+      // MySQL en Windows guarda los nombres de tabla en minúscula.
+      assert.equal(fk.tabla.toLowerCase(), "usuario");
+      assert.equal(fk.destino, "id");
     });
 
     // El valor inválido NO pasa por Prisma Client (que lo rechazaría antes de
@@ -208,6 +257,42 @@ describe("Esquema de Venta (RF-041)", () => {
       assert.equal(completa.pedido.id, pedido.id);
       assert.equal(completa.cliente.id, otroCliente.id);
       assert.equal(completa.responsable.id, vendedor.id);
+    });
+
+    it("venta.anuladaPor y usuario.ventasAnuladas son navegables y distintas de responsable / ventasGestionadas", async () => {
+      const quienAnula = await crearUsuario("vendedor");
+      const pedido = await pedidoDe();
+      const venta = await ventaDe(pedido, {
+        responsableId: admin.id,
+        estado: "ANULADA",
+        anuladaEn: new Date(),
+        anuladaPorId: quienAnula.id,
+      });
+
+      const completa = await prisma.venta.findUnique({
+        where: { id: venta.id },
+        include: { responsable: true, anuladaPor: true },
+      });
+      assert.equal(completa.responsable.id, admin.id);
+      assert.equal(completa.anuladaPor.id, quienAnula.id);
+
+      const anulo = await prisma.usuario.findUnique({
+        where: { id: quienAnula.id },
+        include: { ventasAnuladas: true, ventasGestionadas: true },
+      });
+      assert.deepEqual(
+        anulo.ventasAnuladas.map((v) => v.id),
+        [venta.id]
+      );
+      assert.deepEqual(anulo.ventasGestionadas, []);
+
+      // Una venta sin anular tiene anuladaPor null.
+      const otra = await ventaDe(await pedidoDe());
+      const sinAnular = await prisma.venta.findUnique({
+        where: { id: otra.id },
+        include: { anuladaPor: true },
+      });
+      assert.equal(sinAnular.anuladaPor, null);
     });
 
     it("un pedido sin venta tiene venta null (la relación es opcional)", async () => {
@@ -268,6 +353,31 @@ describe("Esquema de Venta (RF-041)", () => {
 
       const despues = await prisma.venta.findUnique({ where: { id: venta.id } });
       assert.equal(despues.responsableId, gestor.id);
+    });
+
+    // Quien anuló una venta tampoco se puede borrar: el usuario no tiene pedidos
+    // ni ventas propias, así que solo Venta_anuladaPorId_fkey puede impedirlo.
+    it("borrar a quien anuló una venta falla por Venta_anuladaPorId_fkey (P2003): la atribución se conserva", async () => {
+      const quienAnula = await crearUsuario("vendedor");
+      const pedido = await pedidoDe({ lineas: [] });
+      const venta = await ventaDe(pedido, {
+        estado: "ANULADA",
+        anuladaEn: new Date(),
+        anuladaPorId: quienAnula.id,
+      });
+
+      let error;
+      try {
+        await prisma.usuario.delete({ where: { id: quienAnula.id } });
+      } catch (e) {
+        error = e;
+      }
+
+      assert.equal(error?.code, "P2003", error?.message);
+      assert.match(JSON.stringify(error.meta ?? {}) + error.message, /Venta_anuladaPorId_fkey/);
+      assert.equal(await prisma.usuario.count({ where: { id: quienAnula.id } }), 1);
+      const despues = await prisma.venta.findUnique({ where: { id: venta.id } });
+      assert.equal(despues.anuladaPorId, quienAnula.id);
     });
 
     // El titular NO tiene pedidos ni direcciones propias (si las tuviera, el

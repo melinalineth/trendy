@@ -277,14 +277,16 @@ async function limpiar() {
   const filtroPedidos = {
     OR: [{ id: { in: pedidos } }, { usuarioId: { in: usuarios } }],
   };
-  // La Venta (FK RESTRICT a Pedido y a Usuario) va primero: un pedido o un
-  // usuario con venta no se puede borrar.
+  // La Venta (FK RESTRICT a Pedido y a Usuario: cliente, quien la registró y
+  // quien la anuló) va primero: un pedido o un usuario con venta no se puede
+  // borrar.
   await prisma.venta.deleteMany({
     where: {
       OR: [
         { pedido: filtroPedidos },
         { clienteId: { in: usuarios } },
         { responsableId: { in: usuarios } },
+        { anuladaPorId: { in: usuarios } },
       ],
     },
   });
