@@ -12,6 +12,27 @@
   color: var(--color-text);
 }
 
+/* Sin esto, con poco alto la tabla (overflow-x: auto) se achica en vez de
+   dejar que el contenedor scrollee. */
+.sale-detail > * {
+  flex-shrink: 0;
+}
+
+/* El Modal es angosto (500px): celdas más compactas para que la tabla de
+   productos no se estire a lo alto. */
+.sale-detail .table th,
+.sale-detail .table td {
+  padding: var(--space-2) var(--space-3);
+}
+
+.sale-detail .table td:first-child {
+  min-width: 9rem;
+}
+
+.sale-detail .table td:nth-child(n + 3) {
+  white-space: nowrap;
+}
+
 .sale-detail__datos {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
