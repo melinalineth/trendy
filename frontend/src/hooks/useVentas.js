@@ -1,194 +1,194 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import ventaService from "../services/venta.service";
+import { obtenerErrorApi } from "../services/apiError";
 
-import { useEffect, useState } from "react";
-import ventasService from "../services/ventas.service";
+const MENSAJE_ERROR_LISTAR =
+  "No pudimos cargar las ventas. Intentá de nuevo.";
+const MENSAJE_SIN_PERMISOS = "No tenés permisos para ver las ventas.";
+const MENSAJE_FILTROS_INVALIDOS = "Los filtros seleccionados no son válidos.";
+const MENSAJE_RANGO_FECHAS =
+  "La fecha «desde» no puede ser posterior a «hasta».";
 
-const LIMITE_POR_DEFECTO = 50;
+// Máximo de filas por página. El Pagination común dibuja un botón por página:
+// con 50 por página un historial largo sigue siendo manejable.
+const VENTAS_POR_PAGINA = 50;
 
-const PAGINACION_INICIAL = {
-  pagina: 1,
-  limite: LIMITE_POR_DEFECTO,
-  total: 0,
-  totalPaginas: 1,
-};
-
-const FILTROS_INICIALES = {
+export const FILTROS_VACIOS = Object.freeze({
   desde: "",
   hasta: "",
   estado: "",
-};
+});
 
-const MENSAJE_ERROR_LISTAR = "No fue posible cargar las ventas. Intenta nuevamente.";
+const DATOS_VACIOS = Object.freeze({
+  ventas: [],
+  paginacion: null,
+  totales: null,
+});
 
-const obtenerMensajeError = (error) => {
-  const estadoHttp = error?.response?.status;
+// `detalles` de un 400 puede traer strings o objetos { message | mensaje }
+// (obtenerErrorApi solo conserva los strings).
+function leerDetalles(err) {
+  const detalles = err?.response?.data?.error?.detalles;
 
-  if (estadoHttp === 400) {
-    const detalles = error?.response?.data?.error?.detalles;
+  if (!Array.isArray(detalles)) return [];
 
-    if (Array.isArray(detalles)) {
-      return detalles
-        .map((detalle) =>
-          typeof detalle === "string"
-            ? detalle
-            : detalle?.message ?? detalle?.mensaje ?? ""
-        )
-        .filter(Boolean)
-        .join(". ") || "Los filtros seleccionados no son válidos.";
-    }
+  return detalles
+    .map((detalle) =>
+      typeof detalle === "string"
+        ? detalle
+        : (detalle?.message ?? detalle?.mensaje ?? ""),
+    )
+    .filter(Boolean);
+}
 
-    if (typeof detalles === "string" && detalles.trim()) {
-      return detalles;
-    }
+function mensajeDeError(err) {
+  const info = obtenerErrorApi(err, MENSAJE_ERROR_LISTAR);
 
-    return "Los filtros seleccionados no son válidos.";
+  if (info.status === 403) return MENSAJE_SIN_PERMISOS;
+
+  if (info.status === 400) {
+    const detalles = leerDetalles(err);
+    return detalles.length > 0 ? detalles.join(". ") : MENSAJE_FILTROS_INVALIDOS;
   }
 
-  if (estadoHttp === 403) {
-    return "No tenés permisos para ver las ventas";
-  }
+  return info.mensaje;
+}
 
-  return MENSAJE_ERROR_LISTAR;
-};
-
-const validarRangoFechas = ({ desde, hasta }) => {
-  if (!desde || !hasta) return "";
-
-  // Comparar YYYY-MM-DD como fechas de calendario, sin depender
-  // de la zona horaria local.
-  if (desde > hasta) {
-    return "La fecha desde no puede ser posterior a la fecha hasta.";
+// Devuelve el mensaje de error de los filtros, o "" si son válidos (misma
+// regla que el backend, para no ir a buscar un 400). Las fechas son
+// AAAA-MM-DD: se comparan como texto, sin depender de la zona horaria.
+function validarFiltros(filtros) {
+  if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
+    return MENSAJE_RANGO_FECHAS;
   }
 
   return "";
-};
+}
 
-function useVentas() {
-  const [ventas, setVentas] = useState([]);
-  const [paginacion, setPaginacion] = useState(PAGINACION_INICIAL);
-  const [totales, setTotales] = useState(undefined);
-  const [filtros, setFiltros] = useState(FILTROS_INICIALES);
-  const [paginaSolicitada, setPaginaSolicitada] = useState(1);
-  const [recarga, setRecarga] = useState(0);
+// Consulta de ventas para admin y vendedor (RF-042).
+//   - filtros/cambiarFiltro: borrador del formulario de filtros; se aplican
+//     con aplicarFiltros() (valida y vuelve a la página 1) y limpiarFiltros().
+//     errorFiltros es el mensaje de validación del borrador ("" si no hay).
+//   - ventas/paginacion/pagina/cambiarPagina/loading/error: listado de la
+//     consulta vigente. `error` es un texto listo para mostrar.
+//   - totales: { registradas, anuladas } con cantidad y total de TODAS las
+//     ventas que cumplen los filtros (no solo la página), o null si no hay.
+export function useVentas() {
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
+  const [errorFiltros, setErrorFiltros] = useState("");
+  // Lo que efectivamente se consultó. Siempre es un objeto nuevo al aplicar,
+  // así el efecto de carga corre aunque los valores no cambien.
+  const [consulta, setConsulta] = useState({ filtros: FILTROS_VACIOS, pagina: 1 });
+  const [datos, setDatos] = useState(DATOS_VACIOS);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
+
+  // Contador contra respuestas tardías (mismo patrón que useGestionPedidos).
+  const solicitudRef = useRef(0);
+  const consultaRef = useRef(consulta);
 
   useEffect(() => {
-    let activo = true;
+    consultaRef.current = consulta;
+  }, [consulta]);
 
-    const cargarVentas = async () => {
-      const errorFechas = validarRangoFechas(filtros);
+  const cargarLista = useCallback((consultaACargar) => {
+    const solicitud = ++solicitudRef.current;
+    const vigente = () => solicitud === solicitudRef.current;
 
-      if (errorFechas) {
-        setVentas([]);
-        setTotales(undefined);
-        setError(errorFechas);
-        setLoading(false);
-        return;
-      }
+    return ventaService
+      .listarVentas({
+        ...consultaACargar.filtros,
+        pagina: consultaACargar.pagina,
+        limite: VENTAS_POR_PAGINA,
+      })
+      .then((data) => {
+        if (!vigente()) return;
 
-      setLoading(true);
-      setError(null);
+        const ventas = Array.isArray(data?.ventas) ? data.ventas : [];
+        const paginacion = data?.paginacion ?? null;
+        const totalPaginas = paginacion?.totalPaginas ?? 0;
 
-      try {
-        const parametros = {
-          pagina: paginaSolicitada,
-          limite: paginacion.limite || LIMITE_POR_DEFECTO,
-          desde: filtros.desde,
-          hasta: filtros.hasta,
-          estado: filtros.estado,
-        };
-
-        // El servicio debe omitir los filtros vacíos.
-        const respuesta = await ventasService.listar(parametros);
-        const datos = respuesta?.data ?? respuesta;
-
-        if (!activo) return;
-
-        setVentas(
-          datos?.ventas ??
-            datos?.datos ??
-            datos?.items ??
-            []
-        );
-
-        const nuevaPaginacion = datos?.paginacion ?? {};
-
-        setPaginacion({
-          pagina: nuevaPaginacion.pagina ?? paginaSolicitada,
-          limite: nuevaPaginacion.limite ?? LIMITE_POR_DEFECTO,
-          total: nuevaPaginacion.total ?? 0,
-          totalPaginas: nuevaPaginacion.totalPaginas ?? 1,
-        });
-
-        setTotales(datos?.totales);
-      } catch (errorConsulta) {
-        if (!activo) return;
-
-        setVentas([]);
-        setTotales(undefined);
-        setError(obtenerMensajeError(errorConsulta));
-      } finally {
-        if (activo) {
-          setLoading(false);
+        // La página quedó vacía (hay menos ventas que antes, ej. por un
+        // refresco): saltamos a la última que existe.
+        if (ventas.length === 0 && consultaACargar.pagina > 1 && totalPaginas >= 1) {
+          setConsulta((previa) => ({ ...previa, pagina: totalPaginas }));
+          return;
         }
-      }
-    };
 
-    cargarVentas();
+        setDatos({ ventas, paginacion, totales: data?.totales ?? null });
+        setError("");
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!vigente()) return;
+        // Sin datos viejos: no corresponden a los filtros que fallaron.
+        setDatos(DATOS_VACIOS);
+        setError(mensajeDeError(err));
+        setLoading(false);
+      });
+  }, []);
+
+  // Carga inicial y cada vez que cambia la consulta (filtros aplicados o
+  // página). El estado solo cambia en callbacks de la promesa.
+  useEffect(() => {
+    cargarLista(consulta);
 
     return () => {
-      activo = false;
+      solicitudRef.current += 1;
     };
-  }, [filtros, paginaSolicitada, recarga]);
+  }, [consulta, cargarLista]);
 
-  const aplicarFiltros = (nuevosFiltros = {}) => {
-    setFiltros({
-      desde: nuevosFiltros.desde ?? "",
-      hasta: nuevosFiltros.hasta ?? "",
-      estado:
-        !nuevosFiltros.estado || nuevosFiltros.estado === "TODAS"
-          ? ""
-          : nuevosFiltros.estado,
-    });
+  const cambiarFiltro = useCallback((campo, valor) => {
+    setFiltros((actuales) => ({ ...actuales, [campo]: valor }));
+  }, []);
 
-    setPaginaSolicitada(1);
-  };
+  const aplicarFiltros = useCallback(() => {
+    const mensaje = validarFiltros(filtros);
+    setErrorFiltros(mensaje);
+    if (mensaje) return;
 
-  const limpiarFiltros = () => {
-    setFiltros(FILTROS_INICIALES);
-    setPaginaSolicitada(1);
-  };
+    setLoading(true);
+    setConsulta({ filtros: { ...filtros }, pagina: 1 });
+  }, [filtros]);
 
-  const cambiarPagina = (nuevaPagina) => {
-    const pagina = Number(nuevaPagina);
+  const limpiarFiltros = useCallback(() => {
+    setFiltros(FILTROS_VACIOS);
+    setErrorFiltros("");
+    setLoading(true);
+    setConsulta({ filtros: FILTROS_VACIOS, pagina: 1 });
+  }, []);
 
-    if (
-      !Number.isInteger(pagina) ||
-      pagina < 1 ||
-      pagina > paginacion.totalPaginas
-    ) {
-      return;
-    }
+  const cambiarPagina = useCallback(
+    (nueva) => {
+      const total = datos.paginacion?.totalPaginas ?? 1;
+      if (nueva < 1 || nueva > total || nueva === consulta.pagina) return;
 
-    setPaginaSolicitada(pagina);
-  };
+      setLoading(true);
+      setConsulta((previa) => ({ ...previa, pagina: nueva }));
+    },
+    [datos.paginacion, consulta.pagina],
+  );
 
-  const recargar = () => {
-    setRecarga((actual) => actual + 1);
-  };
+  const recargar = useCallback(() => {
+    setLoading(true);
+    setError("");
+
+    return cargarLista(consultaRef.current);
+  }, [cargarLista]);
 
   return {
-    ventas,
-    paginacion,
-    totales,
     filtros,
-    loading,
-    error,
+    cambiarFiltro,
     aplicarFiltros,
     limpiarFiltros,
+    errorFiltros,
+    ventas: datos.ventas,
+    paginacion: datos.paginacion,
+    totales: datos.totales,
+    pagina: consulta.pagina,
     cambiarPagina,
+    loading,
+    error,
     recargar,
   };
 }
-
-export default useVentas;
