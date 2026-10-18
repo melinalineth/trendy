@@ -2,8 +2,14 @@
 // por estado. Prueba contra la base real (ver tests/helpers/entorno.js).
 //
 // Aislamiento: la base de tests puede tener ventas de otros archivos, así que
-// TODAS las ventas de este archivo se registran en octubre/noviembre de 2031 y
-// cada consulta acota ese período con `desde`/`hasta`.
+// TODAS las ventas de este archivo se registran entre 2031 y 2033 (las consultas
+// de "sin ventas" usan 2035) y cada consulta acota su período con
+// `desde`/`hasta`. Los conteos y totales son EXACTOS, por eso el `before`
+// borra primero las ventas de esos años que haya dejado una corrida cortada
+// (solo ese rango de fechas; nada fuera de él).
+//
+// Requiere correr con `--test-concurrency=1` (como el script `test` del
+// proyecto): comparte la base con los demás archivos de test.
 //
 // Convención de horas: se escriben en hora de Bogotá (UTC-5) con un helper, así
 // los casos de borde se leen como los vive el usuario.
@@ -11,6 +17,7 @@ const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  prisma,
   crearUsuario,
   crearVariante,
   crearDireccion,
@@ -48,6 +55,14 @@ describe("Repository de consulta de ventas (RF-042)", () => {
     });
 
   before(async () => {
+    await prisma.venta.deleteMany({
+      where: {
+        registradaEn: {
+          gte: new Date("2031-01-01T00:00:00.000Z"),
+          lt: new Date("2034-01-01T00:00:00.000Z"),
+        },
+      },
+    });
     cliente = await crearUsuario("cliente");
     otroCliente = await crearUsuario("cliente");
     admin = await crearUsuario("admin");

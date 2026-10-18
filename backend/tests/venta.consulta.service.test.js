@@ -1,8 +1,13 @@
 // Service de consulta de ventas (RF-042): presentación del contrato de
 // GET /api/v1/ventas (docs/diseno/ventas-api.md) sobre la base real.
 //
-// Aislamiento: ventas de este archivo en 2034, y cada consulta acota su período
-// con `desde`/`hasta`.
+// Aislamiento: ventas de este archivo en 2034 (la consulta de "sin ventas" usa
+// 2036), y cada consulta acota su período con `desde`/`hasta`. Los conteos y
+// totales son EXACTOS, por eso el `before` borra primero las ventas de 2034 que
+// haya dejado una corrida cortada (solo ese rango de fechas).
+//
+// Requiere correr con `--test-concurrency=1` (como el script `test` del
+// proyecto): comparte la base con los demás archivos de test.
 const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -28,6 +33,14 @@ describe("Service de consulta de ventas (RF-042)", () => {
   let variante;
 
   before(async () => {
+    await prisma.venta.deleteMany({
+      where: {
+        registradaEn: {
+          gte: new Date("2034-01-01T00:00:00.000Z"),
+          lt: new Date("2035-01-01T00:00:00.000Z"),
+        },
+      },
+    });
     cliente = await crearUsuario("cliente");
     admin = await crearUsuario("admin");
     direccion = await crearDireccion(cliente.id);

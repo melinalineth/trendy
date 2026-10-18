@@ -4,12 +4,18 @@
 //                        totales en v1.0); cliente -> 403; sin token -> 401.
 //
 // Aislamiento: la base de tests puede traer ventas de otros archivos. Todas las
-// ventas de este archivo se registran en 2035 y cada consulta acota su período
-// con `desde`/`hasta`.
+// ventas de este archivo se registran en 2035 (las consultas de "sin ventas"
+// usan 2039) y cada consulta acota su período con `desde`/`hasta`. Los conteos
+// y totales son EXACTOS, por eso el `before` borra primero las ventas de 2035
+// que haya dejado una corrida cortada (solo ese rango de fechas).
+//
+// Requiere correr con `--test-concurrency=1` (como el script `test` del
+// proyecto): comparte la base con los demás archivos de test.
 const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  prisma,
   iniciarServidor,
   pedir,
   crearUsuario,
@@ -64,6 +70,14 @@ describe("GET /api/v1/ventas (RF-042)", () => {
     });
 
   before(async () => {
+    await prisma.venta.deleteMany({
+      where: {
+        registradaEn: {
+          gte: new Date("2035-01-01T00:00:00.000Z"),
+          lt: new Date("2036-01-01T00:00:00.000Z"),
+        },
+      },
+    });
     servidor = await iniciarServidor();
     api = (metodo, ruta, opciones) => pedir(servidor.baseUrl, metodo, ruta, opciones);
     admin = await crearUsuario("admin");
