@@ -689,14 +689,7 @@ async function cancelarPedido(pedidoId, usuario) {
   // cancela igual, pero la cancelación no puede pasar sin dejar rastro de que no
   // había venta que anular: queda para reconciliar a mano.
   if (ventaFaltante) {
-    // La clave `responsableId` (quien canceló) se conserva: es el contrato de
-    // este log y no hay venta donde guardar nada.
-    logEvento({
-      evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR",
-      pedidoId,
-      estado,
-      responsableId: anuladaPorId,
-    });
+    logEvento({ evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR", pedidoId, estado, anuladaPorId });
   }
 
   return {

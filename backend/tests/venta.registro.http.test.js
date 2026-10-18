@@ -586,7 +586,7 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
           evento: "VENTA_NO_ENCONTRADA_AL_CANCELAR",
           pedidoId: pedido.id,
           estado,
-          responsableId: vendedor.id,
+          anuladaPorId: vendedor.id,
         });
       });
     }
