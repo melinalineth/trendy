@@ -121,18 +121,20 @@ período, aunque el listado esté filtrado por uno de los dos estados. Sin venta
 Formato estándar del proyecto: `{ "error": { "codigo", "mensaje", "detalles" } }`.
 
 Filtros inválidos (parámetro desconocido, repetido, vacío o mal formado, fechas imposibles, rango
-invertido o mayor a 366 días, estado/pagina/limite fuera de rango): **400 `FILTROS_INVALIDOS`**, con
-`detalles` como **arreglo de textos en español**, informando todos los problemas juntos.
+invertido o mayor a 366 días, años fuera de 2000..2100, estado/pagina/limite fuera de rango): **400
+`VALIDACION_FALLIDA`** (el mismo código que usan todos los 400 de validación del proyecto, incluido
+`GET /pedidos`), con `detalles` como **arreglo de textos en español**, informando todos los problemas
+juntos. Los textos de `detalles` **no llevan punto final**: el frontend los une con `". "`.
 
 ```json
 {
   "error": {
-    "codigo": "FILTROS_INVALIDOS",
+    "codigo": "VALIDACION_FALLIDA",
     "mensaje": "Los filtros de consulta de ventas no son válidos",
     "detalles": [
-      "Parámetros no permitidos: usuarioId.",
-      "desde debe tener el formato YYYY-MM-DD.",
-      "limite debe estar entre 1 y 100."
+      "Parámetros no permitidos: usuarioId",
+      "desde debe tener el formato YYYY-MM-DD",
+      "limite debe estar entre 1 y 100"
     ]
   }
 }
@@ -149,7 +151,7 @@ Devuelve solo las ventas anuladas de octubre (hora de Bogotá), de a 20, y en `t
 consolidado de **registradas y anuladas** de octubre.
 
 ```
-GET /api/v1/ventas?limite=1000        -> 400 FILTROS_INVALIDOS
+GET /api/v1/ventas?limite=1000        -> 400 VALIDACION_FALLIDA
 GET /api/v1/ventas  (como cliente)    -> 403 ACCESO_DENEGADO
 GET /api/v1/ventas  (sin token)       -> 401
 ```

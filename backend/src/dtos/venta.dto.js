@@ -1,8 +1,9 @@
 
 // Sprint 5 / RF-042: filtros de GET /api/v1/ventas. Contrato completo en
 // docs/diseno/ventas-api.md. Borrador original de Valentina Linares; ajustado
-// al contrato (código FILTROS_INVALIDOS, defaults, parámetros desconocidos,
-// tope de página).
+// al contrato (código VALIDACION_FALLIDA como el resto del proyecto, defaults,
+// parámetros desconocidos, tope de página, años 2000..2100). Los mensajes de
+// `detalles` van SIN punto final: el frontend los une con ". ".
 const ESTADOS_VENTA = ["REGISTRADA", "ANULADA"];
 const CAMPOS_PERMITIDOS = ["desde", "hasta", "estado", "pagina", "limite"];
 const LIMITE_POR_DEFECTO = 50;
@@ -18,7 +19,7 @@ const DESFASE_BOGOTA_HORAS = 5;
 const crearErrorValidacion = (detalles) => {
   const error = new Error("Los filtros de consulta de ventas no son válidos");
   error.status = 400;
-  error.codigo = "FILTROS_INVALIDOS";
+  error.codigo = "VALIDACION_FALLIDA";
   error.detalles = detalles;
 
   return error;
@@ -27,7 +28,7 @@ const crearErrorValidacion = (detalles) => {
 // Rechaza formatos incorrectos y fechas inexistentes del calendario.
 const validarFechaCalendario = (valor, campo, detalles) => {
   if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
-    detalles.push(`${campo} debe tener el formato YYYY-MM-DD.`);
+    detalles.push(`${campo} debe tener el formato YYYY-MM-DD`);
     return null;
   }
 
@@ -35,7 +36,7 @@ const validarFechaCalendario = (valor, campo, detalles) => {
 
   // Antes del calendario: Date.UTC trata los años 0..99 como 1900..1999.
   if (anio < ANIO_MINIMO || anio > ANIO_MAXIMO) {
-    detalles.push(`${campo} debe estar entre los años ${ANIO_MINIMO} y ${ANIO_MAXIMO}.`);
+    detalles.push(`${campo} debe estar entre los años ${ANIO_MINIMO} y ${ANIO_MAXIMO}`);
     return null;
   }
 
@@ -46,11 +47,11 @@ const validarFechaCalendario = (valor, campo, detalles) => {
     fecha.getUTCMonth() !== mes - 1 ||
     fecha.getUTCDate() !== dia
   ) {
-    detalles.push(`${campo} no es una fecha de calendario válida.`);
+    detalles.push(`${campo} no es una fecha de calendario válida`);
     return null;
   }
 
-  return { anio, mes, dia, valor };
+  return { anio, mes, dia };
 };
 
 const validarFiltrosVentas = (query) => {
@@ -61,14 +62,14 @@ const validarFiltrosVentas = (query) => {
   );
 
   if (desconocidos.length > 0) {
-    detalles.push(`Parámetros no permitidos: ${desconocidos.join(", ")}.`);
+    detalles.push(`Parámetros no permitidos: ${desconocidos.join(", ")}`);
   }
 
   // Express puede entregar arrays si un parámetro se repite: se informa y no
   // se vuelve a validar ese campo (para no duplicar el mensaje).
   const valorDe = (campo) => {
     if (Array.isArray(query[campo])) {
-      detalles.push(`El parámetro ${campo} no puede repetirse.`);
+      detalles.push(`El parámetro ${campo} no puede repetirse`);
       return undefined;
     }
 
@@ -136,13 +137,13 @@ const validarFiltrosVentas = (query) => {
     );
 
     if (inicioUTC > finUTC) {
-      detalles.push("desde no puede ser posterior a hasta.");
+      detalles.push("desde no puede ser posterior a hasta");
     } else {
       const diasInclusivos =
         (finUTC - inicioUTC) / 86_400_000 + 1;
 
       if (diasInclusivos > 366) {
-        detalles.push("El rango de fechas no puede superar 366 días.");
+        detalles.push("El rango de fechas no puede superar 366 días");
       }
     }
   }
@@ -152,7 +153,7 @@ const validarFiltrosVentas = (query) => {
   if (estadoRaw !== undefined) {
     if (!ESTADOS_VENTA.includes(estadoRaw)) {
       detalles.push(
-        `estado debe ser uno de los siguientes valores: ${ESTADOS_VENTA.join(", ")}.`
+        `estado debe ser uno de los siguientes valores: ${ESTADOS_VENTA.join(", ")}`
       );
     } else {
       estado = estadoRaw;
@@ -171,7 +172,7 @@ const validarFiltrosVentas = (query) => {
     }
 
     if (typeof valor !== "string" || !/^\d+$/.test(valor)) {
-      detalles.push(`${campo} debe ser un número entero.`);
+      detalles.push(`${campo} debe ser un número entero`);
       return undefined;
     }
 
@@ -184,8 +185,8 @@ const validarFiltrosVentas = (query) => {
     ) {
       detalles.push(
         maximo === undefined
-          ? `${campo} debe ser mayor o igual a ${minimo}.`
-          : `${campo} debe estar entre ${minimo} y ${maximo}.`
+          ? `${campo} debe ser mayor o igual a ${minimo}`
+          : `${campo} debe estar entre ${minimo} y ${maximo}`
       );
       return undefined;
     }
@@ -224,6 +225,4 @@ const validarFiltrosVentas = (query) => {
 
 module.exports = {
   validarFiltrosVentas,
-  LIMITE_POR_DEFECTO,
-  LIMITE_MAXIMO,
 };

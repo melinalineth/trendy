@@ -307,7 +307,7 @@ describe("GET /api/v1/ventas (RF-042)", () => {
     });
   });
 
-  describe("filtros inválidos -> 400 FILTROS_INVALIDOS", () => {
+  describe("filtros inválidos -> 400 VALIDACION_FALLIDA", () => {
     const casos = [
       ["desde con formato inválido", "?desde=31-12-2035", /desde/],
       ["hasta con fecha inexistente", "?hasta=2035-02-30", /hasta/],
@@ -332,9 +332,13 @@ describe("GET /api/v1/ventas (RF-042)", () => {
       it(`${nombre} (${query})`, async () => {
         const r = await listar(admin, query);
 
-        assertErrorEstandar(r, 400, "FILTROS_INVALIDOS");
+        assertErrorEstandar(r, 400, "VALIDACION_FALLIDA");
         assert.ok(Array.isArray(r.body.error.detalles) && r.body.error.detalles.length > 0);
         assert.ok(r.body.error.detalles.every((d) => typeof d === "string"));
+        assert.ok(
+          r.body.error.detalles.every((d) => !d.endsWith(".")),
+          JSON.stringify(r.body.error.detalles)
+        );
         assert.match(r.body.error.detalles.join(" | "), patron);
         assert.equal(typeof r.body.error.mensaje, "string");
       });
@@ -343,7 +347,7 @@ describe("GET /api/v1/ventas (RF-042)", () => {
     it("el vendedor recibe el mismo 400 que el admin", async () => {
       const r = await listar(vendedor, "?limite=1000");
 
-      assertErrorEstandar(r, 400, "FILTROS_INVALIDOS");
+      assertErrorEstandar(r, 400, "VALIDACION_FALLIDA");
     });
 
     it("informa todos los problemas juntos", async () => {

@@ -6,7 +6,7 @@
 //     Bogotá del día siguiente), que es lo mismo que "hasta 23:59:59.999".
 //   - rango máximo de 366 días, desde <= hasta.
 //   - parámetros desconocidos, repetidos, vacíos o mal formados -> 400
-//     FILTROS_INVALIDOS con `detalles` (arreglo de textos en español).
+//     VALIDACION_FALLIDA (el código de todo el proyecto) con `detalles` (arreglo de textos en español).
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -25,9 +25,14 @@ function errorDe(query) {
 function assertFiltrosInvalidos(query, patron) {
   const error = errorDe(query);
   assert.equal(error.status, 400);
-  assert.equal(error.codigo, "FILTROS_INVALIDOS");
+  assert.equal(error.codigo, "VALIDACION_FALLIDA");
   assert.ok(Array.isArray(error.detalles) && error.detalles.length > 0);
   assert.ok(error.detalles.every((d) => typeof d === "string" && d.length > 0));
+  // Sin punto final: el frontend une los detalles con ". ".
+  assert.ok(
+    error.detalles.every((d) => !d.trimEnd().endsWith(".")),
+    JSON.stringify(error.detalles)
+  );
   assert.match(error.detalles.join(" | "), patron);
   return error;
 }
@@ -215,7 +220,8 @@ describe("DTO de filtros de ventas (RF-042)", () => {
       const error = errorDe({ desde: "mal", estado: "x", pagina: "0", limite: "500", otro: "1" });
 
       assert.equal(error.status, 400);
-      assert.equal(error.codigo, "FILTROS_INVALIDOS");
+      assert.equal(error.codigo, "VALIDACION_FALLIDA");
+      assert.ok(error.detalles.every((d) => !d.endsWith(".")), JSON.stringify(error.detalles));
       assert.equal(typeof error.message, "string");
       assert.ok(error.detalles.length >= 5, JSON.stringify(error.detalles));
       assert.ok(error.detalles.every((d) => typeof d === "string"));
