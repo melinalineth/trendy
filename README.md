@@ -31,7 +31,7 @@ backend/
   tests/             tests con node:test
 frontend/src/        pages, components, hooks, services, context, router, styles (tokens.css)
 nginx/conf.d/        proxy de /api y fallback de la SPA (staging)
-scripts/             smoke-staging.js
+scripts/             smoke-staging.js, crear-usuario.js
 docs/                ERS, DDS y Plan de Trabajo (.docx), bitácoras y diseño técnico
 ```
 
@@ -78,6 +78,24 @@ npm run lint
 Si no defines `VITE_API_URL`, el frontend usa `/api/v1` (mismo origen), que es lo que usa el
 staging con nginx. El servidor de desarrollo de Vite no tiene proxy, por eso en desarrollo hace
 falta la variable.
+
+### Cómo crear un vendedor o un administrador
+
+La aplicación no tiene pantalla ni endpoint para crearlos (el registro siempre da rol cliente).
+`scripts/crear-usuario.js` crea un usuario con rol `admin`, `vendedor` o `cliente` en la base de
+`backend/.env` (hace falta haber corrido las migraciones y el seed, que crea los roles). La
+contraseña va **solo** por la variable `NUEVO_USUARIO_PASSWORD` (mínimo 8 caracteres, sin empezar por
+`changeme`); nunca por argumento:
+
+```bash
+# desde la raíz del repositorio
+export NUEVO_USUARIO_PASSWORD='<elige una clave>'
+node scripts/crear-usuario.js --correo vendedor@ejemplo.com --nombre "Vendedor Ejemplo" --rol vendedor
+```
+
+Si el correo ya existe no modifica nada (ni la contraseña ni el rol) y avisa qué rol tiene. No imprime
+la contraseña ni su hash. Termina con código 0 si creó el usuario o ya existía, y 1 ante cualquier error.
+Para la demo, ver [docs/manual/guion-demo.md](docs/manual/guion-demo.md).
 
 ## Tests del backend
 
@@ -175,7 +193,8 @@ No verificado / pendiente:
 - **Mercado Pago real nunca se probó en el sandbox**: el webhook necesita una URL pública y el
   staging es local.
 - No hay despliegue en un servidor real, HTTPS ni respaldos (ver la guía de staging).
-- No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed.
+- No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
+  crean con `scripts/crear-usuario.js`, ver arriba).
 - Pendiente: exponer y mostrar quién anuló una venta (`anuladaPor`) en la API y el frontend, y
   completar la navegación (según las bitácoras de los Sprints 3 y 4, algunos paneles no tienen
   enlace en el menú y se entra por URL; no se revisó de nuevo para este README).
@@ -187,6 +206,8 @@ No verificado / pendiente:
 - Diseño técnico: [estados del pedido, envío y pago](docs/diseno/pedidos-estados.md),
   [info de envío e historial](docs/diseno/info-envio.md), [API de ventas](docs/diseno/ventas-api.md),
   [montos en COP](docs/diseno/montos-cop.md).
+- Manuales: [manual de usuario](docs/manual/manual-usuario.md) (cliente, vendedor y administrador) y
+  [guion de demo](docs/manual/guion-demo.md) (preparación, relato y preguntas del jurado).
 - Bitácoras de sprint: `docs/bitacora/`.
 - Despliegue: [docs/despliegue/staging.md](docs/despliegue/staging.md).
 
