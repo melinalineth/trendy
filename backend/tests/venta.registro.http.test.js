@@ -473,4 +473,335 @@ describe("Registro de ventas desde los flujos de pedidos (RF-041)", () => {
       assert.equal(await ventasDe(pedido.id), 1);
     });
   });
+  describe("cancelación de un pedido CONTRA ENTREGA ya confirmado: PATCH /api/v1/pedidos/:id/cancelar", () => {
+    const cambiarEstado = (pedidoId, estado, usuario = admin) =>
+      api("PATCH", `/api/v1/pedidos/${pedidoId}/estado`, { token: usuario.token, body: { estado } });
+    const cancelar = (pedidoId, usuario = admin) =>
+      api("PATCH", `/api/v1/pedidos/${pedidoId}/cancelar`, { token: usuario.token });
+    const vencidos = (body) =>
+      api("POST", "/api/v1/pedidos/vencidos/cancelar", { token: admin.token, body });
+    const entradasDe = (varianteId) =>
+      prisma.inventarioMovimiento.findMany({ where: { varianteId, tipoAjuste: "ENTRADA" } });
+    const infoEnvioDe = (pedidoId) => prisma.infoEnvio.findUnique({ where: { pedidoId } });
+    const historialDe = (pedidoId) =>
+      prisma.historialEstadoEnvio.findMany({
+        where: { infoEnvio: { pedidoId } },
+        orderBy: { id: "asc" },
+      });
+
+    const AVANCE = ["EN_PREPARACION", "ENVIADO", "EN_TRANSITO", "ENTREGADO"];
+
+    // Contra entrega creado por el flujo real, con su pago registrado,
+    // confirmado por el personal (nace la venta) y avanzado hasta `estado`.
+    async function contraEntregaEn(estado = "CONFIRMADO") {
+      const real = await pedidoReal({ metodoPago: "CONTRA_ENTREGA" });
+      const registro = await api("POST", "/api/v1/pagos/contra-entrega", {
+        token: real.cliente.token,
+        body: { pedidoId: real.pedido.id },
+      });
+      assert.equal(registro.status, 201, JSON.stringify(registro.body));
+      assert.equal((await cambiarEstado(real.pedido.id, "CONFIRMADO", vendedor)).status, 200);
+      const pasos = estado === "CONFIRMADO" ? [] : AVANCE.slice(0, AVANCE.indexOf(estado) + 1);
+      for (const siguiente of pasos) {
+        const r = await cambiarEstado(real.pedido.id, siguiente, vendedor);
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+      }
+      assert.equal(await estadoDe(real.pedido.id), estado);
+      return real;
+    }
+
+    for (const estado of ["CONFIRMADO", "EN_PREPARACION", "ENVIADO", "EN_TRANSITO"]) {
+      it(`desde ${estado}: el personal cancela, repone el stock UNA vez, anula la venta y deja el envío como estaba`, async () => {
+        const { pedido, variante, cliente } = await contraEntregaEn(estado);
+        const ventaAntes = await ventaDe(pedido.id);
+        const envioAntes = await infoEnvioDe(pedido.id);
+        const historialAntes = await historialDe(pedido.id);
+        assert.equal(ventaAntes.estado, "REGISTRADA");
+        assert.equal(await stockDe(variante.id), 8);
+
+        const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, admin));
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.yaCancelado, false);
+        assert.equal(r.body.pedido.estado, "CANCELADO");
+        assert.equal(await estadoDe(pedido.id), "CANCELADO");
+        // Stock: exactamente las 2 unidades del pedido, un movimiento ENTRADA.
+        assert.equal(await stockDe(variante.id), 10);
+        const entradas = await entradasDe(variante.id);
+        assert.equal(entradas.length, 1);
+        assert.equal(entradas[0].cantidad, 2);
+        assert.equal(entradas[0].usuarioId, cliente.id);
+        // Venta: la misma fila, ANULADA con anuladaEn; no se borra ni se reescribe.
+        assert.equal(await ventasDe(pedido.id), 1);
+        const ventaDespues = await ventaDe(pedido.id);
+        assert.equal(ventaDespues.id, ventaAntes.id);
+        assert.equal(ventaDespues.estado, "ANULADA");
+        assert.ok(ventaDespues.anuladaEn instanceof Date);
+        assert.ok(Math.abs(ventaDespues.anuladaEn.getTime() - Date.now()) < 60_000);
+        assert.equal(ventaDespues.responsableId, vendedor.id, "responsable = quien la REGISTRÓ");
+        assert.equal(ventaDespues.total.toFixed(2), ventaAntes.total.toFixed(2));
+        assert.equal(ventaDespues.registradaEn.getTime(), ventaAntes.registradaEn.getTime());
+        // El pago contra entrega que no se va a cobrar queda CANCELADO.
+        assert.equal((await pagoDe(pedido.id)).estado, "CANCELADO");
+        // InfoEnvio y su historial NO se tocan: quedan como registro de lo ocurrido.
+        assert.deepEqual(await infoEnvioDe(pedido.id), envioAntes);
+        assert.deepEqual(await historialDe(pedido.id), historialAntes);
+        // Quedó constancia de quién anuló (la venta no guarda ese dato).
+        const linea = lineas.find((l) => l.includes("VENTA_ANULADA"));
+        assert.ok(linea, JSON.stringify(lineas));
+        assert.deepEqual(JSON.parse(linea), {
+          evento: "VENTA_ANULADA",
+          pedidoId: pedido.id,
+          responsableId: admin.id,
+        });
+      });
+    }
+
+    it("el vendedor también puede cancelar (la reposición queda a nombre del dueño del pedido)", async () => {
+      const { pedido, variante, cliente } = await contraEntregaEn("ENVIADO");
+
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id, vendedor));
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+      assert.equal((await entradasDe(variante.id))[0].usuarioId, cliente.id);
+    });
+
+    it("RN-008: la venta anulada conserva sus montos aunque después cambie el precio del producto", async () => {
+      const { pedido, variante } = await contraEntregaEn("CONFIRMADO");
+      await conLogs(() => cancelar(pedido.id));
+
+      await prisma.producto.update({ where: { id: variante.productoId }, data: { precio: "1.00" } });
+
+      const venta = await ventaDe(pedido.id);
+      assert.equal(venta.estado, "ANULADA");
+      assert.equal(venta.subtotal.toFixed(2), "39980.00");
+      assert.equal(venta.total.toFixed(2), "51980.00");
+    });
+
+    it("ENTREGADO NO se cancela: 409 PEDIDO_NO_CANCELABLE y nada cambia", async () => {
+      const { pedido, variante } = await contraEntregaEn("ENTREGADO");
+
+      const r = await cancelar(pedido.id);
+
+      assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+      assert.equal(await estadoDe(pedido.id), "ENTREGADO");
+      assert.equal(await stockDe(variante.id), 8);
+      assert.deepEqual(await entradasDe(variante.id), []);
+      assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+    });
+
+    it("un pedido de MERCADO PAGO ya pagado NO se cancela por esta vía: 409 que explica el reembolso, sin reponer ni anular", async () => {
+      const { pedido, variante } = await pedidoReal();
+      responderMercadoPago(pedido);
+      assert.equal((await webhook(82001)).status, 200);
+      assert.equal(await estadoDe(pedido.id), "CONFIRMADO");
+
+      for (const siguiente of ["EN_PREPARACION", "ENVIADO"]) {
+        const { resultado: r } = await conLogs(() => cancelar(pedido.id));
+
+        assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+        assert.match(r.body.error.mensaje, /reembolso/i);
+        assert.equal(await stockDe(variante.id), 8);
+        assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+        assert.equal((await cambiarEstado(pedido.id, siguiente)).status, 200);
+      }
+    });
+
+    it("un Mercado Pago confirmado SIN pago registrado (datos cargados a mano) tampoco: 409 en cada estado de su ciclo", async () => {
+      const cliente = await clienteConDireccion();
+      for (const estado of ["CONFIRMADO", "EN_PREPARACION", "ENVIADO", "EN_TRANSITO"]) {
+        const variante = await crearVariante({ stock: 3 });
+        const pedido = await crearPedido({
+          usuarioId: cliente.id,
+          direccionId: cliente.direccion.id,
+          lineas: [{ variante, cantidad: 2 }],
+          estado,
+        });
+
+        const r = await cancelar(pedido.id);
+
+        assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+        assert.match(r.body.error.mensaje, /Mercado Pago/);
+        assert.equal(await stockDe(variante.id), 3);
+        assert.equal(await estadoDe(pedido.id), estado);
+      }
+    });
+
+    it("un contra entrega con el cobro ya CONFIRMADO (Pago APROBADO) no se cancela: 409, el reembolso es manual", async () => {
+      const { pedido, variante } = await contraEntregaEn("ENVIADO");
+      const confirmar = await api("PATCH", `/api/v1/pagos/${pedido.id}/confirmar-recepcion`, {
+        token: admin.token,
+      });
+      assert.equal(confirmar.status, 200, JSON.stringify(confirmar.body));
+
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id));
+
+      assertErrorEstandar(r, 409, "PEDIDO_NO_CANCELABLE");
+      assert.equal(await estadoDe(pedido.id), "ENVIADO");
+      assert.equal(await stockDe(variante.id), 8);
+      assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+    });
+
+    it("el cliente NO puede cancelar ni su propio pedido confirmado: 403 y nada cambia", async () => {
+      const { pedido, variante, cliente } = await contraEntregaEn("EN_PREPARACION");
+
+      assertErrorEstandar(await cancelar(pedido.id, cliente), 403, "ACCESO_DENEGADO");
+
+      assert.equal(await estadoDe(pedido.id), "EN_PREPARACION");
+      assert.equal(await stockDe(variante.id), 8);
+      assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+    });
+
+    it("cancelar dos veces es idempotente: 200 yaCancelado, no repone de nuevo, no anula de nuevo y no deja otro log", async () => {
+      const { pedido, variante } = await contraEntregaEn("ENVIADO");
+      assert.equal((await conLogs(() => cancelar(pedido.id))).resultado.status, 200);
+      const anulada = await ventaDe(pedido.id);
+
+      const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id, vendedor));
+
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body.yaCancelado, true);
+      assert.equal(await stockDe(variante.id), 10);
+      assert.equal((await entradasDe(variante.id)).length, 1);
+      assert.equal((await ventaDe(pedido.id)).anuladaEn.getTime(), anulada.anuladaEn.getTime());
+      assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")));
+    });
+
+    it("5 cancelaciones SIMULTÁNEAS: todas 200, el stock se repone una sola vez y la venta se anula una sola vez", async () => {
+      const { pedido, variante } = await contraEntregaEn("EN_TRANSITO");
+
+      const { resultado: respuestas, lineas } = await conLogs(() =>
+        Promise.all([admin, vendedor, admin, vendedor, admin].map((staff) => cancelar(pedido.id, staff)))
+      );
+
+      assert.deepEqual(
+        respuestas.map((r) => r.status),
+        Array(5).fill(200),
+        JSON.stringify(respuestas.map((r) => r.body))
+      );
+      assert.equal(respuestas.filter((r) => r.body.yaCancelado === false).length, 1);
+      assert.equal(await stockDe(variante.id), 10);
+      assert.equal((await entradasDe(variante.id)).length, 1);
+      assert.equal(await ventasDe(pedido.id), 1);
+      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+      assert.equal(lineas.filter((l) => l.includes("VENTA_ANULADA")).length, 1);
+    });
+
+    it("cancelar y avanzar el estado SIMULTÁNEOS: siempre termina CANCELADO con la venta ANULADA y el stock repuesto una vez", async () => {
+      for (let ronda = 0; ronda < 4; ronda++) {
+        const { pedido, variante } = await contraEntregaEn("CONFIRMADO");
+
+        const { resultado: [rc, re] } = await conLogs(() =>
+          Promise.all([
+            cancelar(pedido.id, admin),
+            cambiarEstado(pedido.id, "EN_PREPARACION", vendedor),
+          ])
+        );
+
+        assert.equal(rc.status, 200, JSON.stringify(rc.body));
+        assert.ok([200, 409].includes(re.status), JSON.stringify(re.body));
+        assert.equal(await estadoDe(pedido.id), "CANCELADO");
+        assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+        assert.equal(await stockDe(variante.id), 10);
+        assert.equal((await entradasDe(variante.id)).length, 1);
+      }
+    });
+
+    it("un pedido cancelado ya no avanza ni se reconfirma, y su venta sigue ANULADA", async () => {
+      const { pedido } = await contraEntregaEn("ENVIADO");
+      await conLogs(() => cancelar(pedido.id));
+
+      for (const estado of ["CONFIRMADO", "EN_TRANSITO", "ENTREGADO"]) {
+        assertErrorEstandar(await cambiarEstado(pedido.id, estado), 409, "TRANSICION_ESTADO_INVALIDA");
+      }
+      const envio = await api("PUT", `/api/v1/pedidos/${pedido.id}/estado-envio`, {
+        token: admin.token,
+        body: { estadoEnvio: "EN_TRANSITO" },
+      });
+      assert.equal(envio.status, 409, JSON.stringify(envio.body));
+
+      assert.equal(await estadoDe(pedido.id), "CANCELADO");
+      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+    });
+
+    it("ATOMICIDAD: si falla la anulación de la venta, la cancelación se revierte (pedido, pago y stock intactos)", async () => {
+      const { pedido, variante } = await contraEntregaEn("EN_PREPARACION");
+      const fallo = new Error("falla simulada al anular la venta");
+      const espia = mock.method(ventaRepository, "anular", () => Promise.reject(fallo));
+
+      let fallido;
+      try {
+        fallido = (await conLogs(() => cancelar(pedido.id))).resultado;
+      } finally {
+        espia.mock.restore();
+      }
+
+      assert.equal(fallido.status, 500, JSON.stringify(fallido.body));
+      assert.equal(await estadoDe(pedido.id), "EN_PREPARACION");
+      assert.equal((await pagoDe(pedido.id)).estado, "PENDIENTE");
+      assert.equal(await stockDe(variante.id), 8);
+      assert.deepEqual(await entradasDe(variante.id), []);
+      assert.equal((await ventaDe(pedido.id)).estado, "REGISTRADA");
+
+      // Sin la falla, la cancelación se completa.
+      const { resultado: r } = await conLogs(() => cancelar(pedido.id));
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal((await ventaDe(pedido.id)).estado, "ANULADA");
+      assert.equal(await stockDe(variante.id), 10);
+    });
+
+    describe("lo que NO cambia: pedidos pendientes y cancelar vencidos", () => {
+      it("cancelar un PENDIENTE (contra entrega o Mercado Pago) sigue igual: repone, no hay venta que anular ni log", async () => {
+        for (const metodoPago of ["CONTRA_ENTREGA", "MERCADO_PAGO"]) {
+          const { pedido, variante } = await pedidoReal({ metodoPago });
+
+          const { resultado: r, lineas } = await conLogs(() => cancelar(pedido.id));
+
+          assert.equal(r.status, 200, JSON.stringify(r.body));
+          assert.equal(await estadoDe(pedido.id), "CANCELADO");
+          assert.equal(await stockDe(variante.id), 10);
+          assert.equal(await ventasDe(pedido.id), 0, metodoPago);
+          assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")));
+        }
+      });
+
+      it("cancelar vencidos NO toca ventas: cancela el PENDIENTE viejo (sin venta) y deja intactas las ventas REGISTRADAS", async () => {
+        const cliente = await clienteConDireccion();
+        const viejo = await pedidoReal({ cliente });
+        const confirmadoMp = await pedidoReal({ cliente });
+        responderMercadoPago(confirmadoMp.pedido);
+        assert.equal((await webhook(82002)).status, 200);
+        const confirmadoCe = await contraEntregaEn("ENVIADO");
+        const horas30 = new Date(Date.now() - 30 * 60 * 60 * 1000);
+        for (const { pedido } of [viejo, confirmadoMp, confirmadoCe]) {
+          await prisma.pedido.update({ where: { id: pedido.id }, data: { creadoEn: horas30 } });
+        }
+        const idsConVenta = [confirmadoMp.pedido.id, confirmadoCe.pedido.id];
+        const ventasAntes = await prisma.venta.findMany({
+          where: { pedidoId: { in: idsConVenta } },
+          orderBy: { id: "asc" },
+        });
+        const totalVentasAntes = await prisma.venta.count();
+
+        const { resultado: r, lineas } = await conLogs(() => vencidos({ horas: 24 }));
+
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.ok(r.body.cancelados.includes(viejo.pedido.id));
+        assert.ok(!r.body.cancelados.includes(confirmadoMp.pedido.id));
+        assert.ok(!r.body.cancelados.includes(confirmadoCe.pedido.id));
+        assert.equal(await estadoDe(viejo.pedido.id), "CANCELADO");
+        assert.equal(await ventasDe(viejo.pedido.id), 0);
+        assert.equal(await prisma.venta.count(), totalVentasAntes);
+        assert.deepEqual(
+          await prisma.venta.findMany({
+            where: { pedidoId: { in: idsConVenta } },
+            orderBy: { id: "asc" },
+          }),
+          ventasAntes
+        );
+        assert.ok(!lineas.some((l) => l.includes("VENTA_ANULADA")));
+      });
+    });
+  });
 });

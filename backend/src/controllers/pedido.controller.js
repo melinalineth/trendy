@@ -79,13 +79,14 @@ async function actualizarEstado(req, res) {
 /**
  * PATCH /api/v1/pedidos/:id/cancelar
  * Solo admin/vendedor (roleGuard): en el MVP el personal cancela a pedido del
- * cliente (ERS v1.2 §2.8.3; RF-033 es v2.0). Repone el stock una sola vez;
+ * cliente (ERS v1.2 §2.8.3; RF-033 es v2.0). Repone el stock una sola vez y,
+ * si el pedido era un contra entrega ya confirmado, anula su venta (RF-041);
  * repetirlo responde 200 con `yaCancelado: true`.
  */
 async function cancelar(req, res) {
   const id = validarPedidoIdParam(req.params.id);
 
-  const { pedido, yaCancelado } = await pedidoService.cancelarPedido(id);
+  const { pedido, yaCancelado } = await pedidoService.cancelarPedido(id, req.usuario);
 
   return res.status(200).json({
     mensaje: yaCancelado ? "El pedido ya estaba cancelado" : "Pedido cancelado correctamente",

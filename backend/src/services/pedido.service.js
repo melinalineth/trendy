@@ -72,11 +72,12 @@ class ProductoNoDisponibleError extends Error {
 // Cancelación rechazada: el pedido ya avanzó (confirmado, en envío...) o
 // tiene un Pago APROBADO (el reembolso es manual, fuera del sistema).
 class PedidoNoCancelableError extends Error {
-  constructor(message = "El pedido no se puede cancelar en su estado actual") {
+  constructor(message = "El pedido no se puede cancelar en su estado actual", detalles = null) {
     super(message);
     this.name = "PedidoNoCancelableError";
     this.status = 409;
     this.codigo = "PEDIDO_NO_CANCELABLE";
+    this.detalles = detalles;
   }
 }
 
@@ -502,10 +503,54 @@ async function crearPedido(usuarioId, { direccionId, metodoPago }) {
 const ROLES_PERSONAL = Object.freeze(["admin", "vendedor"]);
 const esPersonal = (usuario) => ROLES_PERSONAL.includes(usuario?.rol);
 
-// Estados desde los que se puede cancelar (el stock sigue reservado y no hubo
-// pago aprobado). PAGO_PENDIENTE / PAGO_RECHAZADO son legados del enum: el
-// flujo vigente no los produce, pero si existieran se cancelan igual.
+// Estados desde los que se puede cancelar CUALQUIER pedido (el stock sigue
+// reservado y no hubo pago aprobado). PAGO_PENDIENTE / PAGO_RECHAZADO son
+// legados del enum: el flujo vigente no los produce, pero si existieran se
+// cancelan igual.
 const ESTADOS_CANCELABLES = Object.freeze(["PENDIENTE", "PAGO_PENDIENTE", "PAGO_RECHAZADO"]);
+
+// Además, un pedido CONTRA_ENTREGA ya confirmado se puede cancelar mientras no
+// se haya entregado (caso típico: el cliente lo rechaza en la puerta). Decisión
+// de producto: "un pedido contra entrega se puede anular". ENTREGADO queda
+// fuera (ya se entregó y se cobró). Un pedido de MERCADO_PAGO confirmado NO se
+// cancela por esta vía: ya está pagado y el reembolso queda fuera de alcance
+// (docs/diseno/pedidos-estados.md §6). Estos son los mismos estados de
+// ESTADOS_QUE_CUENTAN de venta.service salvo ENTREGADO: cancelar uno de ellos
+// anula la venta.
+const ESTADOS_CANCELABLES_CONTRA_ENTREGA = Object.freeze([
+  "CONFIRMADO",
+  "EN_PREPARACION",
+  "ENVIADO",
+  "EN_TRANSITO",
+]);
+
+/**
+ * ¿Se puede cancelar un pedido en `estado` con ese método de pago? Función
+ * pura (sin mirar el Pago: el Pago APROBADO lo rechaza cancelarBajoLock aparte).
+ */
+function esCancelable(estado, metodoPago) {
+  return (
+    ESTADOS_CANCELABLES.includes(estado) ||
+    (metodoPago === "CONTRA_ENTREGA" && ESTADOS_CANCELABLES_CONTRA_ENTREGA.includes(estado))
+  );
+}
+
+// Mensaje de un 409 por estado no cancelable, según el motivo.
+function mensajeNoCancelable(estado, metodoPago) {
+  if (estado === "ENTREGADO") {
+    return "No se puede cancelar un pedido ya entregado";
+  }
+
+  if (metodoPago === "MERCADO_PAGO" && ventaService.ESTADOS_QUE_CUENTAN.includes(estado)) {
+    return (
+      `No se puede cancelar un pedido de Mercado Pago en estado ${estado}: ya está pagado y el ` +
+      "reembolso queda fuera del sistema (se gestiona manualmente)"
+    );
+  }
+
+  return `No se puede cancelar un pedido en estado ${estado}; solo se cancelan pedidos pendientes de pago ` +
+    "o pedidos contra entrega que todavía no se entregaron";
+}
 
 const MOTIVO_CANCELACION = "Pedido cancelado";
 const MOTIVO_VENCIMIENTO = "Pedido cancelado por vencimiento del pago";
@@ -526,9 +571,14 @@ function logEvento(evento) {
 // (PATCH /cancelar es admin/vendedor) y el proceso de vencidos.
 //   - vencimiento: { corte } para la cancelación de vencidos. Si al tomar el
 //     lock el pedido ya no cumple las condiciones (lo pagaron, lo cancelaron,
-//     cambió de estado) se OMITE en vez de fallar.
-// Devuelve { yaCancelado } o { omitido: true }.
-async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null }) {
+//     cambió de estado) se OMITE en vez de fallar. Vencidos solo cancela
+//     pedidos PENDIENTE, que nunca tuvieron venta: no toca ventas.
+//   - responsableId: quien cancela, para la anulación de la venta (RF-041).
+// Si el pedido estaba confirmado (contra entrega), su venta se ANULA en la
+// misma transacción; el InfoEnvio y su historial NO se tocan (quedan como
+// registro de lo ocurrido). Devuelve { yaCancelado, ventaAnulada } o
+// { omitido: true }.
+async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null, responsableId = null }) {
   const bloqueado = await pedidoRepository.bloquearPedido(pedidoId, tx);
 
   if (!bloqueado) {
@@ -556,14 +606,17 @@ async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null }) {
     // Dinero cobrado: no se cancela acá; el reembolso es manual.
     logEvento({ evento: "CANCELACION_RECHAZADA_CON_PAGO_APROBADO", pedidoId });
     throw new PedidoNoCancelableError(
-      "El pedido tiene un pago aprobado: no se puede cancelar desde el sistema (el reembolso se gestiona manualmente)"
+      "El pedido tiene un pago aprobado: no se puede cancelar desde el sistema (el reembolso se gestiona manualmente)",
+      { estado: bloqueado.estado, metodoPago: bloqueado.metodoPago, motivo: "PAGO_APROBADO" }
     );
   }
 
-  if (!ESTADOS_CANCELABLES.includes(bloqueado.estado)) {
-    throw new PedidoNoCancelableError(
-      `No se puede cancelar un pedido en estado ${bloqueado.estado}; solo se cancelan pedidos pendientes de pago`
-    );
+  if (!esCancelable(bloqueado.estado, bloqueado.metodoPago)) {
+    throw new PedidoNoCancelableError(mensajeNoCancelable(bloqueado.estado, bloqueado.metodoPago), {
+      estado: bloqueado.estado,
+      metodoPago: bloqueado.metodoPago,
+      motivo: "ESTADO_NO_CANCELABLE",
+    });
   }
 
   const lineas = await pedidoRepository.obtenerLineas(pedidoId, tx);
@@ -587,20 +640,45 @@ async function cancelarBajoLock(tx, pedidoId, { motivo, vencimiento = null }) {
     });
   }
 
-  return { yaCancelado: false };
+  // RF-041: un pedido confirmado tenía venta; se anula (nunca se borra) en esta
+  // misma transacción. Un pedido pendiente nunca tuvo venta: no se toca.
+  let ventaAnulada = false;
+  if (ventaService.ESTADOS_QUE_CUENTAN.includes(bloqueado.estado)) {
+    ({ anulada: ventaAnulada } = await ventaService.anularVentaDePedido(
+      pedidoId,
+      { responsableId },
+      tx
+    ));
+  }
+
+  return { yaCancelado: false, ventaAnulada };
 }
 
 /**
  * PATCH /api/v1/pedidos/:id/cancelar: SOLO admin y vendedor (ERS v1.2 §2.8.3
  * y matriz §4.1: en el MVP la cancelación la gestiona el personal a pedido
  * del cliente; RF-033, cancelación por el propio cliente, es v2.0). El rol lo
- * restringe roleGuard. Solo pedidos pendientes de pago y sin Pago APROBADO.
- * Repetirlo responde 200 { yaCancelado: true } sin reponer otra vez.
+ * restringe roleGuard. Se cancelan los pedidos pendientes de pago y, solo si son
+ * CONTRA_ENTREGA, los confirmados que todavía no se entregaron (CONFIRMADO,
+ * EN_PREPARACION, ENVIADO, EN_TRANSITO): repone el stock y ANULA la venta en la
+ * misma transacción. Nunca con un Pago APROBADO (409). Repetirlo responde 200
+ * { yaCancelado: true } sin reponer ni anular otra vez.
+ *
+ * `usuario` es quien cancela (admin o vendedor): queda en el log
+ * VENTA_ANULADA, porque la venta no guarda quién la anuló.
  */
-async function cancelarPedido(pedidoId) {
-  const { yaCancelado } = await enTransaccion("CANCELAR_PEDIDO", (tx) =>
-    cancelarBajoLock(tx, pedidoId, { motivo: MOTIVO_CANCELACION })
+async function cancelarPedido(pedidoId, usuario) {
+  const responsableId = usuario?.id === undefined ? null : Number(usuario.id);
+
+  const { yaCancelado, ventaAnulada } = await enTransaccion("CANCELAR_PEDIDO", (tx) =>
+    cancelarBajoLock(tx, pedidoId, { motivo: MOTIVO_CANCELACION, responsableId })
   );
+
+  // Recién con la transacción confirmada: un log antes del commit podría
+  // describir una anulación que después se revierte.
+  if (ventaAnulada) {
+    logEvento({ evento: "VENTA_ANULADA", pedidoId, responsableId });
+  }
 
   return {
     yaCancelado,
@@ -996,6 +1074,9 @@ module.exports = {
   TRANSICIONES_PEDIDO,
   cancelarPedido,
   cancelarPedidosVencidos,
+  esCancelable,
+  ESTADOS_CANCELABLES,
+  ESTADOS_CANCELABLES_CONTRA_ENTREGA,
   MARGEN_VENCIMIENTO_MS,
   esErrorReintentable,
   presentarPedido,
