@@ -282,10 +282,12 @@ enum EstadoEnvio {
 // COPIAN del pedido (historial, no se recalculan); productos, cantidades y
 // valores NO se duplican: salen de DetallePedido. pedidoId @unique es la
 // garantía a nivel de base de que una venta no se registra dos veces. Una
-// venta nunca se borra. ANULADA (con anuladaEn) es un estado RESERVADO: hoy
-// ningún pedido con venta puede cancelarse (solo se cancelan PENDIENTE y los
-// legados PAGO_PENDIENTE / PAGO_RECHAZADO), así que la tarjeta de anulación
-// define cuándo se usa.
+// venta nunca se borra: se ANULA (estado ANULADA con anuladaEn). Hoy la anula
+// la cancelación de un pedido CONTRA_ENTREGA ya confirmado (CONFIRMADO,
+// EN_PREPARACION, ENVIADO o EN_TRANSITO; pedido.service.cancelarPedido), en la
+// misma transacción que repone el stock. Un pedido de MERCADO_PAGO pagado no se
+// cancela (el reembolso está fuera de alcance). La venta no guarda quién la
+// anuló: responsableId es quien la REGISTRÓ.
 // responsableId es NULL cuando la dispara el webhook de Mercado Pago (sin
 // usuario) y guarda al admin/vendedor en un cambio manual de estado.
 // Decisión v1.0: admin y vendedores ven TODAS las ventas; las "ventas
