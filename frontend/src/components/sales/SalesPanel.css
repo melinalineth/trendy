@@ -171,3 +171,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* El Pagination común dibuja un botón por página y no hace wrap: con muchas
+   páginas se salía del panel. Wrap en la barra y scroll de respaldo. */
+  overflow-x: auto;
+}
+
+.sales-panel__paginacion .pagination {
+  flex-wrap: wrap;
+  justify-content: center;
