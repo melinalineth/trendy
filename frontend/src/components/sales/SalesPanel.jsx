@@ -269,6 +269,7 @@ export default function SalesPanel() {
       <Modal
         isOpen={Boolean(ventaSeleccionada)}
         onClose={() => setVentaSeleccionada(null)}
+        closeText="Cerrar"
         title={
           ventaSeleccionada
             ? `Venta #${ventaSeleccionada.id} — pedido ${ventaSeleccionada.numeroPedido ?? `#${ventaSeleccionada.pedidoId}`}`
