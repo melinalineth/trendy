@@ -139,7 +139,12 @@ export default function SalesPanel() {
       render: (venta) => (
         <Button
           className="sales-panel__btn--secundario"
-          text="Ver detalle"
+          text={
+            <>
+              Ver detalle
+              <span className="sales-panel__sr-only"> de la venta #{venta.id}</span>
+            </>
+          }
           onClick={() => setVentaSeleccionada(venta)}
         />
       ),

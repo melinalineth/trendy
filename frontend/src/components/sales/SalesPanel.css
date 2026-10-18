@@ -37,6 +37,26 @@
   margin: 0;
 }
 
+/* Texto solo para lectores de pantalla (nombre accesible único de cada botón
+   «Ver detalle»). Es absoluto, así que el botón es su bloque contenedor: si
+   no, se posiciona respecto de la página y, dentro de la tabla con scroll,
+   agranda el ancho del documento (scroll horizontal en móvil). */
+.sales-panel .btn {
+  position: relative;
+}
+
+.sales-panel__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Variante del Button común (.btn.<clase>: misma especificidad que
    .btn:disabled pero cargada después; disabled con opacidad para no sumar
    un gris nuevo). */
@@ -152,8 +172,16 @@
   font-size: var(--text-sm);
 }
 
+/* El Pagination común dibuja un botón por página y no hace wrap: con muchas
+   páginas se salía del panel. Wrap en la barra y scroll de respaldo. */
 .sales-panel__paginacion {
   display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.sales-panel__paginacion .pagination {
+  flex-wrap: wrap;
   justify-content: center;
 }
 
@@ -171,11 +199,3 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-/* El Pagination común dibuja un botón por página y no hace wrap: con muchas
-   páginas se salía del panel. Wrap en la barra y scroll de respaldo. */
-  overflow-x: auto;
-}
-
-.sales-panel__paginacion .pagination {
-  flex-wrap: wrap;
-  justify-content: center;
