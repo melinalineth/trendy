@@ -349,8 +349,8 @@ function ConfirmarDeshabilitarContraEntrega({
       <p className="zonas-form__resumen">
         ¿Deshabilitar el pago contra entrega en la zona{" "}
         <strong>{zona.nombre}</strong> ({zona.ciudad}, {zona.departamento})? Los
-        clientes con una dirección en esa ciudad ya no podrán elegirlo al pagar,
-        y los pedidos contra entrega de la zona que todavía no registraron su
+        clientes con una dirección en esa ciudad ya no podrán pagar así (el
+        sistema rechazará el pedido), y los pedidos contra entrega de la zona que todavía no registraron su
         pago tampoco podrán registrarlo. Se puede volver a habilitar en
         cualquier momento.
       </p>
