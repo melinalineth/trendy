@@ -69,6 +69,32 @@ const envioRepository = {
       data: { estadoEnvio },
     });
   },
+
+  /**
+   * Sprint 4 / RF-028 y RF-029: agrega una fila al historial de estados de
+   * envío (docs/diseno/info-envio.md §5). `estadoAnterior` es null en el alta.
+   * `client` es la transacción que cambia el InfoEnvio: el cambio y su fila
+   * confirman o revierten juntos.
+   */
+  async crearHistorial({ infoEnvioId, estadoAnterior, estadoNuevo, usuarioId }, client = prisma) {
+    return client.historialEstadoEnvio.create({
+      data: { infoEnvioId, estadoAnterior, estadoNuevo, usuarioId },
+    });
+  },
+
+  /**
+   * Historial de un InfoEnvio, cronológico: más antiguo primero y, si dos
+   * cambios comparten el instante (DATETIME(3)), por id (orden de inserción).
+   * Con `conUsuario` trae quién hizo cada cambio, SOLO id y nombre (nunca
+   * correo ni passwordHash).
+   */
+  async listarHistorial(infoEnvioId, { conUsuario = false } = {}, client = prisma) {
+    return client.historialEstadoEnvio.findMany({
+      where: { infoEnvioId },
+      orderBy: [{ creadoEn: "asc" }, { id: "asc" }],
+      ...(conUsuario ? { include: { usuario: { select: { id: true, nombre: true } } } } : {}),
+    });
+  },
 };
 
 module.exports = envioRepository;

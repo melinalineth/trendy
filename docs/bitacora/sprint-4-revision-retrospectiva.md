@@ -100,3 +100,7 @@ Cada PR de código pasó una revisión con contexto fresco antes de subirse (los
 ## Cierre de rama
 
 El merge de `sprint-4` a `main` va por Pull Request revisado (tarjeta "[Sprint 4 - 10]"). Antes de abrirlo conviene resolver los puntos 1 y 2 de "Deuda" o aceptarlos explícitamente como diferidos. Al mergear: `git tag sprint-4-done` y `git push origin sprint-4-done`.
+
+## Actualización 17/10/2026
+
+RF-028 y RF-029 quedaron cerrados con la tabla `HistorialEstadoEnvio` (historial de estados de envío con usuario, fecha y hora; ver `docs/diseno/info-envio.md` §5). Las menciones de "sin historial" de las secciones anteriores son la foto del momento de la revisión; el texto original no se modificó.
