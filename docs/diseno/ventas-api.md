@@ -64,6 +64,7 @@ Reglas de fechas:
       "estado": "REGISTRADA",
       "anuladaEn": null,
       "responsable": null,
+      "anuladaPor": null,
       "subtotal": 89900,
       "costoEnvio": 8000,
       "total": 97900,
@@ -97,9 +98,16 @@ Campos de cada venta:
   `Pedido.estado` actual.
 - `cliente`: solo `id` y `nombre` (nunca correo ni hash). `responsable`: `{ id, nombre }` del
   admin/vendedor que la registró, o `null` si la disparó el webhook de Mercado Pago.
-  **`cliente.nombre` y `responsable.nombre` son los VIVOS** (el nombre actual del usuario), no un
-  snapshot de cuando se registró la venta: si el usuario cambia su nombre, las ventas viejas muestran
-  el nuevo.
+  `anuladaPor`: `{ id, nombre }` del admin/vendedor que **ANULÓ** la venta (el que canceló el pedido
+  contra entrega ya confirmado; viene de `Venta.anuladaPorId`). Es una persona distinta de
+  `responsable` (quien la registró): una venta puede haberla registrado un admin y anulado un
+  vendedor, y cada dato se muestra por separado. Es `null` cuando la venta no está anulada (estado
+  `REGISTRADA`) y también cuando se anuló sin usuario o antes de que existiera el dato (ventas
+  anuladas legadas): una venta `ANULADA` con `anuladaPor: null` significa «quién la anuló no está
+  registrado». Igual que `cliente`, solo `id` y `nombre`.
+  **`cliente.nombre`, `responsable.nombre` y `anuladaPor.nombre` son los VIVOS** (el nombre actual del
+  usuario), no un snapshot de cuando se registró o se anuló la venta: si el usuario cambia su nombre,
+  las ventas viejas muestran el nuevo.
 - `subtotal`, `costoEnvio`, `total`: **números en pesos COP**, los montos **copiados** a la venta al
   registrarla (no se recalculan del pedido).
 - `productos`: una entrada por línea del pedido (`DetallePedido`), ordenadas por `id`.
