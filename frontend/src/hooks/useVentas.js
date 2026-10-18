@@ -147,6 +147,8 @@ export function useVentas() {
 
   const cambiarFiltro = useCallback((campo, valor) => {
     setFiltros((actuales) => ({ ...actuales, [campo]: valor }));
+    // Al corregir una fecha el aviso de rango deja de valer.
+    setErrorFiltros("");
   }, []);
 
   const aplicarFiltros = useCallback(() => {
