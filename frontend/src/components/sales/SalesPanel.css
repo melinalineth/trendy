@@ -1,113 +1,173 @@
+/* Consulta de ventas para admin y vendedor (RF-042). Mismo criterio visual que
+   OrdersPanel.css. */
 
 .sales-panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  max-width: var(--content-max-width);
   min-width: 0;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
 }
 
 .sales-panel__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.sales-panel__title {
-  margin: 0;
-  color: var(--color-text);
-  font-size: var(--text-xl);
-  font-weight: var(--font-weight-semibold);
-}
-
-.sales-panel__filters {
-  display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.sales-panel__field {
-  display: flex;
-  flex: 1 1 10rem;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.sales-panel__filter-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.sales-panel__summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
-.sales-panel__summary-card {
-  min-width: 0;
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+.sales-panel__header h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  color: var(--color-text);
 }
 
-.sales-panel__summary-card h3 {
-  margin: 0 0 var(--space-2);
+.sales-panel__header p {
+  margin: var(--space-1) 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
 }
 
-.sales-panel__summary-card p {
+.sales-panel .alert {
+  max-width: none;
   margin: 0;
+}
+
+/* Variante del Button común (.btn.<clase>: misma especificidad que
+   .btn:disabled pero cargada después; disabled con opacidad para no sumar
+   un gris nuevo). */
+.btn.sales-panel__btn--secundario {
+  background-color: var(--color-surface);
   color: var(--color-text);
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
+  border: 1px solid var(--color-border);
+}
+
+.btn.sales-panel__btn--secundario:hover {
+  background-color: var(--color-brand-50);
+}
+
+.btn.sales-panel__btn--secundario:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Filtros */
+
+.sales-panel__filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+.sales-panel__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.sales-panel__filtros-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sales-panel__error-campo {
+  margin: 0;
+  color: var(--color-danger-500);
+  font-size: var(--text-sm);
+}
+
+.sales-panel__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* Consolidado */
+
+.sales-panel__resumen {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.sales-panel__resumen-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+}
+
+.sales-panel__resumen-card dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sales-panel__resumen-card dd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
   overflow-wrap: anywhere;
 }
 
-.sales-panel__table {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
+.sales-panel__resumen-card strong {
+  font-size: var(--text-xl);
 }
 
-.sales-panel__pagination {
+/* Tabla */
+
+.sales-panel__muted {
+  display: block;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.sales-panel__count {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.sales-panel__paginacion {
   display: flex;
   justify-content: center;
-  padding-top: var(--space-2);
 }
 
-@media (max-width: 40rem) {
-  .sales-panel__filters {
+@media (max-width: 600px) {
+  .sales-panel {
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .sales-panel__header {
+    flex-direction: column;
     align-items: stretch;
   }
 
-  .sales-panel__field {
-    flex-basis: 100%;
-  }
-
-  .sales-panel__filter-actions {
-    width: 100%;
-  }
-
-  .sales-panel__filter-actions > * {
-    flex: 1;
-  }
-
-  .sales-panel__summary {
+  .sales-panel__resumen {
     grid-template-columns: minmax(0, 1fr);
   }
 }

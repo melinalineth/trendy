@@ -1,304 +1,234 @@
-
-import { useState } from "react";
-
-import { useVentas } from "../../hooks/useVentas";
-import Table from "../common/Table";
-import Pagination from "../common/Pagination";
-import Input from "../common/Input";
-import Select from "../common/Select";
-import Button from "../common/Button";
-import Badge from "../common/Badge";
 import Alert from "../common/Alert";
+import Badge from "../common/Badge";
+import Button from "../common/Button";
+import Input from "../common/Input";
 import Loading from "../common/Loading";
-
+import Pagination from "../common/Pagination";
+import Select from "../common/Select";
+import Table from "../common/Table";
+import { useVentas } from "../../hooks/useVentas";
+import {
+  etiquetaMetodoPago,
+  formatearFecha,
+  formatearPrecio,
+} from "../orders/pedidoEstados";
+import {
+  ESTADOS_VENTA,
+  badgeEstadoVenta,
+  etiquetaEstadoVenta,
+  textoVentas,
+} from "./ventaEstados";
 import "./SalesPanel.css";
 
-const ESTADOS = [
-  { value: "TODAS", label: "Todos los estados" },
-  { value: "REGISTRADA", label: "Registrada" },
-  { value: "ANULADA", label: "Anulada" },
+// Valor del Select común para "sin filtro": su opción de placeholder está
+// deshabilitada y con value "", así que no sirve para volver a "todas".
+const TODAS = "TODAS";
+
+const OPCIONES_ESTADO = [
+  { value: TODAS, label: "Todos los estados" },
+  ...ESTADOS_VENTA.map((estado) => ({
+    value: estado,
+    label: etiquetaEstadoVenta(estado),
+  })),
 ];
 
-const formatearMoneda = (valor) =>
-  Number(valor ?? 0).toLocaleString("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  });
+function nombreCliente(venta) {
+  return venta.cliente?.nombre || "—";
+}
 
-const formatearFecha = (fecha) => {
-  if (!fecha) return "—";
-
-  const fechaValida = new Date(fecha);
-
-  if (Number.isNaN(fechaValida.getTime())) return "—";
-
-  return fechaValida.toLocaleString("es-CO", {
-    timeZone: "America/Bogota",
-  });
-};
-
-const obtenerNombreCliente = (venta) => {
-  const cliente = venta.cliente ?? venta.usuario;
-
-  if (typeof cliente === "string") return cliente;
-
+// Tarjeta del consolidado: cantidad y total de las ventas de un estado.
+function TarjetaResumen({ titulo, resumen }) {
   return (
-    cliente?.nombreCompleto ??
-    cliente?.nombre ??
-    cliente?.nombreUsuario ??
-    "—"
+    <div className="sales-panel__resumen-card">
+      <dt>{titulo}</dt>
+      <dd>
+        <strong>{formatearPrecio(resumen?.total)}</strong>
+        <span className="sales-panel__muted">
+          {textoVentas(resumen?.cantidad ?? 0)}
+        </span>
+      </dd>
+    </div>
   );
-};
+}
 
-const obtenerMetodoPago = (metodo) => {
-  const metodos = {
-    MERCADO_PAGO: "Mercado Pago",
-    CONTRA_ENTREGA: "Contra entrega",
-  };
-
-  return metodos[metodo] ?? metodo ?? "—";
-};
-
-const obtenerNumeroPedido = (venta) =>
-  venta.numeroPedido ??
-  venta.pedido?.numero ??
-  venta.pedido?.numeroPedido ??
-  venta.pedidoId ??
-  "—";
-
-const obtenerTotales = (totales) => {
-  if (!totales) return null;
-
-  return {
-    registradas: {
-      cantidad:
-        totales.registradas?.cantidad ??
-        totales.registradas?.count ??
-        totales.cantidadRegistradas ??
-        0,
-      total:
-        totales.registradas?.total ??
-        totales.totalRegistradas ??
-        0,
-    },
-    anuladas: {
-      cantidad:
-        totales.anuladas?.cantidad ??
-        totales.anuladas?.count ??
-        totales.cantidadAnuladas ??
-        0,
-      total:
-        totales.anuladas?.total ??
-        totales.totalAnuladas ??
-        0,
-    },
-  };
-};
-
-function SalesPanel() {
-  const [filtros, setFiltros] = useState({
-    desde: "",
-    hasta: "",
-    estado: "TODAS",
-  });
-
-  const [filtrosAplicados, setFiltrosAplicados] = useState({
-    limite: 50,
-  });
-
+// Consulta de ventas compartida por /admin/ventas y /vendedor/ventas
+// (RF-042): listado con filtros por fecha y estado, consolidado y paginación.
+// En v1.0 admin y vendedor ven TODAS las ventas; las «ventas asignadas» a cada
+// vendedor quedan para una versión posterior.
+export default function SalesPanel() {
   const {
-    ventas = [],
-    paginacion = { pagina: 1, totalPaginas: 1 },
+    filtros,
+    cambiarFiltro,
+    aplicarFiltros,
+    limpiarFiltros,
+    errorFiltros,
+    ventas,
+    paginacion,
+    totales,
+    pagina,
     cambiarPagina,
     loading,
     error,
-    totales,
-  } = useVentas(filtrosAplicados);
+    recargar,
+  } = useVentas();
 
-  const aplicarFiltros = (event) => {
+  function filtrar(event) {
     event.preventDefault();
+    aplicarFiltros();
+  }
 
-    setFiltrosAplicados({
-      ...(filtros.desde && { desde: filtros.desde }),
-      ...(filtros.hasta && { hasta: filtros.hasta }),
-      ...(filtros.estado !== "TODAS" && { estado: filtros.estado }),
-      limite: 50,
-      pagina: 1,
-    });
-  };
-
-  const limpiarFiltros = () => {
-    setFiltros({
-      desde: "",
-      hasta: "",
-      estado: "TODAS",
-    });
-
-    setFiltrosAplicados({
-      limite: 50,
-      pagina: 1,
-    });
-  };
-
-  const resumen = obtenerTotales(totales);
-
-  const columns = [
+  const columnas = [
     {
       key: "fecha",
       label: "Fecha",
-      render: (venta) => formatearFecha(venta.fecha ?? venta.creadoEn),
+      render: (venta) => formatearFecha(venta.fecha),
     },
     {
-      key: "pedido",
-      label: "Número de pedido",
-      render: (venta) => obtenerNumeroPedido(venta),
+      key: "numeroPedido",
+      label: "N.º pedido",
+      render: (venta) => venta.numeroPedido ?? `#${venta.pedidoId}`,
     },
     {
       key: "cliente",
       label: "Cliente",
-      render: (venta) => obtenerNombreCliente(venta),
+      render: (venta) => nombreCliente(venta),
     },
     {
       key: "metodoPago",
-      label: "Método de pago",
-      render: (venta) => obtenerMetodoPago(venta.metodoPago),
+      label: "Pago",
+      render: (venta) => etiquetaMetodoPago(venta.metodoPago),
     },
     {
       key: "total",
       label: "Total",
-      render: (venta) => formatearMoneda(venta.total),
+      render: (venta) => formatearPrecio(venta.total),
     },
     {
       key: "estado",
       label: "Estado",
       render: (venta) => (
-        <Badge type={venta.estado === "REGISTRADA" ? "success" : "warning"}>
-          {venta.estado}
-        </Badge>
-      ),
-    },
-    {
-      key: "acciones",
-      label: "Acciones",
-      render: () => (
-        <Button type="button" disabled>
-          Ver detalle
-        </Button>
+        <Badge
+          text={etiquetaEstadoVenta(venta.estado)}
+          type={badgeEstadoVenta(venta.estado)}
+        />
       ),
     },
   ];
 
+  const totalPaginas = paginacion?.totalPaginas ?? 0;
+  const mostrarTabla = !loading && (!error || ventas.length > 0);
+  const mostrarResumen = !loading && !error && totales;
+
   return (
     <section className="sales-panel">
       <header className="sales-panel__header">
-        <h2 className="sales-panel__title">Ventas</h2>
+        <div>
+          <h1>Ventas</h1>
+          <p>Consultá las ventas y filtralas por fecha y estado.</p>
+        </div>
+
+        <Button
+          className="sales-panel__btn--secundario"
+          text={loading ? "Cargando..." : "Actualizar"}
+          onClick={recargar}
+          disabled={loading}
+        />
       </header>
 
-      <form className="sales-panel__filters" onSubmit={aplicarFiltros}>
-        <label className="sales-panel__field">
-          <span>Desde</span>
+      <form
+        className="sales-panel__filtros"
+        onSubmit={filtrar}
+        noValidate
+        aria-label="Filtros de ventas"
+      >
+        <label className="sales-panel__campo">
+          Desde
           <Input
             type="date"
+            name="desde"
             value={filtros.desde}
-            onChange={(event) =>
-              setFiltros((actuales) => ({
-                ...actuales,
-                desde: event?.target?.value ?? event,
-              }))
-            }
+            onChange={(e) => cambiarFiltro("desde", e.target.value)}
           />
         </label>
 
-        <label className="sales-panel__field">
-          <span>Hasta</span>
+        <label className="sales-panel__campo">
+          Hasta
           <Input
             type="date"
+            name="hasta"
             value={filtros.hasta}
-            onChange={(event) =>
-              setFiltros((actuales) => ({
-                ...actuales,
-                hasta: event?.target?.value ?? event,
-              }))
-            }
+            onChange={(e) => cambiarFiltro("hasta", e.target.value)}
           />
         </label>
 
-        <label className="sales-panel__field">
-          <span>Estado</span>
-          <Select
-            value={filtros.estado}
-            options={ESTADOS}
-            onChange={(event) =>
-              setFiltros((actuales) => ({
-                ...actuales,
-                estado: event?.target?.value ?? event,
-              }))
-            }
-          />
-        </label>
+        <Select
+          label="Estado"
+          name="estado"
+          value={filtros.estado || TODAS}
+          onChange={(e) =>
+            cambiarFiltro("estado", e.target.value === TODAS ? "" : e.target.value)
+          }
+          options={OPCIONES_ESTADO}
+        />
 
-        <div className="sales-panel__filter-actions">
-          <Button type="submit">Aplicar</Button>
-          <Button type="button" variant="secondary" onClick={limpiarFiltros}>
-            Limpiar
-          </Button>
+        <div className="sales-panel__filtros-acciones">
+          <Button type="submit" text="Filtrar" disabled={loading} />
+          <Button
+            className="sales-panel__btn--secundario"
+            text="Limpiar filtros"
+            onClick={limpiarFiltros}
+            disabled={loading}
+          />
         </div>
       </form>
 
-      {resumen && (
-        <div className="sales-panel__summary">
-          <article className="sales-panel__summary-card">
-            <h3>Ventas registradas</h3>
-            <p>
-              {resumen.registradas.cantidad} ·{" "}
-              {formatearMoneda(resumen.registradas.total)}
-            </p>
-          </article>
+      {errorFiltros && (
+        <p role="alert" className="sales-panel__error-campo">
+          {errorFiltros}
+        </p>
+      )}
 
-          <article className="sales-panel__summary-card">
-            <h3>Anuladas</h3>
-            <p>
-              {resumen.anuladas.cantidad} ·{" "}
-              {formatearMoneda(resumen.anuladas.total)}
-            </p>
-          </article>
+      {error && !loading && (
+        <div role="alert" className="sales-panel__error">
+          <Alert type="error" message={error} />
+          <Button text="Reintentar" onClick={recargar} />
         </div>
       )}
 
-      {error && (
-        <Alert type="error">
-          {typeof error === "string"
-            ? error
-            : error.message ?? "No fue posible cargar las ventas."}
-        </Alert>
+      {loading && <Loading text="Cargando ventas..." />}
+
+      {mostrarResumen && (
+        <section aria-label="Resumen de ventas">
+          <dl className="sales-panel__resumen">
+            <TarjetaResumen titulo="Ventas registradas" resumen={totales.registradas} />
+            <TarjetaResumen titulo="Ventas anuladas" resumen={totales.anuladas} />
+          </dl>
+        </section>
       )}
 
-      {loading ? (
-        <Loading />
-      ) : (
+      {mostrarTabla && (
         <>
-          <div className="sales-panel__table">
-            <Table
-              columns={columns}
-              data={ventas}
-              emptyMessage="No hay ventas para los filtros seleccionados."
-            />
-          </div>
+          <Table
+            columns={columnas}
+            rows={ventas}
+            emptyMessage="No hay ventas para los filtros seleccionados."
+          />
 
-          {paginacion.totalPaginas > 1 && (
-            <div className="sales-panel__pagination">
+          <p className="sales-panel__count">
+            Ventas encontradas: {paginacion?.total ?? ventas.length}
+          </p>
+
+          {totalPaginas > 1 && (
+            <nav className="sales-panel__paginacion" aria-label="Páginas de ventas">
               <Pagination
-                currentPage={paginacion.pagina}
-                totalPages={paginacion.totalPaginas}
+                currentPage={pagina}
+                totalPages={totalPaginas}
                 onPageChange={cambiarPagina}
               />
-            </div>
+            </nav>
           )}
         </>
       )}
     </section>
   );
 }
-
-export default SalesPanel;
