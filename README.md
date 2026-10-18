@@ -95,12 +95,16 @@ DOTENV_CONFIG_QUIET=true node --require dotenv/config --test --test-concurrency=
 
 - `--test-concurrency=1` es obligatorio: todos los archivos comparten la misma base. Es lo que
   hace `npm test`.
-- `--require dotenv/config` hace falta si dependes del `.env`: algunos tests no cargan dotenv por su
-  cuenta y `config/prisma.js` necesita `DATABASE_URL` para armar el adaptador (sin ella fallan con
+- `--require dotenv/config` hace falta si dependes del `.env`: el único `require("dotenv")` de
+  `tests/` está en `tests/helpers/entorno.js`. Los archivos que importan `config/prisma` (directo o
+  por un service) **sin pasar por ese helper** —por ejemplo `montos.test.js`— no cargan el `.env`, y
+  `config/prisma.js` necesita `DATABASE_URL` para armar el adaptador (sin ella fallan con
   `Cannot read properties of undefined`). Una variable exportada en el shell tiene prioridad sobre
   el `.env`, así que `export DATABASE_URL=...` más `npm test` también funciona.
 - Para un solo archivo: `... --test --test-concurrency=1 tests/venta.consulta.http.test.js`.
-- `tests/health.http.test.js` y varios tests unitarios no necesitan base.
+- `tests/health.http.test.js` y varios tests unitarios no necesitan una **base** viva, pero sí
+  `node_modules` (`npm ci`) y el cliente de Prisma generado
+  (`npx prisma generate --config prisma7.config.ts`).
 
 El frontend no tiene tests automáticos; se valida con `npm run lint` y revisión manual.
 
@@ -145,12 +149,16 @@ Reglas que conviene conocer (detalle en `docs/diseno/`):
 ## Staging con Docker Compose
 
 ```bash
-cp staging.env.example .env.staging        # editar los CAMBIAR
-docker compose -p trendy-staging --env-file .env.staging up -d --build
-node scripts/smoke-staging.js
+cp staging.env.example .env.staging        # 1. copiar la plantilla
+# 2. GENERAR secretos propios y reemplazar todos los «changeme-...» en .env.staging:
+#    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+docker compose -p trendy-staging --env-file .env.staging up -d --build   # 3. levantar
+SMOKE_ADMIN_PASSWORD=<tu SEED_ADMIN_PASSWORD> node scripts/smoke-staging.js
 ```
 
-Guía completa, problemas frecuentes y limitaciones: [docs/despliegue/staging.md](docs/despliegue/staging.md).
+El backend **no arranca** con los valores de ejemplo (`changeme...`), nginx escucha solo en
+`127.0.0.1` y el smoke test exige la contraseña del admin por entorno. Guía completa, problemas
+frecuentes y limitaciones: [docs/despliegue/staging.md](docs/despliegue/staging.md).
 
 ## Estado del proyecto
 
@@ -159,7 +167,8 @@ Verificado:
 - Revisión y QA manual de los Sprints 1, 3 y 4 (ver `docs/bitacora/`).
 - Sprint 5: registro y consulta de ventas, anulación con `anuladaPorId` (la API todavía no lo expone).
 - El staging local levanta desde cero (migraciones + seed + admin) y el smoke test pasa con compra
-  contra entrega, venta registrada, cancelación y venta anulada.
+  contra entrega, venta registrada, cancelación y venta anulada (verificado en corridas locales con
+  Docker Desktop; no es una garantía para otros entornos).
 
 No verificado / pendiente:
 
