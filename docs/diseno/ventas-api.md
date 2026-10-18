@@ -37,6 +37,9 @@ Todos los parámetros son opcionales. Cualquier otro nombre se rechaza.
 Reglas de fechas:
 
 - Deben existir en el calendario (`2027-02-29` es inválida; `2028-02-29` es válida).
+- El **año** debe estar entre **2000 y 2100** (ambos inclusive); fuera de ese rango (por ejemplo
+  `9999-12-31`, `0100-01-01` o `1999-12-31`) es un 400. `desde=2000-01-01` y `hasta=2100-12-31` son
+  válidos. Los instantes se calculan con `Date.UTC` (medianoche de Bogotá = 05:00Z), no con texto.
 - `desde` > `hasta` es error. Con ambas, el rango máximo es **366 días inclusivos** (del `2028-01-01`
   al `2028-12-31` hay 366). Con una sola fecha no hay tope.
 - **Zona horaria:** las fechas son días de Bogotá (UTC-5 todo el año, sin horario de verano), no
@@ -53,7 +56,7 @@ Reglas de fechas:
     {
       "id": 12,
       "pedidoId": 340,
-      "numeroPedido": "TRD-20261031-AB12",
+      "numeroPedido": "PED-17619521234561234",
       "estadoPedido": "CONFIRMADO",
       "fecha": "2026-11-01T04:30:00.000Z",
       "cliente": { "id": 7, "nombre": "Ana Pérez" },
@@ -89,9 +92,14 @@ Reglas de fechas:
 Campos de cada venta:
 
 - `fecha`: `registradaEn` en ISO UTC. `anuladaEn`: ISO UTC o `null`.
-- `numeroPedido`: `Pedido.numero`; `estadoPedido`: `Pedido.estado` actual.
+- `numeroPedido`: `Pedido.numero`, con el formato real `PED-<timestamp en ms><4 dígitos>` (lo genera
+  `pedido.repository.generarNumero`); el valor del ejemplo es ilustrativo. `estadoPedido`:
+  `Pedido.estado` actual.
 - `cliente`: solo `id` y `nombre` (nunca correo ni hash). `responsable`: `{ id, nombre }` del
   admin/vendedor que la registró, o `null` si la disparó el webhook de Mercado Pago.
+  **`cliente.nombre` y `responsable.nombre` son los VIVOS** (el nombre actual del usuario), no un
+  snapshot de cuando se registró la venta: si el usuario cambia su nombre, las ventas viejas muestran
+  el nuevo.
 - `subtotal`, `costoEnvio`, `total`: **números en pesos COP**, los montos **copiados** a la venta al
   registrarla (no se recalculan del pedido).
 - `productos`: una entrada por línea del pedido (`DetallePedido`), ordenadas por `id`.
