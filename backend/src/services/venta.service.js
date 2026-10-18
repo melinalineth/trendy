@@ -153,10 +153,111 @@ async function anularVentaDePedido(pedidoId, { responsableId = null } = {}, tx) 
   return { anulada: anuladas > 0 };
 }
 
+// ---------------------------------------------------------------------------
+// --- Consulta (RF-042) ---
+// ---------------------------------------------------------------------------
+// Presentación del contrato de GET /api/v1/ventas (docs/diseno/ventas-api.md).
+
+// Montos: SIEMPRE por centavos enteros, nunca multiplicando floats. Se parsea
+// el TEXTO del Decimal (aCentavos) y se divide al final: "0.10" x 3 = 30
+// centavos exactos. aCentavos vive en utils/montos.js (módulo hoja): no se
+// importa pedido.service porque éste importa este módulo y se crearía un ciclo.
+const { aCentavos: centavosDeDecimal } = require("../utils/montos");
+
+// Centavos enteros -> pesos como número JSON (exacto con dos decimales).
+const pesos = (centavos) => centavos / 100;
+
+const pesosDeDecimal = (valor) => pesos(centavosDeDecimal(valor));
+
+// Una línea del pedido. Precio y subtotal son los HISTÓRICOS de DetallePedido
+// (RN-008). El texto (producto, sku, talla, color) sale de la variante y el
+// producto actuales: DetallePedido no guarda una copia de esos textos.
+function presentarProducto(detalle) {
+  const { variante } = detalle;
+
+  return {
+    id: detalle.id,
+    producto: variante.producto.nombre,
+    sku: variante.sku,
+    talla: variante.talla,
+    color: variante.color,
+    cantidad: detalle.cantidad,
+    precioUnitario: pesosDeDecimal(detalle.precioUnitario),
+    subtotal: pesos(centavosDeDecimal(detalle.precioUnitario) * detalle.cantidad),
+  };
+}
+
+function presentarVenta(venta) {
+  return {
+    id: venta.id,
+    pedidoId: venta.pedidoId,
+    numeroPedido: venta.pedido.numero,
+    estadoPedido: venta.pedido.estado,
+    fecha: venta.registradaEn.toISOString(),
+    cliente: { id: venta.cliente.id, nombre: venta.cliente.nombre },
+    metodoPago: venta.metodoPago,
+    estado: venta.estado,
+    anuladaEn: venta.anuladaEn ? venta.anuladaEn.toISOString() : null,
+    responsable: venta.responsable
+      ? { id: venta.responsable.id, nombre: venta.responsable.nombre }
+      : null,
+    // Montos copiados al registrar la venta (no se recalculan del pedido).
+    subtotal: pesosDeDecimal(venta.subtotal),
+    costoEnvio: pesosDeDecimal(venta.costoEnvio),
+    total: pesosDeDecimal(venta.total),
+    productos: venta.pedido.detalles.map(presentarProducto),
+  };
+}
+
+const presentarTotal = ({ cantidad, total }) => ({
+  cantidad,
+  total: pesosDeDecimal(total),
+});
+
+/**
+ * Consulta de ventas (RF-042) para admin y vendedor: en v1.0 AMBOS ven TODAS las
+ * ventas y los totales (las "ventas asignadas" a un vendedor quedan para una
+ * versión posterior). El rol lo restringe la ruta (roleGuard), no este service.
+ *
+ * `filtros` son los ya validados por validarFiltrosVentas: { desde?,
+ * hastaExclusivo?, estado?, pagina, limite }.
+ *
+ * `totales` cubre TODAS las ventas del rango desde/hasta (no solo la página) e
+ * IGNORA `estado`: las tarjetas «Registradas» y «Anuladas» siempre muestran el
+ * consolidado del período.
+ */
+async function consultar(filtros) {
+  const { desde, hastaExclusivo, estado, pagina, limite } = filtros;
+  const rango = { desde, hastaExclusivo };
+
+  const [filas, total, totales] = await Promise.all([
+    ventaRepository.listar({ ...rango, estado, skip: (pagina - 1) * limite, take: limite }),
+    ventaRepository.contar({ ...rango, estado }),
+    ventaRepository.totalesPorEstado(rango),
+  ]);
+
+  return {
+    ventas: filas.map(presentarVenta),
+    paginacion: {
+      pagina,
+      limite,
+      total,
+      totalPaginas: Math.max(1, Math.ceil(total / limite)),
+    },
+    totales: {
+      registradas: presentarTotal(totales.REGISTRADA),
+      anuladas: presentarTotal(totales.ANULADA),
+    },
+  };
+}
+
+// --- Fin Consulta (RF-042) ---
+
 module.exports = {
   ESTADOS_QUE_CUENTAN,
   registrarVentaDePedido,
   anularVentaDePedido,
   PedidoNoEncontradoError,
   PedidoNoConfirmadoError,
+  consultar,
 };
