@@ -177,6 +177,11 @@ describe("DTO de filtros de ventas (RF-042)", () => {
       assert.equal(validarFiltrosVentas({ limite: "1" }).limite, 1);
     });
 
+    it("el borde superior de pagina: 100000 se acepta y 100001 se rechaza", () => {
+      assert.equal(validarFiltrosVentas({ pagina: "100000" }).pagina, 100000);
+      assertFiltrosInvalidos({ pagina: "100001" }, /pagina debe estar entre 1 y 100000/);
+    });
+
     it("rechaza pagina fuera de rango o no entera", () => {
       for (const valor of ["0", "-1", "1.5", "abc", "", "1e2", " 2", "100001"]) {
         assertFiltrosInvalidos({ pagina: valor }, /pagina/);
@@ -198,11 +203,25 @@ describe("DTO de filtros de ventas (RF-042)", () => {
 
     it("rechaza un parámetro repetido (llega como arreglo)", () => {
       for (const campo of ["desde", "hasta", "estado", "pagina", "limite"]) {
-        assertFiltrosInvalidos({ [campo]: ["1", "2"] }, new RegExp(campo));
+        const error = assertFiltrosInvalidos({ [campo]: ["1", "2"] }, /no puede repetirse/);
+        assert.match(error.detalles.join(" | "), new RegExp(`parámetro ${campo} no puede repetirse`));
+        // Informado una sola vez (no se vuelve a validar el arreglo como valor).
+        assert.equal(error.detalles.length, 1, JSON.stringify(error.detalles));
       }
     });
 
-    it("rechaza valores que no son texto (objetos de la query anidada)", () => {
+    // Express 5 usa el query parser "simple": `?estado[a]=x` NO llega como un
+    // objeto anidado sino como la clave literal "estado[a]", que es un
+    // parámetro desconocido.
+    it("rechaza la sintaxis anidada de la query (?estado[a]=x) como parámetro desconocido", () => {
+      const error = assertFiltrosInvalidos({ "estado[a]": "x" }, /Parámetros no permitidos/);
+      assert.match(error.detalles.join(" | "), /estado\[a\]/);
+      assertFiltrosInvalidos({ "pagina[0]": "1" }, /pagina\[0\]/);
+    });
+
+    // Defensa en profundidad: con otro parser (extended) sí podrían llegar
+    // objetos; el DTO los rechaza igual en vez de coercionarlos a texto.
+    it("rechaza valores que no son texto (objetos, por si cambia el query parser)", () => {
       assertFiltrosInvalidos({ estado: { a: "ANULADA" } }, /estado/);
       assertFiltrosInvalidos({ pagina: { a: "1" } }, /pagina/);
       assertFiltrosInvalidos({ desde: { a: "2026-01-01" } }, /desde/);

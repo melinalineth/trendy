@@ -325,7 +325,8 @@ describe("GET /api/v1/ventas (RF-042)", () => {
       ["parámetro desconocido", "?usuarioId=3", /usuarioId/],
       ["valor vacío", "?desde=", /desde/],
       ["estado vacío", "?estado=", /estado/],
-      ["parámetro repetido", "?pagina=1&pagina=2", /pagina/],
+      ["parámetro repetido", "?pagina=1&pagina=2", /pagina no puede repetirse/],
+      ["sintaxis anidada de la query", "?estado[a]=x", /estado\[a\]/],
     ];
 
     for (const [nombre, query, patron] of casos) {

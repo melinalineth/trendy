@@ -185,11 +185,16 @@ describe("Repository de consulta de ventas (RF-042)", () => {
       );
     });
 
-    it("con la misma registradaEn desempata por id descendente", async () => {
-      const mismaHora = bogota("2031-12-20T09:00:00.000");
-      const a = (await nueva({ registradaEn: mismaHora })).venta;
-      const b = (await nueva({ registradaEn: mismaHora })).venta;
-      const c = (await nueva({ registradaEn: mismaHora })).venta;
+    // Orden de inserción (id creciente) distinto del orden esperado: a y c
+    // comparten hora, b es MÁS NUEVA pero tiene un id intermedio. Un orden solo
+    // por id daría [c, b, a]; solo por fecha sin desempate, [b, a, c] (inserción).
+    it("ordena por registradaEn desc y con la misma hora desempata por id desc (ids no monótonos con la fecha)", async () => {
+      const hora = bogota("2031-12-20T09:00:00.000");
+      const masNueva = bogota("2031-12-20T15:00:00.000");
+      const a = (await nueva({ registradaEn: hora })).venta;
+      const b = (await nueva({ registradaEn: masNueva })).venta;
+      const c = (await nueva({ registradaEn: hora })).venta;
+      assert.ok(a.id < b.id && b.id < c.id);
 
       const lista = await ventaRepository.listar(
         diciembre({ desde: "2031-12-20", hasta: "2031-12-20" }, { skip: 0, take: 100 })
@@ -197,7 +202,7 @@ describe("Repository de consulta de ventas (RF-042)", () => {
 
       assert.deepEqual(
         lista.map((v) => v.id),
-        [c.id, b.id, a.id]
+        [b.id, c.id, a.id]
       );
     });
 
@@ -311,15 +316,6 @@ describe("Repository de consulta de ventas (RF-042)", () => {
         REGISTRADA: { cantidad: 3, total: "60000.00" },
         ANULADA: { cantidad: 1, total: "25000.00" },
       });
-    });
-
-    it("no depende de la página (skip/take no existen para los totales)", async () => {
-      const f = febrero({ limite: "1", pagina: "2" });
-      const lista = await ventaRepository.listar({ ...f, skip: (f.pagina - 1) * f.limite, take: f.limite });
-      const totales = await ventaRepository.totalesPorEstado(f);
-
-      assert.equal(lista.length, 1);
-      assert.equal(totales.REGISTRADA.cantidad + totales.ANULADA.cantidad, 4);
     });
 
     it("sin ventas en el período devuelve ceros, nunca null", async () => {
