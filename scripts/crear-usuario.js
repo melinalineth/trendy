@@ -46,6 +46,25 @@ La contraseña se lee solo de la variable de entorno NUEVO_USUARIO_PASSWORD
 (mínimo ${LARGO_MINIMO_PASSWORD} caracteres, sin empezar por «${PREFIJO_PROHIBIDO}»).
 Si el correo ya existe no se modifica nada y se informa su rol.`;
 
+// Error propio del script (argumentos, validación, entorno): su mensaje ya es el
+// definitivo y se muestra completo, sin pasar por resumirError (que existe solo
+// para recortar los errores largos de Prisma y del driver).
+class ErrorDeUso extends Error {}
+
+// Carga un módulo desde backend/node_modules; si faltan las dependencias, lo dice.
+function cargarDelBackend(modulo) {
+  try {
+    return requireBackend(modulo);
+  } catch (error) {
+    if (error?.code === "MODULE_NOT_FOUND") {
+      throw new ErrorDeUso(
+        `No se pudo cargar «${modulo}» del backend: faltan dependencias. Corré «npm ci» dentro de backend/ y volvé a intentar.`,
+      );
+    }
+    throw error;
+  }
+}
+
 function fallar(mensaje) {
   console.error(`Error: ${mensaje}`);
   process.exitCode = 1;
@@ -56,6 +75,17 @@ function sinSecretos(texto, secretos) {
   return secretos
     .filter((secreto) => typeof secreto === "string" && secreto.length > 0)
     .reduce((acumulado, secreto) => acumulado.split(secreto).join("***"), texto);
+}
+
+// La contraseña que viaja dentro de DATABASE_URL (tal cual y decodificada), para
+// poder enmascararla aunque un error repita solo ese fragmento de la URL.
+function passwordsDeLaUrl(url) {
+  try {
+    const { password } = new URL(url);
+    return password ? [password, decodeURIComponent(password)] : [];
+  } catch {
+    return [];
+  }
 }
 
 function leerArgumentos() {
@@ -71,42 +101,44 @@ function leerArgumentos() {
       allowPositionals: false,
     }).values;
   } catch (error) {
-    throw new Error(`${error.message}\n\n${AYUDA}`);
+    throw new ErrorDeUso(`${error.message}\n\n${AYUDA}`);
   }
 }
 
 function validar({ correo, nombre, rol }, password) {
-  const { loginSchema } = requireBackend("./src/dtos/auth.dto");
+  if (!correo || !correo.trim()) throw new ErrorDeUso("Falta --correo.");
+  if (!nombre || !nombre.trim()) throw new ErrorDeUso("Falta --nombre.");
+  if (!rol) throw new ErrorDeUso("Falta --rol (admin, vendedor o cliente).");
 
-  if (!correo || !correo.trim()) throw new Error("Falta --correo.");
-  if (!nombre || !nombre.trim()) throw new Error("Falta --nombre.");
-  if (!rol) throw new Error("Falta --rol (admin, vendedor o cliente).");
+  if (!ROLES_VALIDOS.includes(rol)) {
+    throw new ErrorDeUso(
+      `El rol «${rol}» no es válido. Usá: ${ROLES_VALIDOS.join(", ")}.`,
+    );
+  }
 
   const correoLimpio = correo.trim();
 
   // Mismo criterio de correo que el login y el seed (zod .email()).
-  if (!loginSchema.shape.correo.safeParse(correoLimpio).success) {
-    throw new Error("El correo no tiene formato de correo válido.");
-  }
+  const { loginSchema } = cargarDelBackend("./src/dtos/auth.dto");
 
-  if (!ROLES_VALIDOS.includes(rol)) {
-    throw new Error(`El rol «${rol}» no es válido. Usá: ${ROLES_VALIDOS.join(", ")}.`);
+  if (!loginSchema.shape.correo.safeParse(correoLimpio).success) {
+    throw new ErrorDeUso("El correo no tiene formato de correo válido.");
   }
 
   if (password === undefined || password === "") {
-    throw new Error(
+    throw new ErrorDeUso(
       "Falta la contraseña: definí la variable de entorno NUEVO_USUARIO_PASSWORD (no se acepta por argumento).",
     );
   }
 
   if (password.length < LARGO_MINIMO_PASSWORD) {
-    throw new Error(
+    throw new ErrorDeUso(
       `La contraseña debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`,
     );
   }
 
   if (password.toLowerCase().startsWith(PREFIJO_PROHIBIDO)) {
-    throw new Error(
+    throw new ErrorDeUso(
       `La contraseña no puede empezar por «${PREFIJO_PROHIBIDO}»: es el valor de ejemplo de las plantillas.`,
     );
   }
@@ -126,16 +158,16 @@ async function main() {
   const datos = validar(argumentos, password);
 
   // Carga backend/.env en este proceso. No pisa variables ya definidas en el shell.
-  requireBackend("dotenv").config({ path: path.join(BACKEND, ".env"), quiet: true });
+  cargarDelBackend("dotenv").config({ path: path.join(BACKEND, ".env"), quiet: true });
 
   if (!process.env.DATABASE_URL) {
-    throw new Error(
+    throw new ErrorDeUso(
       "DATABASE_URL no está definida: completá backend/.env (o exportala en el shell).",
     );
   }
 
-  const prisma = requireBackend("./src/config/prisma");
-  const { hashPassword } = requireBackend("./src/utils/hash");
+  const prisma = cargarDelBackend("./src/config/prisma");
+  const { hashPassword } = cargarDelBackend("./src/utils/hash");
 
   try {
     const existente = await prisma.usuario.findUnique({
@@ -153,7 +185,7 @@ async function main() {
     const rol = await prisma.rol.findUnique({ where: { nombre: datos.rol } });
 
     if (!rol) {
-      throw new Error(
+      throw new ErrorDeUso(
         `El rol «${datos.rol}» no existe en la base. Corré antes el seed: npx prisma db seed --config prisma7.config.ts (desde backend/).`,
       );
     }
@@ -208,7 +240,19 @@ function resumirError(error) {
 }
 
 main().catch((error) => {
-  const secretos = [process.env.NUEVO_USUARIO_PASSWORD, process.env.DATABASE_URL];
+  // Los errores propios (argumentos, validación, entorno) se muestran completos y
+  // no llevan secretos. Solo los de Prisma o del driver se recortan y se enmascaran.
+  if (error instanceof ErrorDeUso) {
+    fallar(error.message);
+    return;
+  }
+
+  const url = process.env.DATABASE_URL;
+  const secretos = [
+    process.env.NUEVO_USUARIO_PASSWORD,
+    url,
+    ...(url ? passwordsDeLaUrl(url) : []),
+  ];
   // Nunca se muestran la contraseña ni la URL de la base, aunque el error las repita.
   fallar(sinSecretos(resumirError(error), secretos));
 });
