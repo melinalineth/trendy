@@ -350,9 +350,10 @@ function ConfirmarDeshabilitarContraEntrega({
         ¿Deshabilitar el pago contra entrega en la zona{" "}
         <strong>{zona.nombre}</strong> ({zona.ciudad}, {zona.departamento})? Los
         clientes con una dirección en esa ciudad ya no podrán pagar así (el
-        sistema rechazará el pedido), y los pedidos contra entrega de la zona que todavía no registraron su
-        pago tampoco podrán registrarlo. Se puede volver a habilitar en
-        cualquier momento.
+        sistema rechazará el pedido). Los pedidos contra entrega de la zona que
+        todavía no registraron su pago no podrán registrarlo: quedarán
+        pendientes, reteniendo su stock, hasta que alguien los cancele a mano.
+        Se puede volver a habilitar en cualquier momento.
       </p>
 
       <div className="zonas-form__acciones">
@@ -496,7 +497,13 @@ function ZonasCobertura() {
       label: "Contra entrega",
       render: (zona) =>
         zona.permiteContraEntrega === true ? (
-          <Badge text="Habilitado" type="success" />
+          // Una zona inactiva no entra en el cálculo de cobertura: aunque esté
+          // marcada, no se puede comprar con contra entrega en ella.
+          zona.estado === "ACTIVO" ? (
+            <Badge text="Habilitado" type="success" />
+          ) : (
+            <Badge text="Habilitado (zona inactiva)" type="warning" />
+          )
         ) : (
           <Badge text="No habilitado" type="warning" />
         ),
@@ -529,7 +536,11 @@ function ZonasCobertura() {
                   ? "Habilitando..."
                   : "Habilitar contra entrega"
               }
-              ariaLabel={`Habilitar contra entrega en la zona ${zona.nombre}`}
+              ariaLabel={
+                habilitandoId === zona.id
+                  ? undefined
+                  : `Habilitar contra entrega en la zona ${zona.nombre}`
+              }
               onClick={() => handleHabilitarContraEntrega(zona)}
               disabled={procesando}
             />
