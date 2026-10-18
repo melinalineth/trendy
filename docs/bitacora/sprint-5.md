@@ -50,7 +50,8 @@ reescribir.
   atribución: con `SET NULL`, borrar al responsable modificaría la venta en silencio.
 - `responsableId` es `NULL` cuando la venta la dispara el webhook de Mercado Pago (no hay usuario) y
   guarda al admin o vendedor en un cambio manual de estado.
-- **`ANULADA` es un estado reservado, hoy sin productor.** En el flujo vigente ningún pedido con
+- **`ANULADA` es un estado reservado, hoy sin productor** (_actualización: desde la sesión 2 lo
+  produce la cancelación de un contra entrega confirmado_). En el flujo vigente ningún pedido con
   venta puede cancelarse: la cancelación solo admite `PENDIENTE` y los legados `PAGO_PENDIENTE` /
   `PAGO_RECHAZADO` (`docs/diseno/pedidos-estados.md` §6), y la venta nace al confirmarse. Cuándo y
   cómo se anula una venta lo define la tarjeta de anulación. Decisión abierta que la condiciona: un
@@ -131,3 +132,100 @@ La lista coincide con la de la tarjeta; se contrastó con el enum `EstadoPedido`
 - Rendimiento de los índices con datos reales (se verificó que existen, no su uso).
 - Pedidos legacy con centavos (`docs/diseno/montos-cop.md`): se copian tal cual a la venta; la regla
   de enteros aplica al pago, no al historial.
+
+---
+
+# Sesión 2: registro y anulación de ventas (RF-041)
+
+## Fecha
+17/10/2026
+
+## Tarjetas
+[Sprint 5 - 02] [01] Repository de ventas, [02] Service de ventas, [03] Registrar la venta al
+aprobarse el pago de Mercado Pago, [04] Registrar y anular la venta al cambiar el estado del pedido
+(con su nota del 17/10), y [Sprint 5 - 04] [02] Tests del registro de ventas.
+
+Las tarjetas se escribieron antes del código real de Sprint 4: se tomaron como guía y cuando
+contradecían al código ganó el código (rutas de archivos, firmas, `git checkout sprint-5`, que se
+ignoró).
+
+## Trabajo realizado
+
+- **Repository** (`venta.repository.js`): se trajo con `cherry-pick` el trabajo de Valentina Ortiz
+  (conserva su autoría) y se ajustó en un commit aparte (ver "Defecto corregido").
+- **Service** (`venta.service.js`): `registrarVentaDePedido(pedidoId, { responsableId }, tx)` y
+  `anularVentaDePedido(pedidoId, { responsableId }, tx)`. Idempotentes; errores con
+  `status`/`codigo`/`detalles` (`PEDIDO_NO_ENCONTRADO` 404, `PEDIDO_NO_CONFIRMADO` 409).
+- **Webhook de Mercado Pago** (`pago.service.procesarWebhook`): al aprobarse el pago, la venta se
+  registra en la misma transacción que confirma el pedido, con `responsableId` NULL.
+- **Cambio manual** (`pedido.service.actualizarEstado`): toda transición a `CONFIRMADO` registra la
+  venta con el admin/vendedor que la hace, en la misma transacción y bajo el lock existente.
+- **Anulación** (`pedido.service.cancelarPedido`, ahora `cancelarPedido(pedidoId, usuario)`; el
+  controller pasa `req.usuario`): el personal puede cancelar un pedido **contra entrega**
+  confirmado. Repone el stock y anula la venta en la misma transacción. Detalle y tabla de estados
+  en `docs/diseno/pedidos-estados.md` §6 y §9.
+- **Tests**: `venta.repository.test.js` (16), `venta.service.test.js` (29) y
+  `venta.registro.http.test.js` (35).
+
+## Decisiones
+
+- **La venta nace con el pedido confirmado, no con el `Pago` aprobado** (la tarjeta 02 pedía
+  dejarlo registrado). Con Mercado Pago es el mismo instante; con contra entrega, cuando el
+  personal confirma el pedido, aunque el cobro se registre después con `confirmar-recepcion`.
+- **Decisión de producto (del usuario): un pedido contra entrega se puede anular.** Lo siguiente lo
+  decidió el desarrollo **dentro de ese marco** y el equipo puede ajustarlo:
+  - **Desde qué estados:** `CONFIRMADO`, `EN_PREPARACION`, `ENVIADO` y `EN_TRANSITO`; no desde
+    `ENTREGADO`. Se cambia en `ESTADOS_CANCELABLES_CONTRA_ENTREGA` (`pedido.service.js`).
+  - **Mercado Pago excluido:** un pedido de Mercado Pago ya pagado no se cancela por esta vía (409
+    `PEDIDO_NO_CANCELABLE`, con el motivo del reembolso en el mensaje). El reembolso sigue fuera de
+    alcance. Tampoco se cancela un contra entrega con `Pago` `APROBADO` (regla vigente de §7).
+  - **Quién:** admin y vendedor (ERS 2.8.3); el cliente sigue con 403.
+- **`TRANSICIONES_PEDIDO` no cambió.** `CANCELADO` no se fija por `PATCH /estado` (regla vigente);
+  la ampliación está en `ESTADOS_CANCELABLES` / `ESTADOS_CANCELABLES_CONTRA_ENTREGA` / `esCancelable`.
+- **`InfoEnvio` y su historial no se tocan al cancelar**: quedan como registro de lo ocurrido. Un
+  pedido `CANCELADO` puede mostrar `estadoEnvio: ENVIADO`; el frontend debe priorizar `estadoPedido`.
+- **Quién anuló la venta**: `Venta.responsableId` es quien la **registró** y no se pisa; el modelo no
+  tiene un campo "anulada por" y no se agregó una migración. Queda en el log JSON `VENTA_ANULADA`,
+  que se escribe después de confirmar la transacción. Por eso `anularVentaDePedido` acepta
+  `responsableId` pero no lo persiste.
+- **Solo `CONFIRMADO` registra la venta en `PATCH /estado`** (no toda transición a un estado de
+  `ESTADOS_QUE_CUENTAN`, como decía la tarjeta 02-04). Registrar al avanzar atribuiría al usuario
+  equivocado una venta confirmada por otro. A cambio queda un hueco (ver "No se verificó").
+- **Cancelar vencidos no cambia**: solo cancela `PENDIENTE`, que nunca tuvo venta (test incluido).
+
+## Defecto corregido en el repository de Ortiz
+
+Se dejó su lógica y se corrigió una sola cosa, con test que fallaba antes: dentro de una transacción
+InnoDB (REPEATABLE READ) una lectura común devuelve la **foto** de la primera lectura. Con
+`findUnique`, `obtenerPedidoParaVenta` podía leer un estado viejo del pedido, y la relectura tras un
+`P2002` (la que la tarjeta 02-02 da por válida "dentro del mismo tx") no veía la venta que otro
+acababa de confirmar y habría propagado el error. Ahora `obtenerPedidoParaVenta` lee con
+`SELECT ... FOR UPDATE` (re-tomar el lock del pedido ya tomado no cuesta nada) y `buscarPorPedido`
+acepta `{ bloquear: true }` para la relectura. Además: cabecera de documentación y `responsableId`
+con default `null`.
+
+## Verificación
+
+- `prisma validate` y `prisma migrate status` ("al día", 8 migraciones, base scratch). No hay
+  cambios de esquema ni migraciones nuevas.
+- Suite completa dos veces: **651 tests, 0 fallos** (571 de base + 80 nuevos).
+- Mutaciones temporales (revertidas, no commiteadas) para comprobar que los tests detectan el
+  defecto: (1) relectura del `P2002` sin lock -> falla el test de foto vieja; (2) `esUniqueDePedido`
+  siempre `false` -> fallan 3 tests de concurrencia; (3) registro de la venta fuera de la
+  transacción en `PATCH /estado` -> falla el test de atomicidad; (4) error del registro atrapado en
+  el webhook -> falla el test de atomicidad del webhook; (5) anulación de la venta fuera de la
+  transacción de cancelación -> falla el test de atomicidad de la cancelación.
+
+## No se verificó
+
+- **Mercado Pago real**: el SDK está mockeado (como en el resto de los tests); falta la prueba en
+  sandbox (tarjeta [Sprint 5 - 07] [04]).
+- **Pedidos confirmados sin venta** (confirmados entre la migración y este servicio, o datos
+  cargados a mano): al avanzar de estado no la obtienen; habría que registrarla con un script
+  puntual (ver `pedidos-estados.md` §9).
+- **Carga real**: la concurrencia se probó con 4 a 6 solicitudes simultáneas, no bajo carga.
+- **Reposición desde `ENVIADO` / `EN_TRANSITO`**: se asume que la mercadería vuelve; es una
+  decisión de negocio sin confirmar.
+- **Frontend**: nada de esto se mostró en pantalla; el consumo de `estadoPedido: CANCELADO` con
+  `estadoEnvio` distinto de `EN_PREPARACION` queda para la tarjeta de frontend.
+- Endpoints de consulta de ventas (`GET /api/v1/ventas`): son el siguiente PR.

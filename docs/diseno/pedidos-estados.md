@@ -15,9 +15,13 @@ RN-002, RN-003, RN-006, RN-008, RN-009; DDS v1.2 §3 (MOD-05/06/07), §5.2 y §5
 - **Invariante:** mientras el pedido está en `EN_PREPARACION`, `ENVIADO`, `EN_TRANSITO` o
   `ENTREGADO`, `InfoEnvio.estadoEnvio` vale exactamente lo mismo. Los dos se escriben en la **misma
   transacción**, con el lock de la fila del pedido tomado (`SELECT ... FOR UPDATE`).
-- Antes de eso (`PENDIENTE`, `CONFIRMADO`...) o si el pedido se cancela, `estadoEnvio` queda en
-  `EN_PREPARACION` (el valor de alta) y **no significa que se esté preparando**: el frontend debe
-  mostrar `estadoPedido` hasta que el pedido entre en preparación (el seguimiento devuelve ambos).
+- Antes de eso (`PENDIENTE`, `CONFIRMADO`...) `estadoEnvio` queda en `EN_PREPARACION` (el valor
+  de alta) y **no significa que se esté preparando**: el frontend debe mostrar `estadoPedido` hasta
+  que el pedido entre en preparación (el seguimiento devuelve ambos).
+- **Si el pedido se cancela, `InfoEnvio` y su historial no se tocan**: quedan como registro de lo
+  ocurrido. Un contra entrega cancelado en `ENVIADO` queda con `estadoPedido: CANCELADO` y
+  `estadoEnvio: ENVIADO` (la invariante de arriba rige solo mientras el pedido sigue en
+  `EN_PREPARACION`..`ENTREGADO`). El frontend debe mostrar `estadoPedido` cuando es `CANCELADO`.
 
 ## 2. Diagrama
 
@@ -32,6 +36,10 @@ stateDiagram-v2
     EN_PREPARACION --> ENVIADO
     ENVIADO --> EN_TRANSITO
     EN_TRANSITO --> ENTREGADO
+    CONFIRMADO --> CANCELADO: /cancelar, solo contra entrega (repone stock, anula la venta)
+    EN_PREPARACION --> CANCELADO: ídem
+    ENVIADO --> CANCELADO: ídem
+    EN_TRANSITO --> CANCELADO: ídem
     ENTREGADO --> [*]
     CANCELADO --> [*]
 ```
@@ -60,11 +68,18 @@ Reglas:
 1. Lineal y hacia adelante: sin saltos (`CONFIRMADO -> ENVIADO`), sin retrocesos y sin repetir el
    mismo estado (mismo criterio que `TRANSICIONES_ENVIO`, ver `info-envio.md` §3).
 2. `CANCELADO` **no** se fija por `/estado`: solo por `PATCH /api/v1/pedidos/:id/cancelar`, que
-   repone el stock.
+   repone el stock (y, en un pedido confirmado, anula la venta: ver §6). Por eso la tabla de arriba
+   no tiene columna `CANCELADO` y `TRANSICIONES_PEDIDO` no cambió; las cancelaciones permitidas
+   están en `ESTADOS_CANCELABLES` y `ESTADOS_CANCELABLES_CONTRA_ENTREGA` (§6).
 3. `PENDIENTE` y los estados de pago (`PAGO_APROBADO`, `PAGO_RECHAZADO`, `PAGO_PENDIENTE`) **no** se
    fijan a mano: los maneja `pago.service`.
 4. Pasar a un estado de envío actualiza `InfoEnvio` en la misma transacción (con
    `validarTransicionEstado` de `envio.service`). Sin `InfoEnvio` -> 409 `ENVIO_NO_REGISTRADO`.
+5. **Toda** transición a `CONFIRMADO` registra la venta del pedido (RF-041, ver §6): `PENDIENTE ->
+   CONFIRMADO` de un contra entrega y la salida del estado legado `PAGO_APROBADO`, con
+   `responsableId` = el admin o vendedor que la hace, en la misma transacción y bajo el mismo lock
+   que el cambio de estado. Si el registro falla, el estado no cambia. Las transiciones posteriores
+   (`EN_PREPARACION`...) no tocan la venta.
 
 Errores: estado fuera del enum -> 400 `VALIDACION_FALLIDA`; transición no permitida -> 409
 `TRANSICION_ESTADO_INVALIDA`; pedido inexistente -> 404 `PEDIDO_NO_ENCONTRADO`.
@@ -125,7 +140,50 @@ qué plazo, qué pasa con el pago) antes de la puesta en producción.
 - Cancelar repone el stock **una sola vez**: la idempotencia sale del estado leído bajo el lock del
   pedido (un pedido ya `CANCELADO` responde 200 `yaCancelado: true` sin reponer), porque
   `reponerPorPedido` no es idempotente.
-- Solo se cancelan pedidos `PENDIENTE` (o los legados `PAGO_PENDIENTE` / `PAGO_RECHAZADO`).
+- Se cancelan los pedidos `PENDIENTE` (o los legados `PAGO_PENDIENTE` / `PAGO_RECHAZADO`) y,
+  **solo si son `CONTRA_ENTREGA`**, los confirmados que todavía no se entregaron (ver abajo).
+
+### Cancelación de un contra entrega confirmado y venta (RF-041)
+
+Regla de producto: **un pedido contra entrega se puede anular** (caso típico: el cliente lo rechaza
+en la puerta). Lo hace el personal con `PATCH /api/v1/pedidos/:id/cancelar` (el cliente sigue sin
+poder cancelar: 403, ERS §2.8.3).
+
+| Pedido | Estado | ¿Se cancela? |
+| --- | --- | --- |
+| cualquiera | `PENDIENTE`, `PAGO_PENDIENTE`, `PAGO_RECHAZADO` | Sí (como antes) |
+| `CONTRA_ENTREGA` | `CONFIRMADO`, `EN_PREPARACION`, `ENVIADO`, `EN_TRANSITO` | Sí |
+| `CONTRA_ENTREGA` | `ENTREGADO` | No: 409 `PEDIDO_NO_CANCELABLE` |
+| `MERCADO_PAGO` | `PAGO_APROBADO`, `CONFIRMADO`..`ENTREGADO` (ya pagado) | No: 409 `PEDIDO_NO_CANCELABLE`, el mensaje explica que el reembolso queda fuera del sistema |
+| cualquiera con `Pago` `APROBADO` | cualquiera | No: 409 (§7) |
+
+Al cancelar, en **una sola transacción** y bajo el lock del pedido:
+
+1. el pedido pasa a `CANCELADO`;
+2. el `Pago` contra entrega `PENDIENTE` pasa a `CANCELADO` (como ya se hacía);
+3. se **repone el stock** con `reponerPorPedido` (una sola vez: la idempotencia sale del estado
+   leído bajo el lock; repetir la cancelación responde 200 `yaCancelado: true`). En `ENVIADO` y
+   `EN_TRANSITO` se asume que la mercadería vuelve al depósito;
+4. la **venta** pasa de `REGISTRADA` a `ANULADA` con `anuladaEn` (`anularVentaDePedido`): la fila
+   no se borra ni se reescribe (montos, cliente y `responsableId`, que es quien la **registró**, se
+   conservan). `Venta` no guarda quién la anuló: eso queda en el log JSON `VENTA_ANULADA`
+   (`{ evento, pedidoId, responsableId }`), que se escribe recién con la transacción confirmada.
+
+Si algo falla (p. ej. la anulación de la venta), se revierte todo: el pedido sigue como estaba.
+**`InfoEnvio` y su historial no se tocan** (ver §1). Un pedido cancelado ya no se puede avanzar
+(`PATCH /estado` y `PUT /estado-envio` responden 409) ni reconfirmar, así que su venta no revive.
+
+**La venta nace con el pedido confirmado, no con el pago:**
+
+- Mercado Pago: el webhook `approved` confirma el pedido y registra la venta (`responsableId`
+  NULL) en la misma transacción. Un webhook repetido o un pago duplicado no crean una segunda
+  venta, y un `approved` sobre un pedido `CANCELADO` (`PAGO_APROBADO_SOBRE_PEDIDO_CANCELADO`) no
+  registra ninguna.
+- Contra entrega: la venta aparece cuando el personal confirma el pedido (`PATCH /estado`), aunque
+  el cobro se registre después con `confirmar-recepcion`.
+- `registrarVentaDePedido` es idempotente (RN-009): una venta por pedido (`pedidoId @unique`).
+
+Cancelar vencidos (§8) solo cancela pedidos `PENDIENTE`, que nunca tuvieron venta: no toca ventas.
 
 ## 7. Invariantes de pago
 
@@ -179,14 +237,33 @@ endpoint periódicamente con un token de admin.
   - los pedidos `CONTRA_ENTREGA` nunca vencen;
   - un contra entrega sin `Pago` registrado no se puede confirmar a mano (queda `PENDIENTE` hasta
     que el personal lo cancele);
-  - un contra entrega `CONFIRMADO` que el cliente rechaza en la entrega no se puede cancelar (solo
-    se cancelan pedidos pendientes de pago);
+  - ~~un contra entrega `CONFIRMADO` que el cliente rechaza en la entrega no se puede cancelar~~:
+    **resuelto** (§6): el personal lo cancela, se repone el stock y se anula la venta;
   - no hay tope de pedidos `PENDIENTE` por cliente;
   - no hay scheduler: si nadie invoca `/vencidos/cancelar`, tampoco vencen los de Mercado Pago.
 
   Propuestas: tope de pedidos pendientes por cliente; vencimiento para contra entrega sin
-  confirmar; cancelación por el personal de un contra entrega `CONFIRMADO` (rechazado en la
-  entrega) con reposición de stock.
+  confirmar.
+- **Anulación de pedidos contra entrega confirmados (RF-041): decisiones.** La regla "un pedido
+  contra entrega se puede anular" es una decisión de producto. Lo que sigue lo decidió el
+  desarrollo **dentro de ese marco** y el equipo puede ajustarlo:
+  - **Desde qué estados:** `CONFIRMADO`, `EN_PREPARACION`, `ENVIADO` y `EN_TRANSITO`; no desde
+    `ENTREGADO`. Cambiarlo es editar `ESTADOS_CANCELABLES_CONTRA_ENTREGA` en `pedido.service.js`.
+  - **Mercado Pago excluido:** un pedido de Mercado Pago ya pagado no se cancela por esta vía
+    (409). Anularlo exige un reembolso, que sigue siendo manual y fuera de alcance. Un contra
+    entrega cuyo cobro ya se confirmó (`Pago` `APROBADO`) tampoco se cancela (§7).
+  - **Quién:** admin y vendedor, como el resto de la cancelación.
+  - **Reposición de stock** también desde `ENVIADO` y `EN_TRANSITO` (se asume que la mercadería
+    vuelve). Si el negocio prefiere revisar el producto devuelto antes de reponerlo, habría que
+    separar la anulación de la reposición.
+  - **`InfoEnvio` e historial intactos** al cancelar: un pedido `CANCELADO` puede tener
+    `estadoEnvio: ENVIADO`. El seguimiento devuelve ambos y el frontend debe priorizar
+    `estadoPedido`.
+  - **Quién anuló la venta** solo queda en el log `VENTA_ANULADA` (no hay campo en `Venta`;
+    agregarlo requeriría una migración).
+  - **Hueco conocido:** solo la transición a `CONFIRMADO` registra la venta. Un pedido que ya
+    estuviera confirmado sin venta (p. ej. confirmado entre la migración y el servicio) no la
+    obtiene al avanzar a `EN_PREPARACION`; habría que registrarla con un script puntual.
 - **Momento del descuento de stock**: se descuenta al **crear** el pedido, lo que se desvía del
   DDS §7.2 (descuento al aprobar el pago, paso 13). Es coherente con `pago.service` (el webhook no
   descuenta) y con la política vigente "un rechazo de pago no repone stock": el stock queda
