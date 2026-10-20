@@ -2,10 +2,13 @@
  * Design tokens de Trendy.
  *
  * Los valores salen de los 4 mapas de pantalla en docs/ (Posibles pantallas
- * trendy.png, Mapa_de_pantallas_usuario_{cliente,vendedor,admin}.png), leídos
- * a ojo sobre la imagen — no son un hex exacto sacado con cuentagotas del
- * archivo de diseño original (Figma/similar), así que si el equipo tiene esa
- * fuente, ajustá estos valores contra ella antes de darlos por definitivos.
+ * trendy.png, Mapa_de_pantallas_usuario_{cliente,vendedor,admin}.png). El
+ * magenta de marca (--color-brand-500), el morado ciruela (--color-plum-*) y el
+ * azul pizarra del sidebar (--color-navy-800) se midieron sobre los PNG, con la
+ * mediana de un parche de 5x5 píxeles; el resto se leyó a ojo. Son imágenes
+ * generadas, no un hex exacto del archivo de diseño original (Figma/similar),
+ * así que si el equipo tiene esa fuente, ajustá estos valores contra ella antes
+ * de darlos por definitivos.
  *
  * Ningún componente debe escribir un color/tamaño/radio "a mano" — siempre
  * un var(--token). Así, cambiar el rosa de marca es tocar UNA línea acá, no
@@ -21,9 +24,9 @@
   --color-brand-50: #fdf2f8;
   --color-brand-100: #fce7f3;
   --color-brand-300: #f472b6;
-  --color-brand-500: #ec1876;
-  --color-brand-600: #d4126a;
-  --color-brand-700: #b30f58;
+  --color-brand-500: #e0197f; /* medido en los botones de los mapas (#e0197f / #de197b) */
+  --color-brand-600: #c51670; /* mismo matiz y saturación, con el escalón de luz de antes */
+  --color-brand-700: #a5125d;
 
   /* ---- Morado ciruela del logo y los títulos de los mapas de pantalla
          (medido con un parche de píxeles sobre el PNG: #3e265b en el mapa del
@@ -31,10 +34,12 @@
   --color-plum-800: #3e265b;
   --color-plum-900: #362150;
 
-  /* ---- Superficie oscura (sidebar de admin/vendedor) ---- */
-  --color-navy-900: #1e1b33;
-  --color-navy-800: #26223f;
-  --color-navy-700: #322c53;
+  /* ---- Superficie oscura (sidebar de admin/vendedor): azul pizarra.
+         El 800 es el medido en el sidebar del mapa del admin (#22283a); el 900 y
+         el 700 son el mismo matiz con menos y más luz. ---- */
+  --color-navy-900: #191e2b;
+  --color-navy-800: #22283a;
+  --color-navy-700: #303952;
 
   /* ---- Estado (badges: Activo/Enviado, Pendiente/Procesando, Pagado, Inactivo) ---- */
   --color-success-500: #22c55e;
@@ -111,11 +116,12 @@
 
   /* Sombras CON color (a diferencia de --shadow-* de arriba, que son
      neutras): ring de foco de inputs/botones y el "glow" del item activo
-     del sidebar. rgb(236,24,118) es --color-brand-500 en rgb — no se puede
+     del sidebar. rgb(224,25,127) es --color-brand-500 en rgb — no se puede
      interpolar un var() dentro de rgba(), por eso el rgb queda repetido acá
-     en vez de compuesto desde --color-brand-500. */
-  --shadow-focus-brand: 0 0 0 3px rgba(236, 24, 118, 0.15);
-  --shadow-glow-brand: 0 5px 15px rgba(236, 24, 118, 0.25);
+     en vez de compuesto desde --color-brand-500: si cambiás el magenta,
+     cambialo también en estas dos líneas. */
+  --shadow-focus-brand: 0 0 0 3px rgba(224, 25, 127, 0.15);
+  --shadow-glow-brand: 0 5px 15px rgba(224, 25, 127, 0.25);
 
   --overlay-scrim: rgba(0, 0, 0, 0.5);
 
