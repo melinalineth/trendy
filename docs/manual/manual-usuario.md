@@ -43,7 +43,7 @@ administrador), a pedido del cliente.
 **Trendy todavía no tiene un menú de navegación.** El encabezado es el mismo en todas las pantallas y
 solo trae lo siguiente:
 
-- El título **Mi aplicación** (es un texto provisional) y una barra **Buscar productos...** con una
+- El título **Trendy** y una barra **Buscar productos...** con una
   lupa. Esa barra del encabezado **no filtra nada**: para buscar usá el catálogo (ver
   [4.2](#42-catálogo-buscar-y-filtrar)).
 - Un botón con el ícono de una persona que **no hace nada** por ahora.
@@ -795,7 +795,7 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 **Pantallas y navegación**
 
 - **No hay menú de navegación ni botón para cerrar sesión**, y la página de inicio está vacía (ver
-  sección 2). El título del encabezado («Mi aplicación») es provisional.
+  sección 2).
 - El **historial del envío no se dibuja** en la pantalla del cliente: el sistema ya lo guarda y lo
   entrega, pero solo se ve el paso actual.
 - El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa y el ícono de persona del

@@ -4,7 +4,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useCarritoContador } from "../../hooks/useCarritoContador";
 import "./Header.css";
 
-const Header = ({ title = "Mi aplicación", subtitle }) => {
+const Header = ({ title = "Trendy", subtitle }) => {
   const { usuario, isAuthenticated } = useAuth();
   const cantidadCarrito = useCarritoContador();
 
