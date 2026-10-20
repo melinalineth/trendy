@@ -10,8 +10,10 @@
  * Ningún componente debe escribir un color/tamaño/radio "a mano" — siempre
  * un var(--token). Así, cambiar el rosa de marca es tocar UNA línea acá, no
  * cazar hex sueltos por 30 archivos .css (que es exactamente el problema que
- * tiene hoy el proyecto: Button.css usa #4caf50 verde Material, Header.css
- * usa un degradé azul — ninguno de los dos existe en el diseño real).
+ * tuvo el proyecto: Button.css usaba #4caf50 verde Material y Header.css un
+ * degradé azul — ninguno de los dos existe en el diseño real; el Header ya
+ * usa tokens, y queda algún hex suelto, como el gris deshabilitado de
+ * Button.css).
  */
 
 :root {
@@ -22,6 +24,12 @@
   --color-brand-500: #ec1876;
   --color-brand-600: #d4126a;
   --color-brand-700: #b30f58;
+
+  /* ---- Morado ciruela del logo y los títulos de los mapas de pantalla
+         (medido con un parche de píxeles sobre el PNG: #3e265b en el mapa del
+         cliente, #362150 en el del admin) ---- */
+  --color-plum-800: #3e265b;
+  --color-plum-900: #362150;
 
   /* ---- Superficie oscura (sidebar de admin/vendedor) ---- */
   --color-navy-900: #1e1b33;
