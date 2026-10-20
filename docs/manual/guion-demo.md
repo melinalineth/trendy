@@ -321,7 +321,7 @@ Texto sugerido (leelo con tus palabras):
   - *Punto 16:* `GET /ventas` se pide dos veces por carga en desarrollo (modo estricto de React); no
     ocurre en producción. Si alguien abre las herramientas del navegador, explicalo así.
 - **Otros detalles que encontró el ensayo** (no están en la bitácora; conviene conocerlos):
-  - La página de inicio (`/`) está vacía y el título del encabezado dice «Mi aplicación». Después de
+  - La página de inicio (`/`) está vacía. Después de
     iniciar sesión siempre llegás ahí: pasá directo a las pestañas preparadas.
   - **No hay botón de cerrar sesión** ni menú: por eso las tres ventanas. El ícono de persona, la
     lupa del encabezado y el corazón y el carrito de las tarjetas del catálogo no hacen nada: no los toques.
