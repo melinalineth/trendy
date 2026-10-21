@@ -81,6 +81,10 @@ la página de inicio sin ningún aviso. Si
 entrás a una pantalla de cliente o de personal sin haber iniciado sesión, te lleva a **Iniciar
 sesión**.
 
+Si escribís una dirección que no existe (por ejemplo `/algo` o `/productos`, sin número), Trendy muestra
+la pantalla **No encontramos esta página** debajo del encabezado, con dos botones: **Ir al inicio** y
+**Ver el catálogo**. Esa pantalla sale igual con o sin sesión iniciada.
+
 **La página de inicio (`/`) está vacía:** solo muestra el título «Trendy». Después de iniciar sesión
 siempre llegás ahí; desde ahí seguí por las direcciones de la tabla.
 
@@ -745,6 +749,7 @@ particulares se leyeron en el código y no se reprodujeron en pantalla.
 | No me llega el correo de recuperación | Hoy Trendy no envía correos; en la consola del servidor sale solo un código. Pedíselo a quien administra el sistema: el enlace es `<dirección del sitio>/restablecer-password/<código>`. |
 | **El enlace es inválido o ya venció. Solicitá uno nuevo desde 'Recuperar contraseña'.** | El enlace venció (30 minutos), ya se usó, o la clave nueva tiene menos de 8 caracteres. Probá con una clave más larga o pedí otro enlace. |
 | Entré a una dirección y volví a la página de inicio | Esa pantalla es de otro rol. Si no iniciaste sesión te lleva a **Iniciar sesión**. |
+| **No encontramos esta página** | La dirección que escribiste no existe (puede tener un error de tipeo). Tocá **Ir al inicio** o **Ver el catálogo**, o revisá la tabla de la sección [2](#2-antes-de-empezar-cómo-moverte). |
 | Mi sesión se cerró sola | La sesión dura 1 hora. Volvé a iniciar sesión. |
 | **No tenemos cobertura de envío para (tu ciudad)** | Esa ciudad no tiene zona activa. Elegí otra dirección o consultá a la tienda. |
 | **Solo quedan N unidades disponibles. Ajustá la cantidad.** | Alguien compró antes que vos. Bajá la cantidad (el primer − te deja en el máximo) o eliminá la línea. |
