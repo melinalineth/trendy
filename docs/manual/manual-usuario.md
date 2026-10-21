@@ -87,17 +87,19 @@ Después de iniciar sesión siempre llegás ahí. De arriba abajo muestra:
 
 - Un banner con **NUEVA COLECCIÓN**, «Descubrí tu estilo» y el botón **Comprar ahora**, que abre el
   catálogo. En pantallas anchas lo acompañan hasta 3 fotos de productos.
-- Tres beneficios: **Envío a domicilio** (se calcula según tu ciudad), **Pago contra entrega** (pagás
-  cuando recibís tu pedido) y **Moda actual**.
+- Tres beneficios: **Envío a domicilio** («En las ciudades con cobertura»), **Pago contra entrega**
+  («Disponible en las zonas habilitadas») y **Moda actual** («Prendas para todos los días»). El envío
+  y el contra entrega solo existen en las zonas de cobertura que el administrador habilitó.
 - **Categorías**: círculos con las categorías que tienen al menos un producto a la venta. Tocar
   cualquiera abre el catálogo **sin elegir esa categoría**: el filtro se elige ahí (ver
   [4.2](#42-catálogo-buscar-y-filtrar)).
-- **Una muestra del catálogo**: los primeros 4 productos de la lista (no son «los más nuevos»: el
-  sistema no guarda la fecha de alta), con el botón **Ver producto**, y el enlace **Ver todo el
+- **Una muestra del catálogo**: los primeros 4 productos de la lista, que viene ordenada por número de
+  producto (son los primeros cargados, no «los más nuevos»: el sistema no guarda la fecha de alta), con el botón **Ver producto**, y el enlace **Ver todo el
   catálogo**. El corazón y el ícono de carrito de esas tarjetas no hacen nada, igual que en el catálogo.
 
 Si no hay productos a la venta, el banner y los beneficios se ven igual y en las otras dos secciones
-aparece un aviso («Todavía no hay productos a la venta»). Si el servidor no responde, aparece **No
+aparece un aviso en cada una: «Todavía no hay categorías con productos. ¡Volvé pronto!» en
+**Categorías** y «Todavía no hay productos a la venta. ¡Volvé pronto!» en la muestra. Si el servidor no responde, aparece **No
 pudimos cargar los productos. Intentá de nuevo más tarde.** (no hay botón para reintentar: recargá la
 página).
 
