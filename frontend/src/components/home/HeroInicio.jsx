@@ -9,9 +9,16 @@ import ImagenHome from "./ImagenHome";
 // El título es el <h1> de la página, igual que en el resto de las pantallas
 // del proyecto (cada una declara el suyo). El <h1> «Trendy» del Header global
 // queda como marca del sitio.
-function HeroInicio({ imagenes }) {
+function HeroInicio({ imagenes, cargando = false }) {
+  // En pantallas anchas el banner reserva el alto del collage mientras llegan
+  // los productos (o si hay fotos), para que no crezca de golpe al cargar.
+  const clases = ["home-hero"];
+
+  if (cargando) clases.push("home-hero--cargando");
+  if (cargando || imagenes.length > 0) clases.push("home-hero--reserva");
+
   return (
-    <section className="home-hero" aria-labelledby="home-hero-titulo">
+    <section className={clases.join(" ")} aria-labelledby="home-hero-titulo">
       <div className="home-hero__texto">
         <p className="home-hero__eyebrow">Nueva colección</p>
 

@@ -26,6 +26,8 @@
 /* Banner principal */
 
 .home-hero {
+  --home-collage-alto: 300px;
+
   display: grid;
   grid-template-columns: 1fr;
   align-items: center;
@@ -137,6 +139,18 @@
     padding: var(--space-12);
   }
 
+  /* Reserva el alto que va a ocupar el collage (alto del collage + padding
+     vertical) mientras llegan los productos, para que el banner no crezca de
+     golpe cuando responde la API. */
+  .home-hero--reserva {
+    min-height: calc(var(--home-collage-alto) + 2 * var(--space-12));
+  }
+
+  /* Si ya terminó de cargar y ninguna foto cargó, se libera esa reserva. */
+  .home-hero--reserva:not(.home-hero--cargando):not(:has(.home-hero__imagen)) {
+    min-height: 0;
+  }
+
   .home-hero__titulo {
     font-size: 2.75rem;
   }
@@ -147,7 +161,7 @@
     grid-auto-columns: 1fr;
     gap: var(--space-4);
 
-    height: 300px;
+    height: var(--home-collage-alto);
   }
 
   /* Si ninguna foto cargó, no se reserva el espacio del collage */
@@ -352,6 +366,11 @@
 }
 
 .home-categoria__nombre {
+  max-width: 100%;
+
+  /* Un nombre largo se corta dentro de su columna en vez de desbordarla */
+  overflow-wrap: anywhere;
+
   font-size: var(--text-sm);
   font-weight: 600;
   text-align: center;

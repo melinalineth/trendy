@@ -44,7 +44,8 @@ export function categoriasConProductos(productos) {
   for (const producto of productos) {
     const categoria = producto.categoria;
 
-    if (!categoria) continue;
+    // Sin nombre no hay chip que mostrar (ni nombre accesible para el enlace).
+    if (!categoria || !categoria.nombre) continue;
 
     if (!porId.has(categoria.id)) {
       porId.set(categoria.id, {

@@ -1,6 +1,7 @@
-// Tira de 3 beneficios. El texto describe solo lo que la app hace hoy: envío
-// a domicilio con costo según la ciudad (zonas de cobertura) y pago contra
-// entrega. No se promete cobertura nacional ni pagos "seguros".
+// Tira de 3 beneficios. El texto describe solo lo que la app hace hoy: el
+// envío a domicilio y el pago contra entrega existen únicamente en las zonas
+// de cobertura habilitadas por el administrador. No se promete cobertura
+// nacional ni pagos "seguros".
 const ICONO_PROPS = {
   width: 28,
   height: 28,
@@ -17,7 +18,7 @@ const ICONO_PROPS = {
 const BENEFICIOS = [
   {
     titulo: "Envío a domicilio",
-    texto: "Se calcula según tu ciudad",
+    texto: "En las ciudades con cobertura",
     icono: (
       <svg {...ICONO_PROPS}>
         <path d="M2 6h11v10H2z" />
@@ -29,7 +30,7 @@ const BENEFICIOS = [
   },
   {
     titulo: "Pago contra entrega",
-    texto: "Pagás cuando recibís tu pedido",
+    texto: "Disponible en las zonas habilitadas",
     icono: (
       <svg {...ICONO_PROPS}>
         <rect x="2" y="6" width="20" height="12" rx="2" />

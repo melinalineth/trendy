@@ -24,24 +24,27 @@ const CANTIDAD_FOTOS_HERO = 3;
 // catálogo. El banner y los beneficios no dependen de la consulta, así que se
 // ven aunque falle o el catálogo esté vacío.
 //
-// La muestra son los primeros productos que devuelve la API, sin criterio de
-// fecha: el modelo Producto no tiene fecha de alta ni la lista tiene un orden
-// definido, por eso la sección no se llama «Novedades».
+// La API devuelve los productos ordenados por id ascendente (ver
+// producto.repository.js), así que la muestra son los primeros productos
+// cargados en el sistema, no los más recientes. El modelo Producto no tiene
+// fecha de alta: por eso la sección no se llama «Novedades».
 function Home() {
   const navigate = useNavigate();
   const { productos, loading, error } = useProducts();
 
   const muestra = productos.slice(0, CANTIDAD_PRODUCTOS);
   const categorias = categoriasConProductos(productos);
-  const fotosHero = productos
-    .map(urlImagen)
-    .filter(Boolean)
-    .slice(0, CANTIDAD_FOTOS_HERO);
+  // Sin URLs repetidas: dos productos pueden compartir imagen y la URL se usa
+  // como key del collage.
+  const fotosHero = [...new Set(productos.map(urlImagen).filter(Boolean))].slice(
+    0,
+    CANTIDAD_FOTOS_HERO,
+  );
 
   return (
     <main className="home">
       <div className="home__container">
-        <HeroInicio imagenes={fotosHero} />
+        <HeroInicio imagenes={fotosHero} cargando={loading} />
 
         <BeneficiosInicio />
 
