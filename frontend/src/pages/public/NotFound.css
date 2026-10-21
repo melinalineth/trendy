@@ -1,0 +1,99 @@
+/* Pantalla "página no encontrada" (ruta comodín de AppRouter). Solo tokens. */
+
+.no-encontrado {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-12) var(--space-4);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.no-encontrado__tarjeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 480px;
+  padding: var(--space-12) var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  text-align: center;
+}
+
+.no-encontrado__codigo {
+  margin: 0;
+  color: var(--color-brand-500);
+  font-family: var(--font-heading);
+  font-size: var(--text-3xl);
+  font-weight: 700;
+}
+
+.no-encontrado__titulo {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+}
+
+.no-encontrado__texto {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.no-encontrado__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.no-encontrado__link {
+  display: inline-block;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-brand-500);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.no-encontrado__link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-brand);
+}
+
+.no-encontrado__link--primario {
+  background-color: var(--color-brand-500);
+  color: var(--color-text-inverse);
+}
+
+.no-encontrado__link--primario:hover {
+  background-color: var(--color-brand-600);
+  border-color: var(--color-brand-600);
+}
+
+.no-encontrado__link--secundario {
+  background-color: var(--color-surface);
+  color: var(--color-brand-500);
+}
+
+.no-encontrado__link--secundario:hover {
+  background-color: var(--color-brand-50);
+}
+
+@media (max-width: 480px) {
+  .no-encontrado__tarjeta {
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .no-encontrado__acciones {
+    flex-direction: column;
+    align-self: stretch;
+  }
+}
