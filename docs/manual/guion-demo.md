@@ -128,18 +128,40 @@ node scripts/datos-demo.js               # carga la demo (tarda unos segundos)
 | Pedidos | 11 pedidos contra entrega de los clientes 1 a 3, repartidos en los últimos ~14 días: 2 pendientes, 1 confirmado, 1 en preparación, 1 enviado, 1 en tránsito, 3 entregados (con el cobro registrado) y 2 cancelados (uno pendiente y otro ya enviado, este con la venta «Anulada por» el vendedor) |
 | Ventas | 8 ventas: 7 registradas y 1 anulada, con responsables distintos (administrador y vendedor) |
 
-**Las cuentas comparten una sola contraseña.** Está en la constante `PASSWORD_DEMO` al principio de
-`scripts/datos-demo.js` (no se copia acá a propósito y el script nunca la imprime). Es una credencial
-descartable para la base local de la demo; si querés otra, cambiala **antes** de la primera corrida.
+**Las cuentas comparten una sola contraseña.** Si definís la variable de entorno `DATOS_DEMO_PASSWORD`
+(mínimo 8 caracteres, sin empezar por «changeme») se usa esa; si no, la constante `PASSWORD_DEMO` del
+principio de `scripts/datos-demo.js` (no se copia acá a propósito; el script nunca la imprime). **Esa
+constante es pública: está en el repositorio.** Elegí la contraseña **antes** de la primera corrida:
+después no cambia la de las cuentas ya creadas.
+
+> **Seguridad:** el backend escucha en **todas las interfaces de red** (`app.listen(PORT)` sin host).
+> Con la demo cargada queda `demo-admin@trendy.test` (rol **admin**) con una clave conocida si usás la
+> constante pública. Corré la demo en una red de confianza o definí `DATOS_DEMO_PASSWORD` antes de la
+> primera corrida (por ejemplo `DATOS_DEMO_PASSWORD='<elegí una clave>' node scripts/datos-demo.js`). Si
+> la definís, es **tu** clave: guardala en tu gestor y usala para iniciar sesión en las cuentas demo.
 
 **Cómo se comporta:**
 
 - **Solo local.** Se niega a correr si la API (`DATOS_DEMO_API`, por defecto
-  `http://localhost:3000/api/v1`) o la base de `backend/.env` no son `localhost`/`127.0.0.1`.
-- **Solo agrega.** No borra ni modifica datos existentes (lo único que toca es dejar Barranquilla sin
-  contra entrega si estuviera habilitada) y **no resetea la base**.
+  `http://localhost:3000/api/v1`) no es `localhost`/`127.0.0.1`, si el host de la `DATABASE_URL` de
+  `backend/.env` no es local o si esa URL trae en su query string claves de conexión (`host`,
+  `socketPath`, etc.) que desviarían la conexión. Tampoco sigue redirecciones HTTP.
+- **No borra nada, pero sí modifica algo de lo existente.** Qué cambia exactamente: **(1)** habilita el
+  contra entrega en las zonas **Bogotá, Medellín y Cali** (Barranquilla no se toca: tiene que estar sin
+  contra entrega, y si no lo está el script aborta sin crear nada); **(2)** cambia el stock de unas **6
+  variantes existentes** mediante movimientos de ajuste (quedan en el historial de cada variante); y
+  **(3)** retrasa la fecha de creación de las cuentas que crea (nunca la de una cuenta que ya existía).
+  **No resetea la base.**
 - **Protegido contra repetir.** Si ya existe alguno de los `demo-cliente1..4@trendy.test` aborta con
-  código 1 y no crea nada. Para volver a cargar la demo hace falta una base nueva.
+  código 1 y no crea nada. Si la carga anterior terminó, dice «ya están cargados»; si se interrumpió
+  (hay clientes demo pero faltan pedidos), dice **«CARGA INCOMPLETA»**: el script no puede reanudarla
+  ni borra lo que quedó, así que hay que usar una base nueva o limpiar a mano los datos demo (cuentas
+  `@trendy.test`, sus pedidos y los movimientos de inventario de la demo). Ante Ctrl+C o un error
+  inesperado a mitad de la carga imprime un aviso de «datos parciales».
+- **Límite de la guarda de la API.** Solo mira el host: un `localhost:3000` que en realidad sea un túnel,
+  o un backend que use **otra** base distinta de la de `backend/.env`, pasaría la guarda. La mitigación
+  que existe: si la base es otra, el login de las cuentas de personal falla con 401 y el script aborta,
+  pero **recién después de crear esas dos cuentas** en la base de `backend/.env`.
 - Si una llamada a la API falla, muestra el paso, el estado HTTP y el código de error, y se detiene.
   Al final imprime un resumen (pedidos por estado, ventas, cuentas, zonas y variantes en stock bajo).
 
@@ -399,7 +421,7 @@ Texto sugerido (leelo con tus palabras):
 | Síntoma | Qué hacer |
 | --- | --- |
 | Pantalla en blanco o «No pudimos cargar...» | Revisá la terminal del backend; reiniciá `npm run dev`. Tras reiniciar MySQL, el backend puede tardar varios minutos en recuperar la conexión (observado): reiniciá el backend. |
-| Te mandó a **Iniciar sesión** de golpe | La sesión venció (1 hora). Iniciá sesión de nuevo (la clave está en tu gestor, no en el repositorio). |
+| Te mandó a **Iniciar sesión** de golpe | La sesión venció (1 hora). Iniciá sesión de nuevo. La clave de las cuentas cargadas con `scripts/datos-demo.js` es la de `DATOS_DEMO_PASSWORD` (si la definiste; tenela en tu gestor) o, si no, la constante `PASSWORD_DEMO` del propio script (está en el repositorio). Las cuentas creadas a mano con `crear-usuario.js` usan la que elegiste. |
 | El botón de la acción no aparece | El estado del pedido no es el esperado. Mirá la etiqueta de estado y la nota del panel **Acciones**. |
 | Se perdieron los datos de la demo | Con una base nueva, `node scripts/datos-demo.js` los rehace en segundos (3.3; sobre la misma base aborta a propósito). O rehacelos a mano en 5 minutos (3.4 y 3.5) o contá el relato mostrando las pantallas ya preparadas. |
 | Todo falla | Tené un recorrido grabado como último recurso (un video del ensayo, que el equipo puede grabar con el entorno funcionando). |

@@ -102,10 +102,20 @@ Para la demo, ver [docs/manual/guion-demo.md](docs/manual/guion-demo.md).
 `scripts/datos-demo.js` carga en tu base **local** una tienda con vida: cuentas de admin, vendedor y 4
 clientes (`@trendy.test`), pedidos contra entrega en todos los estados, ventas registradas y anuladas,
 stock bajo y contra entrega por zona. Con el backend levantado: `node scripts/datos-demo.js`
-(`--verificar` solo comprueba el entorno, `--ayuda` explica el uso). Solo agrega datos, se niega a correr
-contra algo que no sea local y aborta si la demo ya está cargada. La contraseña compartida de las cuentas
-es la constante `PASSWORD_DEMO` del propio script. Detalle y límites (sin Mercado Pago, fechas retrasadas
-directo en la base) en la sección 3.3 de [docs/manual/guion-demo.md](docs/manual/guion-demo.md).
+(`--verificar` solo comprueba el entorno, `--ayuda` explica el uso). **No borra nada**, pero sí modifica
+algo de lo existente: habilita el contra entrega en Bogotá, Medellín y Cali, ajusta el stock de ~6
+variantes con movimientos (quedan en el historial) y retrasa la fecha de creación de las cuentas que
+crea. Se niega a correr contra algo que no sea local y aborta si la demo ya está cargada (o si quedó
+incompleta: entonces hace falta una base nueva o limpiar a mano).
+
+**Seguridad:** la contraseña compartida de las cuentas es `DATOS_DEMO_PASSWORD` si la definís (mínimo 8
+caracteres) o, si no, la constante `PASSWORD_DEMO` del propio script, que es **pública** (está en el
+repositorio). Como el backend escucha en todas las interfaces de red (`app.listen(PORT)` sin host), con
+la demo cargada queda `demo-admin@trendy.test` (rol admin) con una clave conocida si usás la constante:
+usá una red de confianza o definí `DATOS_DEMO_PASSWORD` antes de la primera corrida. La guarda de la API
+solo mira el host (un `localhost:3000` que fuera un túnel o apuntara a otra base pasaría). Detalle y
+límites (sin Mercado Pago, fechas retrasadas directo en la base) en la sección 3.3 de
+[docs/manual/guion-demo.md](docs/manual/guion-demo.md).
 
 ## Tests del backend
 
