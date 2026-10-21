@@ -248,4 +248,5 @@ Equipo (según el historial de Git): Oscar Pérez, Melina Ruidiaz, Valentina Lin
 - **Código:** Controller → Service → Repository; un solo `PrismaClient` en
   `backend/src/config/prisma.js`; cada archivo de rutas declara el path completo bajo `/api/v1`;
   los errores salen como `{ error: { codigo, mensaje, detalles } }` vía `errorHandler.js` (siempre
-  el último middleware); estilos del frontend solo con los tokens de `frontend/src/styles/tokens.css`.
+  el último middleware; justo antes va `rutaNoEncontrada.js`, que responde 404 `RUTA_NO_ENCONTRADA`
+  a las URLs sin ruta); estilos del frontend solo con los tokens de `frontend/src/styles/tokens.css`.

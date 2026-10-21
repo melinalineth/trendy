@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import Home from "../pages/public/Home";
 import Catalog from "../pages/public/Catalog";
 import ProductDetail from "../pages/public/ProductDetail";
+import NotFound from "../pages/public/NotFound";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import ForgotPassword from "../pages/auth/ForgotPassword";
@@ -186,6 +187,11 @@ function AppRoutes() {
           forman parte de esta ronda. Gestión de productos (RF-013, RF-014,
           RF-016) y de inventario (RF-017) sí son de vendedor/admin, por eso
           /vendedor/productos y /vendedor/inventario ya están wireadas acá. */}
+      {/* Cualquier URL que no coincide con las anteriores: pantalla de
+          "página no encontrada" en vez de una página en blanco. Va ÚLTIMA:
+          React Router elige la ruta más específica, pero así queda claro que
+          es el comodín. */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
