@@ -12,10 +12,14 @@
 //   node scripts/datos-demo.js --verificar # solo corre las comprobaciones previas
 //   node scripts/datos-demo.js --ayuda
 //
-// CONTRASEÑA COMPARTIDA: todas las cuentas demo usan la constante PASSWORD_DEMO de
-// más abajo (es una credencial descartable, solo para esta demo local; por eso está
-// escrita acá a propósito). El script nunca la imprime. Si la querés cambiar, editá
-// la constante ANTES de la primera corrida (después no cambia las cuentas ya creadas).
+// CONTRASEÑA COMPARTIDA: todas las cuentas demo usan la misma. Si definís la variable
+// de entorno DATOS_DEMO_PASSWORD (mínimo 8 caracteres, sin empezar por «changeme») se
+// usa esa; si no, la constante PASSWORD_DEMO de más abajo, que es PÚBLICA (está en el
+// repositorio). El script nunca imprime la contraseña. Ojo: el backend escucha en todas
+// las interfaces de red (app.listen(PORT) sin host), así que con la demo cargada queda
+// demo-admin@trendy.test (rol admin) con una clave conocida si usás la constante: corré
+// la demo en una red de confianza o definí DATOS_DEMO_PASSWORD ANTES de la primera
+// corrida (después no cambia la clave de las cuentas ya creadas).
 //
 // Qué crea (todo con correos @trendy.test y nombres ficticios):
 //   - 2 cuentas de personal (admin y vendedor), creadas con prisma + hashPassword del
@@ -25,7 +29,8 @@
 //   - Contra entrega habilitado en Bogotá, Medellín y Cali; Barranquilla queda
 //     deshabilitada (el cliente 4 deja un producto en el carrito para mostrar el rechazo).
 //   - Ajustes de inventario por la API: dos entradas, tres variantes en stock bajo
-//     (<= 5) y una agotada. Solo agrega movimientos.
+//     (<= 5) y una agotada. Cambian el stock de 6 variantes EXISTENTES mediante
+//     movimientos de ajuste (quedan en el historial de cada variante).
 //   - 11 pedidos contra entrega repartidos entre los clientes 1 a 3, en todos los
 //     estados, creados con las transiciones reales (la API genera el historial de
 //     envío, las ventas, la anulación con «anuladaPor» y los movimientos de stock).
@@ -34,21 +39,35 @@
 //   - No crea pedidos de Mercado Pago: sin un access token real no se puede ejercitar.
 //   - Las fechas se retrasan directamente en la base (la API siempre estampa «ahora»):
 //     pedido, historial de envío, pago, venta y movimientos de stock de los pedidos se
-//     reparten en los últimos ~14 días. Es lo único que se escribe fuera de la API,
-//     junto con las dos cuentas de personal.
+//     reparten en los últimos ~14 días, y también la fecha de creación de las cuentas
+//     que crea esta corrida (nunca la de una cuenta que ya existía). Es lo único que se
+//     escribe fuera de la API, junto con las dos cuentas de personal.
 //   - Un cliente NO puede cancelar un pedido (la API responde 403: la cancelación es
 //     del personal, ERS §2.8.3). El pedido «cancelado a pedido del cliente» lo cancela
 //     el vendedor mientras estaba pendiente.
-//   - No resetea la base, no borra ni modifica datos existentes (salvo poner
-//     Barranquilla sin contra entrega si estuviera habilitada).
+//   - No resetea la base y NO BORRA NADA. Lo que sí modifica de lo existente es:
+//       * habilita el contra entrega en las zonas Bogotá, Medellín y Cali (Barranquilla
+//         no se toca: tiene que estar sin contra entrega; si estuviera habilitada el
+//         script aborta antes de crear nada);
+//       * cambia el stock de ~6 variantes existentes con movimientos de ajuste;
+//       * la fecha de creación de las cuentas que crea (no la de las ya existentes).
 //   - El número de pedido (PED-...) lleva incrustado el instante real de creación:
 //     queda como está, solo se retrasan las fechas.
 //
 // Seguridad:
 //   - Se niega a correr si el host de la API no es localhost / 127.0.0.1 (se puede
-//     cambiar el puerto o el prefijo con la variable DATOS_DEMO_API) o si el host de
-//     DATABASE_URL (backend/.env) no es local.
-//   - Si ya existe alguno de los clientes demo, aborta con código 1 y no crea nada.
+//     cambiar el puerto o el prefijo con la variable DATOS_DEMO_API) o si DATABASE_URL
+//     (backend/.env) no apunta a un host local, o si trae en el query string claves de
+//     conexión (host, socketPath, ...) que el driver usaría para desviar la conexión.
+//   - LÍMITE de la guarda de la API: solo mira el host. Un localhost:3000 que sea un
+//     túnel, o un backend que use OTRA base distinta de la de backend/.env, pasaría la
+//     guarda. Mitigación: si la base es otra, el login de las cuentas de personal falla
+//     con 401 y el script aborta, pero recién después de crear esas dos cuentas.
+//   - Si ya hay clientes demo aborta con código 1 y no crea nada: «carga completa» si
+//     están todos los pedidos, «carga incompleta» si faltan (en ese caso hay que usar una
+//     base nueva o limpiar a mano; el script no borra ni ofrece un modo destructivo).
+//   - Ante Ctrl+C o un error inesperado avisa si quedaron datos parciales.
+//   - No sigue redirecciones HTTP (el login no se reenvía a otro origen).
 //   - Nunca imprime contraseñas, tokens, hashes ni la URL de la base.
 //
 // Código de salida: 0 si cargó los datos (o si --verificar pasó); 1 ante cualquier error.
@@ -71,9 +90,30 @@ const requireBackend = createRequire(path.join(BACKEND, "package.json"));
 // local de la demo. Mínimo 8 caracteres y sin empezar por «changeme».
 const PASSWORD_DEMO = "Vitrina-Trendy-2026!";
 
+// Contraseña efectiva de esta corrida (DATOS_DEMO_PASSWORD o PASSWORD_DEMO); la fija
+// validarPasswordDemo() antes de hacer nada.
+let passwordDemo = PASSWORD_DEMO;
+
 const API_POR_DEFECTO = "http://localhost:3000/api/v1";
 const HOSTS_LOCALES_API = ["localhost", "127.0.0.1"];
 const HOSTS_LOCALES_DB = ["localhost", "127.0.0.1", "::1", "[::1]"];
+// Claves del query string de DATABASE_URL que el driver usaría para cambiar a dónde se
+// conecta (en minúsculas).
+const CLAVES_DE_CONEXION_PROHIBIDAS = [
+  "host",
+  "hostname",
+  "port",
+  "socketpath",
+  "localsocket",
+  "sockpath",
+  "pipe",
+  "namedpipe",
+  "localaddress",
+  "stream",
+  "uri",
+  "url",
+  "connectionstring",
+];
 const TIMEOUT_API_MS = 30000;
 
 const MIN = 60 * 1000;
@@ -233,7 +273,9 @@ const ORDEN_TIEMPOS = [
 
 // Pedidos contra entrega, en orden cronológico (así el id crece con la fecha).
 //   cliente:   número de cliente (1 a 3; el 4 no puede comprar contra entrega).
-//   cuando:    { dias, hora } = hora de Bogotá de hace N días, o { haceMin }.
+//   cuando:    { dias, hora } = hora de Bogotá de hace N días, o { hoy: "a" | "b" } = los
+//              dos pedidos más recientes (ver instantesDeHoy: horas razonables, nunca
+//              futuras, sin importar a qué hora se corra el script).
 //   items:     [sku, cantidad].
 //   hasta:     último estado al que se lleva por la API ("PENDIENTE" = ninguno).
 //   confirma:  quién pasa a CONFIRMADO ("admin" | "vendedor") = Responsable de la venta.
@@ -329,14 +371,14 @@ const PEDIDOS = [
   },
   {
     cliente: 1,
-    cuando: { haceMin: 435 },
+    cuando: { hoy: "a" },
     items: [["VESTIDOROSA-M-ROSA", 1], ["BLUSACASUAL-S-BLANCO", 1]],
     hasta: "PENDIENTE",
     min: {},
   },
   {
     cliente: 2,
-    cuando: { haceMin: 80 },
+    cuando: { hoy: "b" },
     items: [["CAMISETABASICA-M-NEGRO", 2]],
     hasta: "PENDIENTE",
     min: {},
@@ -350,14 +392,21 @@ const AYUDA = `Uso:
 
 Requisitos: backend levantado en modo desarrollo (por defecto ${API_POR_DEFECTO}),
 migraciones y seed aplicados (roles, productos y zonas) y backend/.env con una
-DATABASE_URL local. Variable opcional: DATOS_DEMO_API (solo hosts localhost o 127.0.0.1).
+DATABASE_URL local (sin claves de conexión como host o socketPath en su query string).
+Variables opcionales: DATOS_DEMO_API (solo hosts localhost o 127.0.0.1) y
+DATOS_DEMO_PASSWORD (contraseña de las cuentas, mínimo 8 caracteres).
 
 Crea 2 cuentas de personal, 4 clientes y 11 pedidos contra entrega en todos los estados,
-con ventas y stock coherentes. La contraseña compartida de las cuentas es la constante
-PASSWORD_DEMO del encabezado de scripts/datos-demo.js (no se imprime).
+con ventas y stock coherentes. La contraseña compartida de las cuentas es DATOS_DEMO_PASSWORD
+si la definís; si no, la constante PASSWORD_DEMO del encabezado de scripts/datos-demo.js,
+que es PÚBLICA (el backend escucha en todas las interfaces: usá una red de confianza o
+definí DATOS_DEMO_PASSWORD antes de la primera corrida). Nunca se imprime.
 
-Solo agrega datos: no borra ni modifica nada existente. Si ya está cargada la demo
-(existe demo-cliente1@trendy.test) aborta con código 1 sin crear nada.`;
+No borra nada. Lo que modifica de lo existente: habilita contra entrega en Bogotá,
+Medellín y Cali (Barranquilla no se toca), cambia el stock de ~6 variantes con
+movimientos de ajuste y retrasa la fecha de creación de las cuentas que crea. Si la demo
+ya está cargada (existen los demo-cliente1..4) aborta con código 1 sin crear nada, y si la
+carga quedó incompleta lo dice: usá una base nueva o limpiá a mano.`;
 
 // ---------------------------------------------------------------------------
 // Errores y utilidades
@@ -473,13 +522,22 @@ function leerArgumentos() {
   }
 }
 
+// Resuelve la contraseña compartida: DATOS_DEMO_PASSWORD si está definida (no vacía) o,
+// si no, la constante PASSWORD_DEMO. Nunca se imprime ni se acepta por argumento.
 function validarPasswordDemo() {
-  if (typeof PASSWORD_DEMO !== "string" || PASSWORD_DEMO.length < 8) {
-    throw new ErrorDeUso("PASSWORD_DEMO debe tener al menos 8 caracteres.");
+  const deEntorno = process.env.DATOS_DEMO_PASSWORD;
+  const usaEntorno = typeof deEntorno === "string" && deEntorno !== "";
+  const candidata = usaEntorno ? deEntorno : PASSWORD_DEMO;
+  const nombre = usaEntorno ? "DATOS_DEMO_PASSWORD" : "PASSWORD_DEMO";
+
+  if (typeof candidata !== "string" || candidata.length < 8) {
+    throw new ErrorDeUso(`${nombre} debe tener al menos 8 caracteres.`);
   }
-  if (PASSWORD_DEMO.toLowerCase().startsWith("changeme")) {
-    throw new ErrorDeUso("PASSWORD_DEMO no puede empezar por «changeme».");
+  if (candidata.toLowerCase().startsWith("changeme")) {
+    throw new ErrorDeUso(`${nombre} no puede empezar por «changeme».`);
   }
+
+  passwordDemo = candidata;
 }
 
 // ---------------------------------------------------------------------------
@@ -534,6 +592,18 @@ function exigirBaseLocal() {
       "Por seguridad este script solo corre contra una base local: el host de DATABASE_URL no es localhost, 127.0.0.1 ni ::1. No se creó nada.",
     );
   }
+
+  // El driver (mariadb) copia las claves del query string a sus opciones de conexión:
+  // «mysql://u:p@localhost/db?host=remoto» pasaría el chequeo del host y se conectaría
+  // a otro lado. Se rechaza cualquier query string con claves de conexión.
+  const prohibidas = [...new URL(crudo).searchParams.keys()].filter((clave) =>
+    CLAVES_DE_CONEXION_PROHIBIDAS.includes(clave.toLowerCase()),
+  );
+  if (prohibidas.length > 0) {
+    throw new ErrorDeUso(
+      `Por seguridad DATABASE_URL no puede traer en su query string claves de conexión (${[...new Set(prohibidas)].join(", ")}): podrían desviar la conexión a otro host. Quitalas de la URL. No se creó nada.`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -553,8 +623,15 @@ function crearApi(base) {
         headers: cabeceras,
         body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
         signal: AbortSignal.timeout(TIMEOUT_API_MS),
+        // Un 3xx no se sigue: reenviaría el login (con la contraseña) a otro origen.
+        redirect: "error",
       });
     } catch (error) {
+      if (/redirect/i.test(String(error?.cause?.message ?? error?.message ?? ""))) {
+        throw new ErrorDeUso(
+          `Paso «${paso}»: la API respondió con una redirección y el script no las sigue (podría reenviar las credenciales a otro origen). Revisá DATOS_DEMO_API.`,
+        );
+      }
       const causa = error?.cause?.code ?? error?.name ?? "error de red";
       throw new ErrorDeUso(
         `Paso «${paso}»: no se pudo hablar con la API (${causa}). ¿Está el backend levantado?`,
@@ -596,10 +673,27 @@ function instanteDe(ahora, { dias, hora }) {
   return new Date(Date.UTC(anio, mes, dia - dias, hh + DESFASE_BOGOTA_HORAS, mm));
 }
 
+// Instantes de los dos pedidos pendientes más recientes. Hora razonable (07:00 a 21:00
+// en Bogotá), nunca futura (tope: ahora - 10 min) y separados por 45 min como mínimo.
+// Normalmente son «hoy 09:30» y «hoy 14:20»; si todavía es muy temprano para que quepan
+// hoy a partir de las 07:00, van al final de la tarde de ayer (después del pedido anterior).
+function instantesDeHoy(ahora) {
+  const tope = ahora.getTime() - 10 * MIN;
+  const b = Math.min(instanteDe(ahora, { dias: 0, hora: "14:20" }).getTime(), tope);
+  const a = Math.min(instanteDe(ahora, { dias: 0, hora: "09:30" }).getTime(), b - 45 * MIN);
+
+  if (a < instanteDe(ahora, { dias: 0, hora: "07:00" }).getTime()) {
+    return {
+      a: instanteDe(ahora, { dias: 1, hora: "18:30" }),
+      b: instanteDe(ahora, { dias: 1, hora: "20:15" }),
+    };
+  }
+
+  return { a: new Date(a), b: new Date(b) };
+}
+
 function instanteInicial(ahora, cuando) {
-  return cuando.haceMin !== undefined
-    ? new Date(ahora.getTime() - cuando.haceMin * MIN)
-    : instanteDe(ahora, cuando);
+  return cuando.hoy !== undefined ? instantesDeHoy(ahora)[cuando.hoy] : instanteDe(ahora, cuando);
 }
 
 // Pasos de la API que va a recorrer un pedido, según su plan.
@@ -641,6 +735,29 @@ function calcularTiempos(plan, ahora, etiqueta) {
   return t;
 }
 
+// Valida los tiempos de TODOS los pedidos para el instante `ahora` (función pura, sin
+// base ni red). Devuelve las marcas de cada pedido; lanza ErrorDeUso si algo no cierra.
+function comprobarPlanDeTiempos(ahora) {
+  const todos = PEDIDOS.map((plan, i) => calcularTiempos(plan, ahora, `pedido ${i + 1}`));
+
+  todos.forEach((t, i) => {
+    for (const [clave, instante] of Object.entries(t)) {
+      const local = new Date(instante.getTime() - DESFASE_BOGOTA_HORAS * 60 * MIN);
+      const minutosDelDia = local.getUTCHours() * 60 + local.getUTCMinutes();
+      if (minutosDelDia < 7 * 60 || minutosDelDia > 21 * 60) {
+        throw new ErrorDeUso(
+          `Plan de demo inválido (pedido ${i + 1}): «${clave}» cae fuera del horario de 07:00 a 21:00 (Bogotá).`,
+        );
+      }
+    }
+    if (i > 0 && t.creado <= todos[i - 1].creado) {
+      throw new ErrorDeUso(`Plan de demo inválido (pedido ${i + 1}): se crea antes que el pedido anterior.`);
+    }
+  });
+
+  return todos;
+}
+
 // ---------------------------------------------------------------------------
 // Comprobaciones previas (solo lectura)
 // ---------------------------------------------------------------------------
@@ -664,17 +781,40 @@ async function comprobarEntorno(prisma, hashes, ahora) {
     }
   }
 
-  // 2. Protección contra una segunda corrida: ningún cliente demo puede existir.
+  // 2. Protección contra una segunda corrida: ningún cliente demo puede existir. Se
+  //    distingue una carga completa de una incompleta (corrida interrumpida).
+  const correosClientes = CLIENTES.map((c) => correoCliente(c.n));
   const previos = await prisma.usuario.findMany({
-    where: { correo: { in: CLIENTES.map((c) => correoCliente(c.n)) } },
+    where: { correo: { in: correosClientes } },
     select: { correo: true },
     orderBy: { correo: "asc" },
   });
   if (previos.length > 0) {
+    const pedidosPrevios = await prisma.pedido.findMany({
+      where: { usuario: { correo: { in: correosClientes } } },
+      select: { creadoEn: true },
+      orderBy: { creadoEn: "asc" },
+    });
+    // En una carga completa el pedido más viejo se retrasó ~13 días; si no, la
+    // corrida murió antes de retrasar las fechas.
+    const fechasRetrasadas =
+      pedidosPrevios.length > 0 && pedidosPrevios[0].creadoEn < new Date(ahora.getTime() - 5 * DIA);
+    const completa =
+      previos.length === CLIENTES.length && pedidosPrevios.length >= PEDIDOS.length && fechasRetrasadas;
+
+    if (completa) {
+      throw new ErrorDeUso(
+        `Los datos de demo ya están cargados (existen ${previos.map((u) => u.correo).join(", ")} y sus ${pedidosPrevios.length} pedidos). ` +
+          "No se creó nada: este script no repite ni borra. Para volver a cargar la demo usá una base nueva.",
+      );
+    }
+
     throw new ErrorDeUso(
-      `Los datos de demo ya están cargados (existe ${previos.map((u) => u.correo).join(", ")}). ` +
-        "No se creó nada: este script solo agrega datos y no borra ni repite. " +
-        "Para volver a cargar la demo usá una base nueva.",
+      `CARGA INCOMPLETA: hay ${previos.length} de ${CLIENTES.length} clientes demo y ${pedidosPrevios.length} de ${PEDIDOS.length} pedidos demo` +
+        `${pedidosPrevios.length >= PEDIDOS.length && !fechasRetrasadas ? " (con las fechas sin retrasar)" : ""}: ` +
+        "una corrida anterior se interrumpió a mitad de camino. No se creó nada y el script no puede reanudarla ni borrar lo que quedó. " +
+        "Qué hacer: usá una base nueva (por ejemplo, restaurá un respaldo anterior a la carga) o limpiá a mano los datos demo " +
+        "(las cuentas @trendy.test, sus pedidos y los movimientos de inventario de la demo) y volvé a correr el script.",
     );
   }
 
@@ -691,9 +831,9 @@ async function comprobarEntorno(prisma, hashes, ahora) {
         `${cuenta.correo} ya existe con rol ${existente.rol.nombre} (se esperaba ${cuenta.rol}); no se modificó nada.`,
       );
     }
-    if (!(await hashes.comparePassword(PASSWORD_DEMO, existente.passwordHash))) {
+    if (!(await hashes.comparePassword(passwordDemo, existente.passwordHash))) {
       throw new ErrorDeUso(
-        `${cuenta.correo} ya existe con una contraseña distinta de PASSWORD_DEMO; no se modificó nada y no se podría iniciar sesión con ella.`,
+        `${cuenta.correo} ya existe con una contraseña distinta de la de la demo (DATOS_DEMO_PASSWORD o PASSWORD_DEMO); no se modificó nada y no se podría iniciar sesión con ella.`,
       );
     }
   }
@@ -717,6 +857,12 @@ async function comprobarEntorno(prisma, hashes, ahora) {
     }
     if (zona.tarifas.length === 0) {
       throw new ErrorDeUso(`La zona ${zona.ciudad} no tiene una tarifa de envío activa.`);
+    }
+    // Barranquilla no se toca: tiene que estar sin contra entrega para mostrar el rechazo.
+    if (!deseada.contraEntrega && zona.permiteContraEntrega) {
+      throw new ErrorDeUso(
+        `La zona ${zona.ciudad} tiene el contra entrega habilitado y la demo necesita que no lo tenga (el script no la modifica): deshabilitalo desde /admin/envios y volvé a correr.`,
+      );
     }
     zonas.set(normalizar(deseada.ciudad), {
       id: zona.id,
@@ -771,8 +917,10 @@ async function comprobarEntorno(prisma, hashes, ahora) {
     throw new ErrorDeUso(`Hay productos con precio con centavos (${sinPrecioEntero.join(", ")}): el total esperado no se podría verificar.`);
   }
 
-  // 6. El plan de tiempos es válido (error de programación si no lo fuera).
-  PEDIDOS.forEach((plan, i) => calcularTiempos(plan, ahora, `pedido ${i + 1}`));
+  // 6. El plan de tiempos es válido (error de programación si no lo fuera): cada pedido
+  //    es cronológico, ninguna marca es futura, todas caen entre las 07:00 y las 21:00
+  //    de Bogotá y los pedidos se crean en orden (el id crece con la fecha).
+  comprobarPlanDeTiempos(ahora);
 
   return { rolPorNombre, zonas, variantes };
 }
@@ -787,7 +935,7 @@ function paso(texto) {
 
 async function iniciarSesion(api, correo, paso_) {
   const { datos } = await api.llamar(paso_, "POST", "/auth/login", {
-    cuerpo: { correo, password: PASSWORD_DEMO },
+    cuerpo: { correo, password: passwordDemo },
   });
   secretosDinamicos.add(datos.token);
   return { token: datos.token, id: datos.usuario.id, correo };
@@ -804,7 +952,7 @@ async function crearPersonal(prisma, hashes, rolPorNombre) {
       data: {
         nombre: cuenta.nombre,
         correo: cuenta.correo,
-        passwordHash: await hashes.hashPassword(PASSWORD_DEMO),
+        passwordHash: await hashes.hashPassword(passwordDemo),
         rolId: rolPorNombre.get(cuenta.rol).id,
       },
     });
@@ -822,7 +970,7 @@ async function registrarClientes(api, zonas) {
     const etiqueta = `cliente ${cliente.n}`;
 
     await api.llamar(`registrar ${etiqueta}`, "POST", "/auth/register", {
-      cuerpo: { nombre: cliente.nombre, correo, password: PASSWORD_DEMO, aceptaPoliticas: true },
+      cuerpo: { nombre: cliente.nombre, correo, password: passwordDemo, aceptaPoliticas: true },
       esperado: [201],
     });
     const sesion = await iniciarSesion(api, correo, `iniciar sesión ${etiqueta}`);
@@ -854,14 +1002,18 @@ async function configurarZonas(api, admin, zonas) {
   const cambios = [];
 
   for (const zona of zonas.values()) {
+    // Solo se HABILITA. Las zonas que deben quedar sin contra entrega (Barranquilla) no se
+    // tocan: la comprobación previa ya exigió que lo estén.
+    if (!zona.contraEntregaDeseado) continue;
+
     const actual = listado.find((z) => z.id === zona.id);
-    if (actual && actual.permiteContraEntrega === zona.contraEntregaDeseado) continue;
+    if (actual && actual.permiteContraEntrega === true) continue;
 
     await api.llamar(`contra entrega en ${zona.ciudad}`, "PATCH", `/zonas-cobertura/${zona.id}/contra-entrega`, {
       token: admin.token,
-      cuerpo: { permiteContraEntrega: zona.contraEntregaDeseado },
+      cuerpo: { permiteContraEntrega: true },
     });
-    cambios.push(`${zona.ciudad}: ${zona.contraEntregaDeseado ? "habilitada" : "deshabilitada"}`);
+    cambios.push(`${zona.ciudad}: habilitada`);
   }
 
   return cambios;
@@ -1004,8 +1156,13 @@ async function verificarRechazoBarranquilla(api, cliente4, variantes) {
 }
 
 // Retrasa las fechas en la base: lo único que la API no puede hacer.
-async function retrasarFechas(prisma, registros, movimientosInventario, ahora) {
+// `cuentasCreadas`: correos de las cuentas de personal que creó ESTA corrida. Solo a esas
+// se les retrasa la fecha de creación; una cuenta que ya existía no se toca. Los clientes
+// siempre son de esta corrida (la comprobación previa exige que no existieran).
+async function retrasarFechas(prisma, registros, movimientosInventario, ahora, cuentasCreadas) {
   for (const cuenta of CUENTAS_PERSONAL) {
+    if (!cuentasCreadas.includes(cuenta.correo)) continue;
+
     await prisma.usuario.update({
       where: { correo: cuenta.correo },
       data: { creadoEn: new Date(ahora.getTime() - cuenta.antiguedadDias * DIA) },
@@ -1158,7 +1315,7 @@ async function imprimirResumen(api, prisma, admin, registros, comprobacion, cuen
   console.log(`\nVentas de esos pedidos: ${ventas.length}`);
   for (const [estado, cantidad] of [...porEstadoVenta].sort()) console.log(`  ${estado}: ${cantidad}`);
 
-  console.log("\nCuentas demo (la contraseña es la constante PASSWORD_DEMO de scripts/datos-demo.js):");
+  console.log("\nCuentas demo (contraseña: DATOS_DEMO_PASSWORD si la definiste; si no, la constante PASSWORD_DEMO de scripts/datos-demo.js):");
   for (const cuenta of CUENTAS_PERSONAL) {
     console.log(`  ${cuenta.correo}  rol ${cuenta.rol}${cuentasCreadas.includes(cuenta.correo) ? "" : " (ya existía)"}`);
   }
@@ -1224,7 +1381,7 @@ async function main() {
       return;
     }
 
-    console.log("Cargando datos de demostración (solo se agregan datos)...");
+    console.log("Cargando datos de demostración (no se borra nada)...");
     hayDatosParciales = true;
 
     const cuentasCreadas = await crearPersonal(prisma, hashes, entorno.rolPorNombre);
@@ -1253,7 +1410,7 @@ async function main() {
     await verificarRechazoBarranquilla(api, clientes.get(4), entorno.variantes);
     paso("Rechazo de contra entrega en Barranquilla verificado");
 
-    await retrasarFechas(prisma, registros, movimientos, ahora);
+    await retrasarFechas(prisma, registros, movimientos, ahora, cuentasCreadas);
     paso("Fechas repartidas en los últimos ~14 días (escritas directo en la base)");
 
     const comprobacion = await comprobarConsistencia(prisma, registros, sesiones, ahora);
@@ -1268,23 +1425,55 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+// Todo lo que no se puede mostrar: contraseñas (la de la demo y la constante), tokens y la
+// URL de la base con su contraseña.
+function enmascarar(texto) {
   const url = process.env.DATABASE_URL;
-  const secretos = [
+  return sinSecretos(texto, [
     PASSWORD_DEMO,
+    passwordDemo,
+    process.env.DATOS_DEMO_PASSWORD,
     ...secretosDinamicos,
     url,
     ...(url ? passwordsDeLaUrl(url) : []),
-  ];
+  ]);
+}
 
+const AVISO_DATOS_PARCIALES =
+  "ATENCIÓN, DATOS PARCIALES: la carga se interrumpió a mitad de camino y ya se habían creado datos en la base. " +
+  "El script no borra nada ni puede reanudarse: al volver a correrlo va a decir «carga incompleta». " +
+  "Usá una base nueva (por ejemplo, restaurá un respaldo anterior a la carga) o limpiá a mano los datos demo " +
+  "(cuentas @trendy.test, sus pedidos y los movimientos de inventario de la demo).";
+
+function avisarSiHayDatosParciales() {
+  if (hayDatosParciales) console.error(AVISO_DATOS_PARCIALES);
+}
+
+function manejarErrorFinal(error) {
   const mensaje =
     error instanceof ErrorDeUso || error instanceof ErrorDeApi ? error.message : resumirError(error);
-  fallar(sinSecretos(mensaje, secretos));
+  fallar(enmascarar(mensaje));
+  avisarSiHayDatosParciales();
+}
 
-  if (hayDatosParciales) {
-    console.error(
-      "La carga se interrumpió a mitad de camino: pueden haber quedado datos parciales. " +
-        "El script no borra nada; revisá el estado de la base o usá una base nueva.",
-    );
-  }
-});
+if (require.main === module) {
+  // Ctrl+C o un error que nadie atrapó: si ya se creó algo, se avisa (sin secretos).
+  process.on("SIGINT", () => {
+    console.error("\nInterrumpido (Ctrl+C).");
+    avisarSiHayDatosParciales();
+    process.exit(130);
+  });
+  process.on("uncaughtException", (error) => {
+    manejarErrorFinal(error);
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (motivo) => {
+    manejarErrorFinal(motivo);
+    process.exit(1);
+  });
+
+  main().catch(manejarErrorFinal);
+}
+
+// Para las pruebas en seco de los planes de tiempos (sin tocar base ni red).
+module.exports = { PEDIDOS, comprobarPlanDeTiempos, calcularTiempos, instantesDeHoy };
