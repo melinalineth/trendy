@@ -7,6 +7,10 @@ punta en la aplicación real, con los textos de pantalla copiados tal cual. **No
 plan B de cancelar desde «Confirmado» saltando el envío (ver la nota del bloque 3); el detalle está en
 [Cómo se ensayó](#cómo-se-ensayó). Para el detalle de cada pantalla, el [manual de usuario](manual-usuario.md).
 
+**Datos de demo:** el relato se ensayó con datos armados a mano; ahora hay un script que carga una
+tienda completa (`scripts/datos-demo.js`, ver 3.3). Con esos datos **las cifras y los totales serán
+distintos** de los que figuran en los textos del guion: confiá en lo que muestra la pantalla.
+
 ## 1. Objetivo y público
 
 **Objetivo:** que el jurado vea que Trendy resuelve el ciclo completo de una venta —un cliente compra,
@@ -102,27 +106,99 @@ pisa al archivo). Reiniciá `npm run dev` después de cambiarla. Si queda config
 no verás el aviso: se abrirá Mercado Pago, o fallará de otra forma; en ese caso saltá el bloque 6 y
 explicalo de palabra.
 
-### 3.3 Crear los usuarios de demo
+### 3.3 Cargar los usuarios y los datos de demo (`scripts/datos-demo.js`)
 
 La aplicación **no tiene pantalla para crear vendedores ni administradores** (el registro siempre da
-rol cliente). Se crean con `scripts/crear-usuario.js`; la contraseña va **solo** por la variable
-`NUEVO_USUARIO_PASSWORD` (mínimo 8 caracteres, no puede empezar por «changeme»). Elegí una propia y no
-la anotes en el repositorio:
+rol cliente) y armar a mano una tienda con pedidos en todos los estados lleva más de una hora. Por eso
+hay un script que lo hace por vos. Con el backend levantado (3.2), desde la raíz del repositorio:
+
+```bash
+node scripts/datos-demo.js --verificar   # opcional: solo comprueba el entorno, no crea nada
+node scripts/datos-demo.js               # carga la demo (tarda unos segundos)
+```
+
+**Qué crea** (todo con correos `@trendy.test` y nombres ficticios):
+
+| Qué | Detalle |
+| --- | --- |
+| Personal | `demo-admin@trendy.test` (Administrador Demo, rol admin) y `demo-vendedor@trendy.test` (Vendedor Demo, rol vendedor) |
+| Clientes | `demo-cliente1@trendy.test` (Bogotá), `demo-cliente2@trendy.test` (Medellín), `demo-cliente3@trendy.test` (Cali) y `demo-cliente4@trendy.test` (Barranquilla), cada uno con su dirección principal |
+| Contra entrega | Habilitado en Bogotá, Medellín y Cali; **Barranquilla queda sin habilitar** (el cliente 4 tiene un producto en el carrito para mostrar el rechazo) |
+| Inventario | Tres variantes en stock bajo (Camiseta Básica L Negro, Jean Clásico 30 Azul, Chaqueta de Cuero M Negro), una agotada (Vestido Negro L Negro) y dos entradas de reposición |
+| Pedidos | 11 pedidos contra entrega de los clientes 1 a 3, repartidos en los últimos ~14 días: 2 pendientes, 1 confirmado, 1 en preparación, 1 enviado, 1 en tránsito, 3 entregados (con el cobro registrado) y 2 cancelados (uno pendiente y otro ya enviado, este con la venta «Anulada por» el vendedor) |
+| Ventas | 8 ventas: 7 registradas y 1 anulada, con responsables distintos (administrador y vendedor) |
+
+**Las cuentas comparten una sola contraseña.** Si definís la variable de entorno `DATOS_DEMO_PASSWORD`
+(mínimo 8 caracteres, sin empezar por «changeme») se usa esa; si no, la constante `PASSWORD_DEMO` del
+principio de `scripts/datos-demo.js` (no se copia acá a propósito; el script nunca la imprime). **Esa
+constante es pública: está en el repositorio.** Elegí la contraseña **antes** de la primera corrida:
+después no cambia la de las cuentas ya creadas.
+
+> **Seguridad:** el backend escucha en **todas las interfaces de red** (`app.listen(PORT)` sin host).
+> Con la demo cargada queda `demo-admin@trendy.test` (rol **admin**) con una clave conocida si usás la
+> constante pública. Corré la demo en una red de confianza o definí `DATOS_DEMO_PASSWORD` antes de la
+> primera corrida (por ejemplo `DATOS_DEMO_PASSWORD='<elegí una clave>' node scripts/datos-demo.js`). Si
+> la definís, es **tu** clave: guardala en tu gestor y usala para iniciar sesión en las cuentas demo.
+
+**Cómo se comporta:**
+
+- **Solo local.** Se niega a correr si la API (`DATOS_DEMO_API`, por defecto
+  `http://localhost:3000/api/v1`) no es `localhost`/`127.0.0.1`, si el host de la `DATABASE_URL` de
+  `backend/.env` no es local o si esa URL trae en su query string claves de conexión (`host`,
+  `socketPath`, etc.) que desviarían la conexión. Tampoco sigue redirecciones HTTP.
+- **No borra nada, pero sí modifica algo de lo existente.** Qué cambia exactamente: **(1)** habilita el
+  contra entrega en las zonas **Bogotá, Medellín y Cali** (Barranquilla no se toca: tiene que estar sin
+  contra entrega, y si no lo está el script aborta sin crear nada); **(2)** cambia el stock de unas **6
+  variantes existentes** mediante movimientos de ajuste (quedan en el historial de cada variante); y
+  **(3)** retrasa la fecha de creación de las cuentas que crea (nunca la de una cuenta que ya existía).
+  **No resetea la base.**
+- **Protegido contra repetir.** Si ya existe alguno de los `demo-cliente1..4@trendy.test` aborta con
+  código 1 y no crea nada. Si la carga anterior terminó, dice «ya están cargados»; si se interrumpió
+  (hay clientes demo pero faltan pedidos), dice **«CARGA INCOMPLETA»**: el script no puede reanudarla
+  ni borra lo que quedó, así que hay que usar una base nueva o limpiar a mano los datos demo (cuentas
+  `@trendy.test`, sus pedidos y los movimientos de inventario de la demo). Ante Ctrl+C o un error
+  inesperado a mitad de la carga imprime un aviso de «datos parciales».
+- **Límite de la guarda de la API.** Solo mira el host: un `localhost:3000` que en realidad sea un túnel,
+  o un backend que use **otra** base distinta de la de `backend/.env`, pasaría la guarda. La mitigación
+  que existe: si la base es otra, el login de las cuentas de personal falla con 401 y el script aborta,
+  pero **recién después de crear esas dos cuentas** en la base de `backend/.env`.
+- Si una llamada a la API falla, muestra el paso, el estado HTTP y el código de error, y se detiene.
+  Al final imprime un resumen (pedidos por estado, ventas, cuentas, zonas y variantes en stock bajo).
+
+**Límites que conviene conocer:**
+
+- **No hay pedidos de Mercado Pago:** sin un access token real no se pueden ejercitar. El bloque 6 sigue
+  siendo el aviso previsto.
+- **Las fechas se retrasan directo en la base** (la API siempre pone «ahora»): pedido, historial de
+  envío, pago, venta y movimientos de stock de los pedidos. Los números de pedido (`PED-...`) llevan el
+  instante real de creación, así que no coinciden con las fechas mostradas.
+- **Un cliente no puede cancelar** (la API responde 403): el pedido «cancelado a pedido del cliente» lo
+  cancela el vendedor mientras estaba pendiente.
+- El **relato se ensayó con otros datos**: cifras, totales y cantidades de pedidos y ventas serán
+  distintas de las que dicen los textos de este guion. Mirá siempre el número real en pantalla.
+- Las ventas y pedidos de la base de desarrollo que ya existían (por ejemplo los del usuario
+  `cliente1@trendy.com`) siguen apareciendo mezclados con los de la demo.
+
+**Alternativa manual** (solo si no podés usar el script): `scripts/crear-usuario.js` crea de a un usuario;
+la contraseña va **solo** por la variable `NUEVO_USUARIO_PASSWORD` (mínimo 8 caracteres, sin empezar por
+«changeme») y no hay que anotarla en el repositorio:
 
 ```bash
 # Git Bash / Linux / macOS (desde la raíz del repositorio)
 export NUEVO_USUARIO_PASSWORD='<elegí una clave>'
-node scripts/crear-usuario.js --correo demo-admin@trendy.test    --nombre "Admin Demo"    --rol admin
-node scripts/crear-usuario.js --correo demo-vendedor@trendy.test --nombre "Vendedor Demo" --rol vendedor
-node scripts/crear-usuario.js --correo demo-cliente@trendy.test  --nombre "Cliente Demo"  --rol cliente
+node scripts/crear-usuario.js --correo demo-admin@trendy.test    --nombre "Administrador Demo" --rol admin
+node scripts/crear-usuario.js --correo demo-vendedor@trendy.test --nombre "Vendedor Demo"      --rol vendedor
+node scripts/crear-usuario.js --correo demo-cliente1@trendy.test --nombre "Cliente Demo"       --rol cliente
 ```
 
 En PowerShell: `$env:NUEVO_USUARIO_PASSWORD='<elegí una clave>'` y los mismos `node ...`. Si el correo ya
-existe el script no cambia nada y dice qué rol tiene; el éxito imprime `Usuario creado: ... (rol ...).`
-Usa la base de `backend/.env`. (Alternativa para el cliente: registrarlo desde `/registro`, que además
-sirve de ensayo.)
+existe el script no cambia nada y dice qué rol tiene. Con esta vía manual hacen falta 3.4 y 3.5 completos.
 
 ### 3.4 Habilitar el contra entrega en Bogotá (obligatorio)
+
+**Si cargaste los datos con el script (3.3), este paso ya está hecho:** Bogotá, Medellín y Cali quedan
+con contra entrega habilitado; solo comprobalo en `/admin/envios`. El resto de esta sección es para la
+vía manual.
 
 Las zonas del seed nacen **sin** contra entrega. Sin este paso, el cliente de la demo no podrá pagar
 contra entrega. Se habilita desde la pantalla de zonas, con la sesión de administrador (es la ventana B
@@ -143,7 +219,14 @@ usuario](manual-usuario.md#64-zonas-de-cobertura-y-tarifas-de-envío)).
 
 ### 3.5 Datos que dejar listos
 
-1. **Dirección del cliente.** Iniciá sesión como `demo-cliente@trendy.test`, abrí `/direcciones` y
+**Con el script (3.3) los puntos 1 y 2 ya están cubiertos:** `demo-cliente1@trendy.test` tiene su
+dirección principal en Bogotá y el panel de ventas ya tiene ventas registradas y anuladas. Revisá el
+punto 3 (el carrito del cliente 1 arranca vacío; el stock de «Camiseta Básica» M Negro queda en 16
+porque el pedido pendiente del cliente 2 reservó 2, de sobra para el relato) y el punto 5 (tarifas
+reales: Bogotá $8.000).
+Los puntos 1 y 2 de abajo son la vía manual.
+
+1. **Dirección del cliente.** Iniciá sesión como `demo-cliente1@trendy.test`, abrí `/direcciones` y
    agregá una dirección **principal** en **Bogotá, Cundinamarca** (Ciudad `Bogotá`, Departamento
    `Cundinamarca`: tiene que coincidir con la zona). Opcional pero útil para un plan B del bloque 6:
    una segunda en **Medellín, Antioquia** (sin contra entrega).
@@ -165,7 +248,7 @@ Como **no hay botón de cerrar sesión ni menú**, usá **tres ventanas ya inici
 
 | Ventana | Rol | Cómo |
 | --- | --- | --- |
-| A | Cliente `demo-cliente@trendy.test` | Navegador normal (Chrome) |
+| A | Cliente `demo-cliente1@trendy.test` (Laura Camila Rodríguez, Bogotá) | Navegador normal (Chrome) |
 | B | Administrador `demo-admin@trendy.test` | Ventana de incógnito de Chrome |
 | C | Vendedor `demo-vendedor@trendy.test` | Otro navegador (Edge o Firefox) o otro perfil |
 
@@ -187,7 +270,7 @@ andá a las pestañas preparadas.
 - [ ] `http://localhost:3000/api/v1/health` responde `ok` y `http://localhost:5173/catalogo` carga.
 - [ ] Mercado Pago **sin** configurar (para el bloque 6): `MERCADOPAGO_ACCESS_TOKEN` vacía o ausente en
   `backend/.env` y no exportada en la terminal (verificación de 3.2).
-- [ ] Tres usuarios creados y tres ventanas iniciadas (A, B, C).
+- [ ] Datos de demo cargados (`node scripts/datos-demo.js`, 3.3) y tres ventanas iniciadas (A, B, C).
 - [ ] Bogotá con contra entrega habilitado; cliente con dirección principal en Bogotá.
 - [ ] Carrito del cliente vacío; panel de ventas con al menos una venta registrada y una anulada.
 - [ ] Una pestaña por pantalla preparada en cada ventana.
@@ -226,7 +309,7 @@ andá a las pestañas preparadas.
 | 2.1 | Ventana B, `/admin/pedidos`. Primera fila = el pedido nuevo. Toco **Ver**. | «Esta es la gestión de pedidos. El pedido llega pendiente, con el pago contra entrega registrado.» | Detalle con Cliente, **Método de pago: Pago contra entrega**, **Pago: Pendiente**, **Envío: Todavía no empezó** y el panel **Acciones**. | Si no está, tocá **Actualizar** o filtrá por **Número de pedido**. |
 | 2.2 | Toco **Pasar a «Confirmado»** y **Sí, cambiar estado**. | «Los estados avanzan de a un paso, sin saltos ni retrocesos. Un contra entrega se puede confirmar a mano; uno de Mercado Pago lo confirma solo el pago.» | Aviso **Pedido PED-...: ahora está «Confirmado».** | Si el botón no está, falta el pago contra entrega del cliente: mirá la nota del panel. |
 | 2.3 | Toco el enlace **Ventas** del encabezado (o la pestaña `/admin/ventas`). | «Acá nace la venta: no cuando se paga, sino cuando el pedido se confirma.» | Una fila nueva **Registrada** con el total, y la tarjeta **Ventas registradas** suma. | Tocá **Actualizar**. |
-| 2.4 | Toco **Ver detalle** de esa venta. | «Los precios son los del momento de la compra. El Responsable es quien la registró: Admin Demo.» | Ventana **Venta #N — pedido PED-...** con **Estado de la venta: Registrada**, **Responsable: Admin Demo**, productos y totales. Cerrá con **Cerrar**. | |
+| 2.4 | Toco **Ver detalle** de esa venta. | «Los precios son los del momento de la compra. El Responsable es quien la registró: Administrador Demo.» | Ventana **Venta #N — pedido PED-...** con **Estado de la venta: Registrada**, **Responsable: Administrador Demo**, productos y totales. Cerrá con **Cerrar**. | |
 
 ### Bloque 3. Cancelación por un vendedor y «Anulada por» (2:30)
 
@@ -236,7 +319,7 @@ andá a las pestañas preparadas.
 | 3.2 | Toco **Pasar a «En preparación»** y **Sí, cambiar estado**; después **Marcar envío como «Enviado»** y **Sí, actualizar envío**. | «Con el envío, el estado del pedido avanza junto.» | Pedido **Enviado** y en la fila **Envío**: «Enviado (actualizado ...)». | Para ganar tiempo, saltá este paso y cancelá desde «Confirmado»: **cambian los textos de 3.3, 3.4 y 3.6** (ver la nota debajo de la tabla). |
 | 3.3 | Toco **Cancelar pedido** y **leo en voz alta** la ventana de confirmación. | «Si el cliente rechaza el pedido en la puerta, la tienda lo puede cancelar. Fíjense lo que avisa el sistema: repone las unidades al stock, advierte que, como ya salió, hay que confirmar que la mercadería vuelve, y que la venta se anula.» | «¿Cancelar el pedido PED-...? Las 2 unidades reservadas vuelven al stock... Como el pedido ya salió de la tienda... La venta registrada de este pedido se anula. El pago contra entrega registrado también se cancela. Esta acción no se puede deshacer.» | |
 | 3.4 | Toco **Sí, cancelar pedido**. | «No se borra nada: la venta queda anulada.» | Aviso **Pedido PED-... cancelado. El stock se repuso en el sistema, pero la mercadería puede no haber vuelto todavía. La venta quedó anulada.** y «No hay acciones disponibles para un pedido «Cancelado».» | |
-| 3.5 | Toco **Ventas** y **Ver detalle** de la venta. | «La venta anulada conserva todo y registra **quién** la anuló: Vendedor Demo. El responsable que la registró sigue siendo el administrador.» | **Estado de la venta: Anulada**, **Fecha de anulación**, **Anulada por: Vendedor Demo**, **Responsable: Admin Demo**. La tarjeta **Ventas anuladas** suma el importe. | |
+| 3.5 | Toco **Ventas** y **Ver detalle** de la venta. | «La venta anulada conserva todo y registra **quién** la anuló: Vendedor Demo. El responsable que la registró sigue siendo el administrador.» | **Estado de la venta: Anulada**, **Fecha de anulación**, **Anulada por: Vendedor Demo**, **Responsable: Administrador Demo**. La tarjeta **Ventas anuladas** suma el importe. | |
 | 3.6 | (Opcional, 20 s) Ventana A, `/pedidos`, abro el pedido. | «El cliente lo ve cancelado.» | Estado **Cancelado** y «El pedido ya había salido de la tienda cuando se canceló. Comunicate con la tienda para coordinar la devolución.» | |
 
 **Nota: si salteás el paso 3.2 y cancelás desde «Confirmado»** (plan B de tiempo; los textos de este
@@ -338,9 +421,9 @@ Texto sugerido (leelo con tus palabras):
 | Síntoma | Qué hacer |
 | --- | --- |
 | Pantalla en blanco o «No pudimos cargar...» | Revisá la terminal del backend; reiniciá `npm run dev`. Tras reiniciar MySQL, el backend puede tardar varios minutos en recuperar la conexión (observado): reiniciá el backend. |
-| Te mandó a **Iniciar sesión** de golpe | La sesión venció (1 hora). Iniciá sesión de nuevo (la clave está en tu gestor, no en el repositorio). |
+| Te mandó a **Iniciar sesión** de golpe | La sesión venció (1 hora). Iniciá sesión de nuevo. La clave de las cuentas cargadas con `scripts/datos-demo.js` es la de `DATOS_DEMO_PASSWORD` (si la definiste; tenela en tu gestor) o, si no, la constante `PASSWORD_DEMO` del propio script (está en el repositorio). Las cuentas creadas a mano con `crear-usuario.js` usan la que elegiste. |
 | El botón de la acción no aparece | El estado del pedido no es el esperado. Mirá la etiqueta de estado y la nota del panel **Acciones**. |
-| Se perdieron los datos de la demo | Podés rehacerlos en 5 minutos (3.4 y 3.5) o contar el relato mostrando las pantallas ya preparadas. |
+| Se perdieron los datos de la demo | Con una base nueva, `node scripts/datos-demo.js` los rehace en segundos (3.3; sobre la misma base aborta a propósito). O rehacelos a mano en 5 minutos (3.4 y 3.5) o contá el relato mostrando las pantallas ya preparadas. |
 | Todo falla | Tené un recorrido grabado como último recurso (un video del ensayo, que el equipo puede grabar con el entorno funcionando). |
 
 ## 7. Preguntas probables del jurado y respuestas honestas
