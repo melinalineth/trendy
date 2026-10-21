@@ -107,7 +107,7 @@ const productos = [
     precio: 54900,
     categoria: "Mujer",
     imagen:
-      "https://images.unsplash.com/photo-1564257577054-5e6e8c2b5e4f?w=800",
+      "https://images.unsplash.com/photo-1510074229140-bdfc2ff28550?w=800",
     variantes: [
       { talla: "S", color: "Blanco", stock: 8 },
       { talla: "M", color: "Blanco", stock: 10 },
@@ -149,7 +149,7 @@ const productos = [
     precio: 59900,
     categoria: "Camisetas",
     imagen:
-      "https://images.unsplash.com/photo-1625910513413-5fc45c5d8d3d?w=800",
+      "https://images.unsplash.com/photo-1720514496268-44bb31c03815?w=800",
     variantes: [
       { talla: "M", color: "Azul", stock: 10 },
       { talla: "L", color: "Azul", stock: 8 },
@@ -205,7 +205,7 @@ const productos = [
     precio: 89900,
     categoria: "Hombre",
     imagen:
-      "https://images.unsplash.com/photo-1517445312882-4c4a2d5d1c2b?w=800",
+      "https://images.unsplash.com/photo-1766575696324-5b65330f23c2?w=800",
     variantes: [
       { talla: "30", color: "Verde", stock: 6 },
       { talla: "32", color: "Verde", stock: 8 },
@@ -303,7 +303,7 @@ const productos = [
     precio: 64900,
     categoria: "Mujer",
     imagen:
-      "https://images.unsplash.com/photo-1583496661160-fb5886a13d27?w=800",
+      "https://images.unsplash.com/photo-1561834798-f491438a7880?w=800",
     variantes: [
       { talla: "S", color: "Azul", stock: 5 },
       { talla: "M", color: "Azul", stock: 7 },
