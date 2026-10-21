@@ -31,7 +31,7 @@ backend/
   tests/             tests con node:test
 frontend/src/        pages, components, hooks, services, context, router, styles (tokens.css)
 nginx/conf.d/        proxy de /api y fallback de la SPA (staging)
-scripts/             smoke-staging.js, crear-usuario.js
+scripts/             smoke-staging.js, crear-usuario.js, datos-demo.js
 docs/                ERS, DDS y Plan de Trabajo (.docx), bitácoras y diseño técnico
 ```
 
@@ -96,6 +96,16 @@ node scripts/crear-usuario.js --correo vendedor@ejemplo.com --nombre "Vendedor E
 Si el correo ya existe no modifica nada (ni la contraseña ni el rol) y avisa qué rol tiene. No imprime
 la contraseña ni su hash. Termina con código 0 si creó el usuario o ya existía, y 1 ante cualquier error.
 Para la demo, ver [docs/manual/guion-demo.md](docs/manual/guion-demo.md).
+
+### Datos de demostración
+
+`scripts/datos-demo.js` carga en tu base **local** una tienda con vida: cuentas de admin, vendedor y 4
+clientes (`@trendy.test`), pedidos contra entrega en todos los estados, ventas registradas y anuladas,
+stock bajo y contra entrega por zona. Con el backend levantado: `node scripts/datos-demo.js`
+(`--verificar` solo comprueba el entorno, `--ayuda` explica el uso). Solo agrega datos, se niega a correr
+contra algo que no sea local y aborta si la demo ya está cargada. La contraseña compartida de las cuentas
+es la constante `PASSWORD_DEMO` del propio script. Detalle y límites (sin Mercado Pago, fechas retrasadas
+directo en la base) en la sección 3.3 de [docs/manual/guion-demo.md](docs/manual/guion-demo.md).
 
 ## Tests del backend
 
