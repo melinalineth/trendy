@@ -262,8 +262,8 @@ dejá abierta una pestaña por pantalla (no hay menú, así que son tus «botone
 - C (vendedor): `/vendedor/pedidos`, `/vendedor/ventas`, `/vendedor/productos`, `/vendedor/inventario`
 
 Tamaño: pantalla de escritorio, 1280 × 720 o más, zoom al 100 %. Cerrá notificaciones y otras pestañas.
-Acordate de que tras iniciar sesión el sistema siempre te deja en `/`, que está vacía: no te asustes,
-andá a las pestañas preparadas.
+Acordate de que tras iniciar sesión el sistema siempre te deja en `/` (la página de inicio, que solo
+lleva al catálogo): no te asustes, andá a las pestañas preparadas.
 
 ### 3.7 Checklist final (marcar antes de empezar)
 
@@ -404,8 +404,10 @@ Texto sugerido (leelo con tus palabras):
   - *Punto 16:* `GET /ventas` se pide dos veces por carga en desarrollo (modo estricto de React); no
     ocurre en producción. Si alguien abre las herramientas del navegador, explicalo así.
 - **Otros detalles que encontró el ensayo** (no están en la bitácora; conviene conocerlos):
-  - La página de inicio (`/`) está vacía. Después de
-    iniciar sesión siempre llegás ahí: pasá directo a las pestañas preparadas.
+  - La página de inicio (`/`) es una portada: banner, tres beneficios, categorías y una muestra de 4
+    productos. No es un panel: no tiene accesos a pedidos ni a la gestión. Las categorías abren el
+    catálogo **sin filtrar**, y «una muestra» son los primeros 4 productos de la lista, no «los más
+    nuevos». Después de iniciar sesión siempre llegás ahí: pasá directo a las pestañas preparadas.
   - **No hay botón de cerrar sesión** ni menú: por eso las tres ventanas. El ícono de persona, la
     lupa del encabezado y el corazón y el carrito de las tarjetas del catálogo no hacen nada: no los toques.
   - En «Roles y permisos» no hay permisos cargados y la pantalla no hace nada útil: no la abras.
@@ -496,9 +498,11 @@ Hay un staging local con Docker Compose (nginx, backend y MySQL) y una prueba de
 que pasó, también desde cero (docs/despliegue/staging.md). **No hay un servidor real**, ni HTTPS ni
 respaldos automáticos.
 
-**12. ¿Por qué no hay menú ni una página de inicio?**
-Se priorizó el flujo compra → venta y la solidez del backend. La navegación, el inicio y los tableros
-quedaron como deuda declarada (punto 14). Las pantallas funcionan, pero hoy se entra por su dirección.
+**12. ¿Por qué no hay menú?**
+Se priorizó el flujo compra → venta y la solidez del backend. La navegación y los tableros quedaron
+como deuda declarada (punto 14). La página de inicio ya es una portada simple (banner, categorías y una
+muestra del catálogo), pero no reemplaza al menú: las pantallas funcionan y hoy se entra por su
+dirección.
 
 **13. ¿Por qué precios enteros, sin centavos?**
 Para evitar que la pasarela rechace un pago. Ojo: es una regla de **prevención** basada en fuentes no

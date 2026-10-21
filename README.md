@@ -216,7 +216,8 @@ No verificado / pendiente:
 - No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
   crean con `scripts/crear-usuario.js`, ver arriba).
 - Pendiente: completar la navegación y otros huecos de uso (no hay menú ni botón para cerrar
-  sesión y la página de inicio está vacía). Están documentados en la sección «Límites conocidos» de
+  sesión; la página de inicio es una portada simple y sus categorías no preseleccionan el filtro del
+  catálogo). Están documentados en la sección «Límites conocidos» de
   [`docs/manual/manual-usuario.md`](docs/manual/manual-usuario.md).
 - El contra entrega se habilita y deshabilita por zona desde `/admin/envios` (columna «Contra
   entrega» y botones por zona). Esa pantalla se verificó en el navegador al integrarla (PR #48); el

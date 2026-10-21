@@ -1,12 +1,102 @@
-// Placeholder mínimo: esta página estaba vacía y AppRouter.jsx ya la
-// importaba para la ruta "/", lo que rompía el build al conectar el router
-// en App.jsx. El contenido real de Home queda fuera del alcance de esta
-// ronda (RF-001/002/003 de auth) y debería reemplazarse en su propio sprint.
+import { Link, useNavigate } from "react-router-dom";
+
+import ProductCard from "../../components/products/ProductCard";
+import Loading from "../../components/common/Loading";
+import HeroInicio from "../../components/home/HeroInicio";
+import BeneficiosInicio from "../../components/home/BeneficiosInicio";
+import CategoriasInicio from "../../components/home/CategoriasInicio";
+import {
+  IMAGEN_PLACEHOLDER,
+  categoriasConProductos,
+  formatearPrecio,
+  urlImagen,
+} from "../../components/home/homeProductos";
+import { useProducts } from "../../hooks/useProducts";
+
+import "./Home.css";
+
+const CANTIDAD_PRODUCTOS = 4;
+const CANTIDAD_FOTOS_HERO = 3;
+
+// Página de inicio pública (ruta "/"). Con una sola consulta a la lista
+// pública de productos (la misma que usa el catálogo) arma tres cosas: el
+// collage del banner, las categorías con productos y una muestra del
+// catálogo. El banner y los beneficios no dependen de la consulta, así que se
+// ven aunque falle o el catálogo esté vacío.
+//
+// La API devuelve los productos ordenados por id ascendente (ver
+// producto.repository.js), así que la muestra son los primeros productos
+// cargados en el sistema, no los más recientes. El modelo Producto no tiene
+// fecha de alta: por eso la sección no se llama «Novedades».
 function Home() {
+  const navigate = useNavigate();
+  const { productos, loading, error } = useProducts();
+
+  const muestra = productos.slice(0, CANTIDAD_PRODUCTOS);
+  const categorias = categoriasConProductos(productos);
+  // Sin URLs repetidas: dos productos pueden compartir imagen y la URL se usa
+  // como key del collage.
+  const fotosHero = [...new Set(productos.map(urlImagen).filter(Boolean))].slice(
+    0,
+    CANTIDAD_FOTOS_HERO,
+  );
+
   return (
-    <div>
-      <h1>Trendy</h1>
-    </div>
+    <main className="home">
+      <div className="home__container">
+        <HeroInicio imagenes={fotosHero} cargando={loading} />
+
+        <BeneficiosInicio />
+
+        {loading ? (
+          <Loading text="Cargando productos..." />
+        ) : error ? (
+          <p className="home__error" role="alert">
+            {error}
+          </p>
+        ) : (
+          <>
+            <CategoriasInicio categorias={categorias} />
+
+            <section
+              className="home-seccion"
+              aria-labelledby="home-muestra-titulo"
+            >
+              <div className="home-seccion__encabezado">
+                <h2 id="home-muestra-titulo" className="home-seccion__titulo">
+                  Una muestra del catálogo
+                </h2>
+
+                {muestra.length > 0 && (
+                  <Link to="/catalogo" className="home-seccion__enlace">
+                    Ver todo el catálogo
+                  </Link>
+                )}
+              </div>
+
+              {muestra.length === 0 ? (
+                <p className="home-vacio">
+                  Todavía no hay productos a la venta. ¡Volvé pronto!
+                </p>
+              ) : (
+                <div className="home__grid">
+                  {muestra.map((producto) => (
+                    <ProductCard
+                      key={producto.id}
+                      image={urlImagen(producto) ?? IMAGEN_PLACEHOLDER}
+                      name={producto.nombre}
+                      category={producto.categoria?.nombre}
+                      price={formatearPrecio(producto.precio)}
+                      onView={() => navigate(`/productos/${producto.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+    </main>
   );
 }
 
