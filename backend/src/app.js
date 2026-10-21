@@ -10,6 +10,7 @@ const categoriaRoutes = require("./routes/categoria.routes");
 const productoRoutes = require("./routes/producto.routes");
 const inventarioRoutes = require("./routes/inventario.routes");
 const errorHandler = require("./middlewares/errorHandler");
+const rutaNoEncontrada = require("./middlewares/rutaNoEncontrada");
 const carritoRoutes = require("./routes/carrito.routes");
 const envioRoutes = require("./routes/envio.routes");
 const zonaCoberturaRoutes = require("./routes/zonaCobertura.routes");
@@ -44,6 +45,11 @@ app.use(pagoRoutes);
 app.use(pedidoRoutes);
 app.use(ventaRoutes);
 app.use(healthRoutes);
+
+// Cualquier URL que no matcheó ninguna ruta de arriba: 404 en JSON en vez del
+// HTML por defecto de Express. Va después de TODOS los routers y antes del
+// errorHandler.
+app.use(rutaNoEncontrada);
 
 // DDS §5.3: SIEMPRE al final, después de montar todas las rutas — es el
 // único middleware con firma de 4 argumentos, por eso Express lo trata
