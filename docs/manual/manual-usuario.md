@@ -57,6 +57,7 @@ continuación de la dirección del sitio:
 
 | Para ir a... | Escribí | Quién |
 | --- | --- | --- |
+| Página de inicio | `/` | Todos |
 | Iniciar sesión | `/login` | Todos |
 | Crear una cuenta | `/registro` | Todos |
 | Recuperar la contraseña | `/recuperar-password` | Todos |
@@ -81,8 +82,24 @@ la página de inicio sin ningún aviso. Si
 entrás a una pantalla de cliente o de personal sin haber iniciado sesión, te lleva a **Iniciar
 sesión**.
 
-**La página de inicio (`/`) está vacía:** solo muestra el título «Trendy». Después de iniciar sesión
-siempre llegás ahí; desde ahí seguí por las direcciones de la tabla.
+**La página de inicio (`/`)** es la portada de la tienda y la ven todos, hayan iniciado sesión o no.
+Después de iniciar sesión siempre llegás ahí. De arriba abajo muestra:
+
+- Un banner con **NUEVA COLECCIÓN**, «Descubrí tu estilo» y el botón **Comprar ahora**, que abre el
+  catálogo. En pantallas anchas lo acompañan hasta 3 fotos de productos.
+- Tres beneficios: **Envío a domicilio** (se calcula según tu ciudad), **Pago contra entrega** (pagás
+  cuando recibís tu pedido) y **Moda actual**.
+- **Categorías**: círculos con las categorías que tienen al menos un producto a la venta. Tocar
+  cualquiera abre el catálogo **sin elegir esa categoría**: el filtro se elige ahí (ver
+  [4.2](#42-catálogo-buscar-y-filtrar)).
+- **Una muestra del catálogo**: los primeros 4 productos de la lista (no son «los más nuevos»: el
+  sistema no guarda la fecha de alta), con el botón **Ver producto**, y el enlace **Ver todo el
+  catálogo**. El corazón y el ícono de carrito de esas tarjetas no hacen nada, igual que en el catálogo.
+
+Si no hay productos a la venta, el banner y los beneficios se ven igual y en las otras dos secciones
+aparece un aviso («Todavía no hay productos a la venta»). Si el servidor no responde, aparece **No
+pudimos cargar los productos. Intentá de nuevo más tarde.** (no hay botón para reintentar: recargá la
+página).
 
 **No hay botón para cerrar sesión.** La sesión dura 1 hora (valor por defecto del servidor) y se cierra
 sola al vencer: la próxima petición te manda a iniciar sesión de nuevo. Si necesitás entrar con otra
@@ -122,8 +139,8 @@ cuenta**.
 - Si los datos no coinciden aparece **Correo o contraseña incorrectos.** Es el mismo mensaje si el
   correo no existe, si la contraseña es incorrecta o si tu cuenta fue desactivada: a propósito no se
   dice cuál de las tres cosas pasó.
-- Si entraste bien, vas a la página de inicio (vacía). Desde ahí seguí por las direcciones de la
-  sección 2.
+- Si entraste bien, vas a la página de inicio. Desde ahí podés abrir el catálogo o seguir por las
+  direcciones de la sección 2.
 
 ### 3.3 Recuperar la contraseña
 
@@ -794,8 +811,8 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 
 **Pantallas y navegación**
 
-- **No hay menú de navegación ni botón para cerrar sesión**, y la página de inicio está vacía (ver
-  sección 2).
+- **No hay menú de navegación ni botón para cerrar sesión** (ver sección 2). La página de inicio solo
+  enlaza al catálogo y a los productos: las categorías que muestra no preseleccionan el filtro.
 - El **historial del envío no se dibuja** en la pantalla del cliente: el sistema ya lo guarda y lo
   entrega, pero solo se ve el paso actual.
 - El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa y el ícono de persona del
