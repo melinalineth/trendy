@@ -150,32 +150,63 @@ function AppRoutes() {
           }
         />
       </Route>
-      {/* Panel de inicio del vendedor: a donde llega al iniciar sesión (ver
-          Login.jsx). El del admin es /admin, dentro del layout de arriba. */}
+      {/* Pantallas del vendedor: comparten el mismo PersonalLayout que el admin
+          (menú lateral + contenido) con las entradas del rol vendedor. Mismas
+          reglas que el grupo de arriba: el layout va guardado por RoleGuard Y
+          cada hija conserva el suyo, y una URL /vendedor/xyz que no existe cae
+          en el comodín `*` (NotFound, sin menú lateral). /vendedor es el panel
+          de inicio: a donde llega al iniciar sesión (ver Login.jsx).
+          Gestión de productos (RF-013, RF-014, RF-016) y de inventario
+          (RF-017) son de vendedor/admin; pedidos y ventas se comparten con el
+          panel del admin (v1.0: ven todo; RF-042 consulta de ventas). */}
       <Route
-        path="/vendedor"
         element={
           <RoleGuard roles={["vendedor"]}>
-            <SellerDashboard />
+            <PersonalLayout rol="vendedor" />
           </RoleGuard>
         }
-      />
-      <Route
-        path="/vendedor/productos"
-        element={
-          <RoleGuard roles={["vendedor"]}>
-            <SellerProducts />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/vendedor/inventario"
-        element={
-          <RoleGuard roles={["vendedor"]}>
-            <SellerInventory />
-          </RoleGuard>
-        }
-      />
+      >
+        <Route
+          path="/vendedor"
+          element={
+            <RoleGuard roles={["vendedor"]}>
+              <SellerDashboard />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/vendedor/productos"
+          element={
+            <RoleGuard roles={["vendedor"]}>
+              <SellerProducts />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/vendedor/inventario"
+          element={
+            <RoleGuard roles={["vendedor"]}>
+              <SellerInventory />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/vendedor/pedidos"
+          element={
+            <RoleGuard roles={["vendedor"]}>
+              <SellerOrders />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/vendedor/ventas"
+          element={
+            <RoleGuard roles={["vendedor"]}>
+              <SellerSales />
+            </RoleGuard>
+          }
+        />
+      </Route>
       {/* Sprint 4: checkout, pedidos y pagos (RF-028, RF-030 a RF-032,
           RF-034, RF-037, RF-038). El cliente compra y consulta SUS pedidos;
           admin y vendedor los gestionan desde el panel compartido. */}
@@ -203,30 +234,6 @@ function AppRoutes() {
           </RoleGuard>
         }
       />
-      <Route
-        path="/vendedor/pedidos"
-        element={
-          <RoleGuard roles={["vendedor"]}>
-            <SellerOrders />
-          </RoleGuard>
-        }
-      />
-      {/* Sprint 5: consulta de ventas (RF-042). En v1.0 admin y vendedor ven
-          todas las ventas desde el mismo panel compartido (la del admin está
-          en el layout de arriba). */}
-      <Route
-        path="/vendedor/ventas"
-        element={
-          <RoleGuard roles={["vendedor"]}>
-            <SellerSales />
-          </RoleGuard>
-        }
-      />
-      {/* Resto del panel de vendedor (rutas /vendedor/*) queda pendiente:
-          RF-007, RF-045, RF-046 son exclusivamente de administración y no
-          forman parte de esta ronda. Gestión de productos (RF-013, RF-014,
-          RF-016) y de inventario (RF-017) sí son de vendedor/admin, por eso
-          /vendedor/productos y /vendedor/inventario ya están wireadas acá. */}
       {/* Cualquier URL que no coincide con las anteriores: pantalla de
           "página no encontrada" en vez de una página en blanco. Va ÚLTIMA:
           React Router elige la ruta más específica, pero así queda claro que

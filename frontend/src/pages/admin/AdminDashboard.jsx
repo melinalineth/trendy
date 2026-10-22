@@ -1,10 +1,9 @@
 import PanelInicio from "../../components/dashboard/PanelInicio";
 
 // Wrapper de ruta (/admin): la implementación vive en PanelInicio (compartida
-// con /vendedor). El <main> de la pantalla lo pone PersonalLayout, por eso el panel
-// va `envuelto` (un <div>, no otro <main>).
+// con /vendedor). El <main> de la pantalla lo pone PersonalLayout.
 function AdminDashboard() {
-  return <PanelInicio rol="admin" envuelto />;
+  return <PanelInicio rol="admin" />;
 }
 
 export default AdminDashboard;

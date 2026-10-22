@@ -1,7 +1,7 @@
 /* Panel de inicio de admin y vendedor. Conserva la estructura visual del
    dashboard de los mapas de pantalla (tarjetas con ícono, gráfico de ventas y
-   pedidos recientes). El menú lateral del admin no es de este componente: lo
-   pone PersonalLayout (el vendedor navega con el Header y los accesos rápidos).
+   pedidos recientes). El menú lateral no es de este componente: lo
+   pone PersonalLayout (admin y vendedor).
    Solo tokens de styles/tokens.css. */
 
 .panel-inicio {

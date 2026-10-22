@@ -25,7 +25,7 @@ const TEXTOS_POR_ROL = {
 // va DEBAJO del Header global de App.jsx.
 //
 // El área de contenido es el único <main> de la pantalla: las páginas no
-// declaran el suyo (PanelInicio recibe `envuelto` para no anidarlo). Las
+// declaran el suyo (PanelInicio usa un <div>, no otro <main>). Las
 // páginas conservan su propio max-width/padding; este contenedor solo les da
 // el ancho que queda a la derecha del menú.
 //
