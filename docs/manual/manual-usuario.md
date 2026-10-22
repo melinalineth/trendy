@@ -30,7 +30,7 @@ pantalla manda: avisale al equipo.
 
 | Rol | Cómo se obtiene | Qué puede hacer |
 | --- | --- | --- |
-| **Visitante** (sin sesión) | Entrando al sitio | Ver el catálogo y el detalle de cada producto, registrarse, iniciar sesión y recuperar la contraseña. |
+| **Visitante** (sin sesión) | Entrando al sitio | Ver el catálogo y el detalle de cada producto, registrarse, iniciar sesión, recuperar la contraseña y leer los **Términos de uso** (`/terminos`) y la **Política de privacidad** (`/privacidad`), que son borradores pendientes de aprobación. |
 | **Cliente** | Registrándose en la pantalla «Crear cuenta» | Todo lo del visitante, más: guardar direcciones, usar el carrito, comprar (checkout), ver sus pedidos y el seguimiento del envío. |
 | **Vendedor** | Lo crea el equipo técnico (ver el [README](../../README.md#cómo-crear-un-vendedor-o-un-administrador)) | Gestionar productos, inventario y pedidos (estados, envío, cobro contra entrega, cancelaciones) y consultar las ventas. Ve **todos** los pedidos y **todas** las ventas, no solo «los suyos». |
 | **Administrador** | Lo crea el equipo técnico | Todo lo del vendedor, más: zonas de cobertura y tarifas de envío, cancelar pedidos vencidos y ver/activar/desactivar usuarios y vendedores. |
@@ -40,19 +40,33 @@ administrador), a pedido del cliente.
 
 ## 2. Antes de empezar: cómo moverte
 
-**Trendy todavía no tiene un menú de navegación.** El encabezado es el mismo en todas las pantallas y
-solo trae lo siguiente:
+El encabezado es el mismo en todas las pantallas y trae lo siguiente:
 
 - El título **Trendy** y una barra **Buscar productos...** con una
   lupa. Esa barra del encabezado **no filtra nada**: para buscar usá el catálogo (ver
   [4.2](#42-catálogo-buscar-y-filtrar)).
-- Un botón con el ícono de una persona que **no hace nada** por ahora.
-- **Mis pedidos**: solo aparece si iniciaste sesión como cliente.
-- **Ventas**: solo aparece si iniciaste sesión como vendedor o administrador.
+- El **menú de usuario**: el botón con el ícono de una persona (ver más abajo).
 - El ícono del carrito, con un número: es la cantidad de productos **distintos** que tenés en el
   carrito (dos camisetas iguales cuentan 1). Solo lo ven los visitantes y los clientes.
 
-El resto de las pantallas se abre **escribiendo la dirección en la barra del navegador**, a
+**El menú de usuario** se abre tocando el ícono de la persona y se cierra con la tecla **Esc**, tocando
+fuera del panel, al salir del menú con la tecla **Tab** o al cambiar de pantalla. Con el teclado:
+**Enter** (o **Espacio**) sobre el botón abre el panel, **Tab** recorre las opciones (el foco se ve con un
+contorno) y **Esc** lo cierra y devuelve el foco al botón. Lo que ofrece depende de tu sesión:
+
+| Quién | Qué muestra el menú |
+| --- | --- |
+| Visitante (sin sesión) | **Iniciar sesión** y **Crear cuenta**. |
+| Cliente | Tu nombre y el rol, y: **Mis pedidos**, **Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. |
+| Vendedor | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Catálogo** y **Cerrar sesión**. |
+| Administrador | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios**, **Roles**, **Catálogo** y **Cerrar sesión**. |
+
+Cada entrada del personal lleva a la pantalla de **su** rol (por ejemplo, **Ventas** abre
+`/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). El menú no tiene una
+entrada de «Panel» o tablero de inicio, porque esos tableros todavía no están conectados.
+
+Las pantallas que no están en el menú (como **Finalizar compra**, que se llega desde el carrito) y todas
+las demás también se abren **escribiendo la dirección en la barra del navegador**, a
 continuación de la dirección del sitio:
 
 | Para ir a... | Escribí | Quién |
@@ -65,12 +79,12 @@ continuación de la dirección del sitio:
 | Mi carrito | `/carrito` | Cliente |
 | Mis direcciones | `/direcciones` | Cliente |
 | Finalizar compra | `/checkout` | Cliente |
-| Mis pedidos | `/pedidos` (o el enlace **Mis pedidos**) | Cliente |
+| Mis pedidos | `/pedidos` (o la entrada **Mis pedidos** del menú) | Cliente |
 | Panel de inicio del personal | `/vendedor` (vendedor) o `/admin` (administrador); es donde llegás al iniciar sesión | Vendedor / Administrador |
 | Productos | `/vendedor/productos` (vendedor) o `/admin/productos` (administrador) | Vendedor / Administrador |
 | Inventario | `/vendedor/inventario` (vendedor) o `/admin/inventario` (administrador) | Vendedor / Administrador |
 | Gestión de pedidos | `/vendedor/pedidos` (vendedor) o `/admin/pedidos` (administrador) | Vendedor / Administrador |
-| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o el enlace **Ventas** | Vendedor / Administrador |
+| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o la entrada **Ventas** del menú | Vendedor / Administrador |
 | Vendedores | `/admin/vendedores` | Administrador |
 | Usuarios | `/admin/usuarios` | Administrador |
 | Roles y permisos | `/admin/roles` | Administrador |
@@ -110,9 +124,18 @@ aparece un aviso en cada una: «Todavía no hay categorías con productos. ¡Vol
 pudimos cargar los productos. Intentá de nuevo más tarde.** (no hay botón para reintentar: recargá la
 página).
 
-**No hay botón para cerrar sesión.** La sesión dura 1 hora (valor por defecto del servidor) y se cierra
-sola al vencer: la próxima petición te manda a iniciar sesión de nuevo. Si necesitás entrar con otra
-cuenta antes, abrí una **ventana privada** del navegador o borrá los datos del sitio.
+**Cerrar sesión.** Abrí el menú de usuario y tocá **Cerrar sesión** (es la última opción). Trendy borra
+**al instante** tu sesión de este navegador (el token y tus datos guardados), vacía el número del carrito
+del encabezado, cierra el menú y te lleva a **Iniciar sesión**; el aviso al servidor se envía después, en
+segundo plano. Si el servidor no responde, la sesión local ya está cerrada igual y no ves ningún error. A
+partir de ahí el encabezado vuelve a mostrar el menú de visitante y las pantallas de cliente o de personal
+te mandan a **Iniciar sesión**. Si tenés Trendy abierto en otra pestaña del mismo navegador, esa pestaña
+también pasa a visitante.
+
+Dos aclaraciones: la sesión dura 1 hora (valor por defecto del servidor) y se cierra sola al vencer: la
+próxima petición te manda a iniciar sesión de nuevo. Y el servidor **no invalida** el token al cerrar
+sesión (usa tokens sin estado y su respuesta solo confirma el cierre): cerrar sesión borra el token de
+tu navegador, pero un token copiado antes seguiría siendo válido hasta que venza.
 
 Recomendación: usá una pantalla de escritorio (1280 píxeles de ancho o más).
 
@@ -126,7 +149,8 @@ Pantalla **Crear cuenta**. Completá:
 - **Correo electrónico** (con formato de correo)
 - **Contraseña** (mínimo 8 caracteres)
 - La casilla **Acepto las políticas de privacidad y los términos de uso**. El botón **Crear cuenta**
-  queda deshabilitado hasta que la marques.
+  queda deshabilitado hasta que la marques. Las palabras «políticas de privacidad» y «términos de
+  uso» son enlaces que abren los textos en otra pestaña (ver más abajo).
 
 Qué puede pasar:
 
@@ -138,6 +162,37 @@ Qué puede pasar:
 - Cualquier otro problema (por ejemplo una contraseña de menos de 8 caracteres o un correo que el
   navegador acepta pero el sistema no): **No pudimos completar el registro. Revisá los datos e
   intentá de nuevo.** El mensaje no dice cuál es el campo con el problema; revisá los tres.
+
+#### Términos de uso y Política de privacidad (`/terminos` y `/privacidad`)
+
+Son dos páginas públicas (no hace falta iniciar sesión) a las que se llega desde los enlaces de la
+casilla del registro: **políticas de privacidad** abre `/privacidad` y **términos de uso** abre
+`/terminos`, cada una en una pestaña nueva, así no perdés lo que ya escribiste. Hacer clic en un
+enlace no marca ni desmarca la casilla.
+
+- **Borrador.** Arriba de las dos páginas hay un aviso amarillo: «Borrador: este texto está
+  pendiente de revisión y aprobación del equipo de Trendy. No constituye asesoría legal.» Los textos
+  describen cómo funciona la tienda hoy, pero **todavía no fueron aprobados por el equipo** y no son
+  asesoría legal.
+- Cada página muestra la fecha de «Última actualización», un índice con enlaces a sus secciones
+  numeradas, y al pie un enlace a la otra página y otro para **Volver al registro**.
+- **Términos de uso**: qué es Trendy, cuentas y credenciales, pedidos y precios (el precio queda fijo
+  al crear el pedido), medios de pago (contra entrega solo en zonas habilitadas: la opción se muestra siempre, pero no se
+  puede confirmar el pedido fuera de ellas; Mercado Pago sin
+  garantías, porque nunca se probó con el servicio real), envíos solo a zonas de cobertura,
+  cancelaciones y cambios a cargo del personal, sin reembolsos ni devoluciones en el sistema, uso
+  aceptable, disponibilidad sin garantía, cambios a los términos y contacto.
+- **Política de privacidad**: qué datos se guardan y para qué, cómo se guardan (contraseña con
+  bcrypt; sesión en el navegador, 1 hora por defecto; y, como no se envían correos, el código de
+  recuperación y el correo se escriben en el registro del servidor, con el código legible hasta que
+  vence o se usa), quién los ve (vendedores y administradores ven en los pedidos nombre, correo,
+  dirección de entrega completa y productos, y en las ventas solo el nombre; los administradores
+  además ven el listado de usuarios, activan o desactivan cuentas y editan los permisos de cada
+  rol), terceros (Mercado Pago e imágenes de sitios externos), conservación (sin herramienta de
+  borrado), derechos y cookies (no se usan; no hay analítica).
+- **Pendiente de definir**: el canal de contacto, el plazo de conservación de datos y la revisión de
+  cómo aplica la Ley 1581 de 2012 (habeas data). Los textos no inventan datos de empresa (NIT,
+  dirección, teléfono ni correo).
 
 ### 3.2 Iniciar sesión (`/login`)
 
@@ -249,9 +304,23 @@ Tocá **Agregar dirección** y completá el formulario:
 - Botón **Guardar dirección** («Guardando...»). Si algo falta: **No pudimos guardar la dirección.
   Revisá los datos e intentá de nuevo.**
 
-Cada dirección guardada es una tarjeta con la etiqueta **Principal** cuando corresponde. Hoy **no se
-pueden editar ni eliminar** las direcciones desde la pantalla; si te equivocás, agregá una nueva (y
-marcala como principal).
+Cada dirección guardada es una tarjeta con la etiqueta **Principal** cuando corresponde. Cada tarjeta
+tiene estos botones:
+
+- **Editar**: abre el mismo formulario con los datos cargados. Los obligatorios no pueden quedar
+  vacíos (**El destinatario es requerido**, **La calle es requerida**, etc.). Botón **Guardar cambios**
+  («Guardando...»). Si salió bien: **Dirección actualizada.**
+- **Marcar como principal** (en las que no lo son): cambia la principal sin abrir el formulario y avisa
+  **Ahora la dirección de ... es tu principal.** Solo puede haber una principal.
+- **Eliminar**: pide confirmación mostrando la dirección. Si era la principal, la más reciente de las
+  que te queden pasa a serlo (si no queda ninguna, ninguna es principal). Si salió bien:
+  **Dirección eliminada.** Si ya no existía (por ejemplo, la borraste desde otra pestaña) la ventana se
+  cierra, arriba aparece **La dirección no existe** y la lista se actualiza sola. Lo mismo pasa si
+  intentás **Editar** una dirección que ya no existe.
+
+Los **pedidos que ya hiciste con una dirección no cambian** aunque la edites o la elimines: conservan el
+destinatario, el teléfono y el lugar de entrega que usaste (se ven en el detalle del pedido). Una
+dirección eliminada ya no aparece en el carrito ni en el checkout.
 
 Para que el envío tenga cobertura, la **Ciudad** y el **Departamento** tienen que coincidir con una
 zona de cobertura activa (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)); no distingue
@@ -335,6 +404,11 @@ Los pedidos contra entrega no vencen.
 - **No hay stock suficiente de Camiseta Básica (Talla M · Negro). Quedan 3 unidades. Ajustá la
   cantidad en tu carrito para continuar.** (con el enlace **Ir al carrito**)
 - **Todavía no hacemos envíos a la dirección elegida. Elegí otra dirección o agregá una nueva.**
+- **La dirección elegida ya no existe. Elegí otra dirección.** (por ejemplo, la eliminaste desde otra
+  pestaña mientras comprabas)
+- **Tu dirección cambió mientras confirmabas el pedido. Revisala y volvé a confirmar.** (editaste la
+  ciudad o el departamento de la dirección elegida desde otra pestaña mientras confirmabas: el envío
+  calculado ya no valía; el carrito y las direcciones se actualizan)
 - **Tu carrito está vacío. Si acabás de confirmar una compra, la encontrás en Mis pedidos.**
 - **No pudimos confirmar si tu pedido se registró: puede que sí. Revisá «Mis pedidos» antes de volver
   a intentar.** (si se cortó la conexión: mirá **Mis pedidos** antes de comprar de nuevo para no
@@ -557,7 +631,7 @@ deshacer.» Se confirma con **Sí, cancelar pedido** y queda el aviso «Pedido P
 se puede cancelar, la pantalla dice por qué (por ejemplo «Un pedido ya entregado no se puede
 cancelar.»).
 
-### 5.4 Ventas (`/vendedor/ventas`, o el enlace **Ventas**)
+### 5.4 Ventas (`/vendedor/ventas`, o la entrada **Ventas** del menú)
 
 Pantalla **Ventas** («Consultá las ventas y filtralas por fecha y estado.»). Una venta es el registro
 del pedido que se confirmó; nunca se borra.
@@ -873,13 +947,13 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 
 **Pantallas y navegación**
 
-- **No hay menú de navegación ni botón para cerrar sesión** (ver sección 2). La página de inicio solo
-  enlaza al catálogo y a los productos: las categorías que muestra no preseleccionan el filtro.
+- La página de inicio solo enlaza al catálogo y a los productos: las categorías que muestra no
+  preseleccionan el filtro. El menú de usuario no tiene todavía una entrada de «Panel» (los tableros de
+  inicio de cada rol no están conectados).
 - El **historial del envío no se dibuja** en la pantalla del cliente: el sistema ya lo guarda y lo
   entrega, pero solo se ve el paso actual.
-- El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa y el ícono de persona del
+- El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa del
   encabezado, tampoco.
-- Las direcciones no se pueden editar ni eliminar.
 - **Roles y permisos** no tiene permisos configurados y no gobierna nada.
 - **Contra entrega por zona**: el checkout siempre ofrece la opción y el rechazo llega recién al
   confirmar; y deshabilitar una zona deja sus pedidos contra entrega sin pago registrado pendientes

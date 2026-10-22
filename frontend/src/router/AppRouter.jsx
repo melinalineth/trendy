@@ -4,6 +4,8 @@ import Home from "../pages/public/Home";
 import Catalog from "../pages/public/Catalog";
 import ProductDetail from "../pages/public/ProductDetail";
 import NotFound from "../pages/public/NotFound";
+import TerminosUso from "../pages/public/TerminosUso";
+import PoliticaPrivacidad from "../pages/public/PoliticaPrivacidad";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import ForgotPassword from "../pages/auth/ForgotPassword";
@@ -42,6 +44,8 @@ function AppRoutes() {
         path="/restablecer-password/:token"
         element={<RestablecerPassword />}
       />
+      <Route path="/terminos" element={<TerminosUso />} />
+      <Route path="/privacidad" element={<PoliticaPrivacidad />} />
       <Route
         path="/direcciones"
         element={

@@ -244,7 +244,10 @@ Los puntos 1 y 2 de abajo son la vía manual.
 
 ### 3.6 Navegador y ventanas
 
-Como **no hay botón de cerrar sesión ni menú**, usá **tres ventanas ya iniciadas**, una por rol:
+Trendy ya tiene **Cerrar sesión** (menú de usuario, el ícono de la persona del encabezado), así que con una
+sola ventana se puede cambiar de rol. Igual te recomendamos, como **consejo opcional**, **tres ventanas ya
+iniciadas**, una por rol: ahorra los cierres e inicios de sesión en vivo y no depende del tiempo de
+respuesta de cada login:
 
 | Ventana | Rol | Cómo |
 | --- | --- | --- |
@@ -255,7 +258,8 @@ Como **no hay botón de cerrar sesión ni menú**, usá **tres ventanas ya inici
 (Las ventanas de incógnito de un mismo navegador suelen compartir el almacenamiento y, con él, la
 sesión de Trendy: no uses dos incógnitos.) **La
 sesión dura 1 hora**: iniciá sesión en las tres como máximo 30 minutos antes de empezar. En cada ventana
-dejá abierta una pestaña por pantalla (no hay menú, así que son tus «botones»):
+dejá abierta una pestaña por pantalla (son tus atajos; el menú de usuario también lleva a cada una según
+el rol):
 
 - A (cliente): `/catalogo`, `/carrito`, `/pedidos`
 - B (admin): `/admin`, `/admin/pedidos`, `/admin/ventas`, `/admin/envios`
@@ -310,7 +314,7 @@ en la A, andá a las pestañas preparadas.
 | --- | --- | --- | --- | --- |
 | 2.1 | Ventana B, `/admin/pedidos`. Primera fila = el pedido nuevo. Toco **Ver**. | «Esta es la gestión de pedidos. El pedido llega pendiente, con el pago contra entrega registrado.» | Detalle con Cliente, **Método de pago: Pago contra entrega**, **Pago: Pendiente**, **Envío: Todavía no empezó** y el panel **Acciones**. | Si no está, tocá **Actualizar** o filtrá por **Número de pedido**. |
 | 2.2 | Toco **Pasar a «Confirmado»** y **Sí, cambiar estado**. | «Los estados avanzan de a un paso, sin saltos ni retrocesos. Un contra entrega se puede confirmar a mano; uno de Mercado Pago lo confirma solo el pago.» | Aviso **Pedido PED-...: ahora está «Confirmado».** | Si el botón no está, falta el pago contra entrega del cliente: mirá la nota del panel. |
-| 2.3 | Toco el enlace **Ventas** del encabezado (o la pestaña `/admin/ventas`). | «Acá nace la venta: no cuando se paga, sino cuando el pedido se confirma.» | Una fila nueva **Registrada** con el total, y la tarjeta **Ventas registradas** suma. | Tocá **Actualizar**. |
+| 2.3 | Abro el menú de usuario (ícono de la persona) y toco **Ventas** (o la pestaña `/admin/ventas`). | «Acá nace la venta: no cuando se paga, sino cuando el pedido se confirma.» | Una fila nueva **Registrada** con el total, y la tarjeta **Ventas registradas** suma. | Tocá **Actualizar**. |
 | 2.4 | Toco **Ver detalle** de esa venta. | «Los precios son los del momento de la compra. El Responsable es quien la registró: Administrador Demo.» | Ventana **Venta #N — pedido PED-...** con **Estado de la venta: Registrada**, **Responsable: Administrador Demo**, productos y totales. Cerrá con **Cerrar**. | |
 
 ### Bloque 3. Cancelación por un vendedor y «Anulada por» (2:30)
@@ -398,12 +402,12 @@ Texto sugerido (leelo con tus palabras):
     **Cómo evitarlo:** no abras pedidos entregados y no te detengas en el campo Envío de un pedido
     recién confirmado; si preguntan, es un texto engañoso conocido (manda el estado del pedido).
   - *Punto 13:* el formato de moneda no es uniforme (`$39.900` vs `$ 39.900`). No lo comentes.
-  - *Punto 14:* el seguimiento del cliente no dibuja el historial; no hay menú de navegación. Los
-    tableros de inicio del personal (`/admin` y `/vendedor`) ya muestran datos reales (ventas, pedidos
-    por estado, inventario, gráfico de 30 días), pero son más simples que los de los mapas de pantalla
-    (sin porcentajes ni selector de período; ver «Límites conocidos» del manual). **Cómo evitarlo:**
-    usá las pestañas preparadas (3.6); si preguntan por el historial, la API ya lo devuelve y falta
-    dibujarlo.
+  - *Punto 14:* el seguimiento del cliente no dibuja el historial; el menú de usuario todavía no tiene
+    entrada «Panel» (los paneles `/admin` y `/vendedor` se alcanzan al iniciar sesión o escribiendo la
+    URL). Esos tableros de inicio del personal ya muestran datos reales (ventas, pedidos por estado,
+    inventario, gráfico de 30 días), pero son más simples que los de los mapas de pantalla (sin
+    porcentajes ni selector de período; ver «Límites conocidos» del manual). **Cómo evitarlo:** usá las
+    pestañas preparadas (3.6); si preguntan por el historial, la API ya lo devuelve y falta dibujarlo.
   - *Punto 15:* accesibilidad de los componentes comunes. No uses teclado ni lector de pantalla en la
     demo.
   - *Punto 16:* `GET /ventas` se pide dos veces por carga en desarrollo (modo estricto de React); no
@@ -414,8 +418,9 @@ Texto sugerido (leelo con tus palabras):
     catálogo **sin filtrar**, y «una muestra» son los primeros 4 productos de la lista, no «los más
     nuevos». Después de iniciar sesión solo el cliente llega ahí (el administrador y el vendedor entran
     a su panel de inicio): pasá directo a las pestañas preparadas.
-  - **No hay botón de cerrar sesión** ni menú: por eso las tres ventanas. El ícono de persona, la
-    lupa del encabezado y el corazón y el carrito de las tarjetas del catálogo no hacen nada: no los toques.
+  - Ya hay **Cerrar sesión** en el menú de usuario (ícono de persona del encabezado): las tres ventanas
+    son un consejo opcional, no una obligación. La lupa del encabezado y el corazón y el carrito de las
+    tarjetas del catálogo no hacen nada: no los toques.
   - En «Roles y permisos» no hay permisos cargados y la pantalla no hace nada útil: no la abras.
   - Recuperar la contraseña **no envía correo**: el enlace sale por la consola del backend. Si querés
     mostrarla, tené la consola a mano y decí que no hay servicio de correo (diferido a la versión 2.0).
@@ -504,11 +509,12 @@ Hay un staging local con Docker Compose (nginx, backend y MySQL) y una prueba de
 que pasó, también desde cero (docs/despliegue/staging.md). **No hay un servidor real**, ni HTTPS ni
 respaldos automáticos.
 
-**12. ¿Por qué no hay menú?**
-Se priorizó el flujo compra → venta y la solidez del backend. La navegación quedó como deuda declarada
-(punto 14). La página de inicio ya es una portada simple (banner, categorías y una muestra del catálogo)
-y el personal ya tiene su panel de inicio con datos reales, pero ninguno reemplaza al menú: las pantallas
-funcionan y hoy se entra por su dirección (o por los accesos rápidos del panel).
+**12. ¿Cómo se navega?**
+Desde el menú de usuario del encabezado (ícono de la persona): según el rol muestra las pantallas que
+existen hoy y **Cerrar sesión**. Al iniciar sesión, el administrador y el vendedor llegan a su panel de
+inicio con datos reales (ventas, pedidos por estado, inventario, gráfico de 30 días), pero el menú todavía
+no tiene una entrada «Panel» para volver a él (deuda declarada, punto 14). La página de inicio (`/`) es
+una portada simple (banner, categorías y una muestra del catálogo): no es un panel.
 
 **13. ¿Por qué precios enteros, sin centavos?**
 Para evitar que la pasarela rechace un pago. Ojo: es una regla de **prevención** basada en fuentes no

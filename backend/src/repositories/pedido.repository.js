@@ -28,13 +28,28 @@ const DETALLES_CON_VARIANTE = {
   },
 };
 
+// Dirección del pedido: solo los datos de entrega. Nunca la fila completa
+// (usuarioId, esPrincipal y eliminadaEn son metadatos de la cuenta, RF-005).
+const DIRECCION_DE_ENTREGA = {
+  select: {
+    id: true,
+    destinatario: true,
+    telefono: true,
+    calle: true,
+    ciudad: true,
+    departamento: true,
+    codigoPostal: true,
+    referencia: true,
+  },
+};
+
 // Detalle completo de un pedido (respuesta de crear, consultar y gestionar).
 const INCLUDE_DETALLE = {
   detalles: DETALLES_CON_VARIANTE,
   usuario: USUARIO_PUBLICO,
   pago: true,
   infoEnvio: true,
-  direccion: true,
+  direccion: DIRECCION_DE_ENTREGA,
 };
 
 // RN-003: las consultas de un cliente siempre filtran por su usuarioId. Un
@@ -187,7 +202,7 @@ const obtenerDeUsuario = async (id, usuarioId) => {
           },
         },
       },
-      direccion: true,
+      direccion: DIRECCION_DE_ENTREGA,
     },
   });
 };

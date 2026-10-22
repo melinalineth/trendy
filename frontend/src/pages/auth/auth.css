@@ -34,6 +34,12 @@
   font-weight: normal;
 }
 
+/* Enlaces a las páginas legales dentro de la etiqueta de la casilla:
+   subrayados para distinguirlos del texto sin depender solo del color. */
+.auth-form__checkbox a {
+  text-decoration: underline;
+}
+
 .auth-form__links {
   display: flex;
   flex-direction: column;

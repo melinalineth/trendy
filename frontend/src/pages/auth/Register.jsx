@@ -105,7 +105,23 @@ function Register() {
             checked={aceptaPoliticas}
             onChange={(event) => setAceptaPoliticas(event.target.checked)}
           />
-          Acepto las políticas de privacidad y los términos de uso
+          {/* Los enlaces abren las páginas legales en otra pestaña para no
+              perder lo que ya escribiste. Al ser contenido interactivo dentro
+              del <label>, hacer clic en ellos NO marca ni desmarca la casilla. */}
+          <span>
+            Acepto las{" "}
+            <a
+              href="/privacidad"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              políticas de privacidad
+            </a>{" "}
+            y los{" "}
+            <a href="/terminos" target="_blank" rel="noopener noreferrer">
+              términos de uso
+            </a>
+          </span>
         </label>
 
         <Button

@@ -52,8 +52,20 @@ Decisiones:
   del pedido) debe pasar `EN_PREPARACION` explícitamente.
 - La información de contacto (RF-027, 3er criterio) sale de `Direccion` (`destinatario`,
   `telefono`) vía `direccionId`. Riesgo: si el cliente edita o borra esa dirección después,
-  el envío ya creado cambiaría con ella. Sprint 4 debería decidir si congela un snapshot o
-  bloquea la edición de direcciones con pedidos activos.
+  el envío ya creado cambiaría con ella. Resuelto con RF-005 (editar y eliminar direcciones):
+  los datos de entrega de la fila de `Direccion` que usa un pedido o un `InfoEnvio` nunca se
+  modifican y la fila nunca se borra de verdad. Una edición que cambia los datos de entrega
+  crea una fila nueva y da de baja la anterior, así que **el `id` de la dirección puede cambiar
+  tras un `PUT`** (la respuesta trae el vigente); una baja con pedidos es lógica
+  (`Direccion.eliminadaEn`). Sin pedidos se edita y se borra en el lugar. `esPrincipal` no forma
+  parte de la copia histórica (es un metadato de la cuenta; `PATCH /api/v1/direcciones/:id` con
+  `{ esPrincipal }` lo cambia sin tocar los datos de entrega) y el pedido solo expone los datos de
+  entrega de su dirección.
+  Durante la compra, la dirección se relee dentro de la transacción del pedido con lock
+  compartido: si se dio de baja o borró entre el cálculo del envío y el pedido, responde 404
+  `DIRECCION_NO_ENCONTRADA`; si cambió su ciudad o departamento (la tarifa calculada ya no
+  vale), 409 `DIRECCION_MODIFICADA`; en ambos casos no se crea nada. Detalle en
+  `direccion.service.js`.
 
 ## 3. Estados y transiciones válidas
 

@@ -215,9 +215,9 @@ No verificado / pendiente:
 - No hay despliegue en un servidor real, HTTPS ni respaldos (ver la guía de staging).
 - No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
   crean con `scripts/crear-usuario.js`, ver arriba).
-- Pendiente: completar la navegación y otros huecos de uso (no hay menú ni botón para cerrar
-  sesión; la página de inicio es una portada simple y sus categorías no preseleccionan el filtro del
-  catálogo). Están documentados en la sección «Límites conocidos» de
+- Pendiente: completar la navegación y otros huecos de uso (el menú de usuario ya ofrece las pantallas
+  de cada rol y «Cerrar sesión», pero no tiene entrada «Panel»; la página de inicio es una portada simple
+  y sus categorías no preseleccionan el filtro del catálogo). Están documentados en la sección «Límites conocidos» de
   [`docs/manual/manual-usuario.md`](docs/manual/manual-usuario.md).
 - El contra entrega se habilita y deshabilita por zona desde `/admin/envios` (columna «Contra
   entrega» y botones por zona). Esa pantalla se verificó en el navegador al integrarla (PR #48); el

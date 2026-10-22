@@ -68,24 +68,139 @@
   font-style: italic;
 }
 
+.direcciones-page__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.direccion-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* Botones de las tarjetas: más chicos que el .btn base y con el mismo
+   lenguaje que la administración de zonas (secundario / peligro). */
+.btn.direccion-btn--secundario,
+.btn.direccion-btn--peligro {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.btn.direccion-btn--secundario {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn.direccion-btn--secundario:hover {
+  background-color: var(--color-brand-50);
+}
+
+.btn.direccion-btn--peligro {
+  background-color: var(--color-danger-500);
+  color: var(--color-text-inverse);
+}
+
+.btn.direccion-btn--peligro:hover {
+  background-color: var(--color-danger-500);
+  opacity: 0.85;
+}
+
+.btn.direccion-btn--secundario:disabled,
+.btn.direccion-btn--peligro:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Formularios y confirmación dentro del Modal. Con el teclado en pantalla o
+   en un celular bajo, el formulario hace scroll en vez de salirse del modal. */
 .direccion-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
+  max-height: calc(100dvh - 15rem);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.direccion-form__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .direccion-form__field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 600;
+}
+
+.direccion-form__error {
+  margin: 0;
+  color: var(--color-danger-500);
+  font-size: var(--text-sm);
+}
+
+.direccion-form__error-general .alert {
+  max-width: 100%;
+  margin: 0;
+}
+
+.direccion-form__detalles {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  color: var(--color-danger-500);
+  font-size: var(--text-sm);
 }
 
 .direccion-form__checkbox {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
   font-weight: normal;
+}
+
+.direccion-confirmar__resumen {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-brand-50);
+}
+
+.direccion-confirmar__destinatario {
+  margin: 0 0 4px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.direccion-confirmar__resumen .direccion-card__telefono {
+  margin: 0;
+}
+
+.direccion-confirmar__texto {
+  margin: 0;
+  color: var(--color-text);
+}
+
+@media (max-width: 600px) {
+  .direcciones-page {
+    padding: var(--space-6) 12px;
+  }
+
+  .direcciones-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .direccion-card__acciones .btn {
+    flex: 1 1 auto;
+  }
 }
