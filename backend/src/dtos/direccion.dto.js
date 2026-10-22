@@ -37,6 +37,57 @@ const crearDireccionSchema = z.object({
   esPrincipal: z.boolean().optional(),
 });
 
+// PUT /direcciones/:id REEMPLAZA los datos de la dirección: mismos campos y
+// mismas validaciones que el alta (los opcionales que no vienen quedan sin
+// valor; `esPrincipal` ausente conserva el que tenía).
+const actualizarDireccionSchema = crearDireccionSchema;
+
+// PATCH /direcciones/:id: cambia SOLO el flag de principal. Estricto: cualquier
+// otro campo es un error (no se aplica nada a medias).
+const principalDireccionSchema = z.strictObject(
+  {
+    esPrincipal: z.boolean({ error: "esPrincipal es requerido y debe ser true o false" }),
+  },
+  { error: "El cuerpo solo admite el campo esPrincipal" }
+);
+
+// Mismo contrato de error que el resto de los DTOs (carrito, envío, pedidos):
+// un Error con status 400 que errorHandler.js formatea como
+// { error: { codigo, mensaje, detalles } } (DDS §5.3).
+function errorDeValidacion(detalles) {
+  const error = new Error("Datos inválidos");
+  error.status = 400;
+  error.codigo = "VALIDACION_FALLIDA";
+  error.detalles = detalles;
+  return error;
+}
+
+// Valida el body de alta/modificación y devuelve los datos limpios (trim).
+function validarCuerpoDireccion(body, schema = crearDireccionSchema) {
+  const parseo = schema.safeParse(body ?? {});
+
+  if (!parseo.success) {
+    throw errorDeValidacion(parseo.error.issues.map((issue) => issue.message));
+  }
+
+  return parseo.data;
+}
+
+// Valida el :id de la ruta (entero positivo) y lo devuelve como Number.
+function validarIdDireccion(valor) {
+  const texto = typeof valor === "string" ? valor.trim() : "";
+
+  if (!/^\d+$/.test(texto) || !Number.isSafeInteger(Number(texto)) || Number(texto) <= 0) {
+    throw errorDeValidacion(["El id de la dirección debe ser un entero mayor que cero"]);
+  }
+
+  return Number(texto);
+}
+
 module.exports = {
   crearDireccionSchema,
+  actualizarDireccionSchema,
+  principalDireccionSchema,
+  validarCuerpoDireccion,
+  validarIdDireccion,
 };
