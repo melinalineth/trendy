@@ -1,7 +1,8 @@
 /* Panel de inicio de admin y vendedor. Conserva la estructura visual del
    dashboard de los mapas de pantalla (tarjetas con ícono, gráfico de ventas y
-   pedidos recientes) pero sin el menú lateral falso: la navegación real es la
-   del Header y los accesos rápidos. Solo tokens de styles/tokens.css. */
+   pedidos recientes). El menú lateral del admin no es de este componente: lo
+   pone AdminLayout (el vendedor navega con el Header y los accesos rápidos).
+   Solo tokens de styles/tokens.css. */
 
 .panel-inicio {
   display: flex;

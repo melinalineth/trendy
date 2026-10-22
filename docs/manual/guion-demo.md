@@ -259,13 +259,15 @@ respuesta de cada login:
 sesión de Trendy: no uses dos incógnitos.) **La
 sesión dura 1 hora**: iniciá sesión en las tres como máximo 30 minutos antes de empezar. En cada ventana
 dejá abierta una pestaña por pantalla (son tus atajos; el menú de usuario también lleva a cada una según
-el rol):
+el rol, y en la ventana B además está el **menú lateral** azul oscuro del administrador, a la izquierda,
+con las mismas pantallas):
 
 - A (cliente): `/catalogo`, `/carrito`, `/pedidos`
 - B (admin): `/admin`, `/admin/pedidos`, `/admin/ventas`, `/admin/envios`
 - C (vendedor): `/vendedor`, `/vendedor/pedidos`, `/vendedor/ventas`, `/vendedor/productos`, `/vendedor/inventario`
 
-Tamaño: pantalla de escritorio, 1280 × 720 o más, zoom al 100 %. Cerrá notificaciones y otras pestañas.
+Tamaño: pantalla de escritorio, 1280 × 720 o más, zoom al 100 % (con menos de 900 px de ancho el menú
+lateral del administrador se pliega en un botón **Menú de administración**). Cerrá notificaciones y otras pestañas.
 Acordate de que tras iniciar sesión el sistema te deja según el rol: el cliente en `/` (la página de
 inicio, que solo lleva al catálogo), el administrador en `/admin` y el vendedor en `/vendedor` (sus
 paneles de inicio, con datos reales). Así, las ventanas B y C quedan en la primera pestaña de su lista;
@@ -314,7 +316,7 @@ en la A, andá a las pestañas preparadas.
 | --- | --- | --- | --- | --- |
 | 2.1 | Ventana B, `/admin/pedidos`. Primera fila = el pedido nuevo. Toco **Ver**. | «Esta es la gestión de pedidos. El pedido llega pendiente, con el pago contra entrega registrado.» | Detalle con Cliente, **Método de pago: Pago contra entrega**, **Pago: Pendiente**, **Envío: Todavía no empezó** y el panel **Acciones**. | Si no está, tocá **Actualizar** o filtrá por **Número de pedido**. |
 | 2.2 | Toco **Pasar a «Confirmado»** y **Sí, cambiar estado**. | «Los estados avanzan de a un paso, sin saltos ni retrocesos. Un contra entrega se puede confirmar a mano; uno de Mercado Pago lo confirma solo el pago.» | Aviso **Pedido PED-...: ahora está «Confirmado».** | Si el botón no está, falta el pago contra entrega del cliente: mirá la nota del panel. |
-| 2.3 | Abro el menú de usuario (ícono de la persona) y toco **Ventas** (o la pestaña `/admin/ventas`). | «Acá nace la venta: no cuando se paga, sino cuando el pedido se confirma.» | Una fila nueva **Registrada** con el total, y la tarjeta **Ventas registradas** suma. | Tocá **Actualizar**. |
+| 2.3 | En el menú lateral de la izquierda toco **Ventas** (o la pestaña `/admin/ventas`). | «Acá nace la venta: no cuando se paga, sino cuando el pedido se confirma.» | Una fila nueva **Registrada** con el total, y la tarjeta **Ventas registradas** suma. | Tocá **Actualizar**. |
 | 2.4 | Toco **Ver detalle** de esa venta. | «Los precios son los del momento de la compra. El Responsable es quien la registró: Administrador Demo.» | Ventana **Venta #N — pedido PED-...** con **Estado de la venta: Registrada**, **Responsable: Administrador Demo**, productos y totales. Cerrá con **Cerrar**. | |
 
 ### Bloque 3. Cancelación por un vendedor y «Anulada por» (2:30)
@@ -511,7 +513,8 @@ respaldos automáticos.
 
 **12. ¿Cómo se navega?**
 Desde el menú de usuario del encabezado (ícono de la persona): según el rol muestra las pantallas que
-existen hoy y **Cerrar sesión**. Al iniciar sesión, el administrador y el vendedor llegan a su panel de
+existen hoy y **Cerrar sesión**. El administrador además tiene un menú lateral fijo a la izquierda con las
+mismas pantallas (en el celular se despliega con un botón; el vendedor todavía no lo tiene). Al iniciar sesión, el administrador y el vendedor llegan a su panel de
 inicio con datos reales (ventas, pedidos por estado, inventario, gráfico de 30 días), y la primera
 entrada de su menú, **Panel de inicio**, vuelve a él. La página de inicio (`/`) es una portada simple
 (banner, categorías y una muestra del catálogo): no es un panel.

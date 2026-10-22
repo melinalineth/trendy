@@ -64,7 +64,8 @@ contorno) y **Esc** lo cierra y devuelve el foco al botón. Lo que ofrece depend
 Cada entrada del personal lleva a la pantalla de **su** rol (por ejemplo, **Ventas** abre
 `/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). **Panel de inicio** es la
 primera entrada del personal y vuelve al tablero al que llegaste al iniciar sesión (`/vendedor` o
-`/admin`).
+`/admin`). El administrador, además, tiene un **menú lateral** con las mismas entradas en todas sus
+pantallas (ver [6.0](#60-menú-lateral-y-panel-de-inicio-admin)).
 
 Las pantallas que no están en el menú (como **Finalizar compra**, que se llega desde el carrito) y todas
 las demás también se abren **escribiendo la dirección en la barra del navegador**, a
@@ -104,7 +105,7 @@ la pantalla **No encontramos esta página** debajo del encabezado, con dos boton
 
 **La página de inicio (`/`)** es la portada de la tienda y la ven todos, hayan iniciado sesión o no.
 Si sos cliente, después de iniciar sesión llegás ahí; el vendedor y el administrador llegan a su
-propio panel de inicio (ver [5.0](#50-panel-de-inicio-vendedor) y [6.0](#60-panel-de-inicio-admin)).
+propio panel de inicio (ver [5.0](#50-panel-de-inicio-vendedor) y [6.0](#60-menú-lateral-y-panel-de-inicio-admin)).
 La portada muestra, de arriba abajo:
 
 - Un banner con **NUEVA COLECCIÓN**, «Descubrí tu estilo» y el botón **Comprar ahora**, que abre el
@@ -669,9 +670,30 @@ del pedido que se confirmó; nunca se borra.
 Un administrador puede hacer todo lo del vendedor (las mismas pantallas de productos, inventario,
 pedidos y ventas, con las direcciones que empiezan con `/admin/`) y además lo siguiente.
 
-### 6.0 Panel de inicio (`/admin`)
+### 6.0 Menú lateral y panel de inicio (`/admin`)
 
-Es la pantalla a la que llegás al iniciar sesión como administrador. Se titula **Panel de
+**Menú lateral.** Todas las pantallas del administrador (`/admin`, `/admin/productos`,
+`/admin/inventario`, `/admin/pedidos`, `/admin/ventas`, `/admin/envios`, `/admin/vendedores`,
+`/admin/usuarios` y `/admin/roles`) se muestran con un menú vertical azul oscuro a la izquierda, debajo
+del encabezado, y el contenido de la pantalla a la derecha. Arriba dice **Administración** y tu nombre;
+después van las entradas, cada una con un ícono: **Panel de inicio**, **Productos**, **Inventario**,
+**Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios** y **Roles** (son las mismas
+que ofrece el menú de usuario del encabezado, que sigue existiendo con **Cerrar sesión**). Al final hay
+un enlace **Ver la tienda**, que abre el catálogo (esa pantalla ya no lleva el menú lateral). La
+pantalla en la que estás aparece resaltada en magenta, con una marca blanca a la izquierda y el texto
+en negrita (así se nota aunque no distingas los colores; **Panel de inicio** solo se resalta en
+`/admin`, no en las demás, y vale igual si la dirección termina en una barra, como `/admin/`). El menú se queda visible mientras bajás por una pantalla larga.
+
+**En el celular o la tablet** (ventanas de menos de 900 píxeles de ancho) el menú no ocupa la pantalla:
+arriba del contenido aparece un botón **Menú de administración**. Al tocarlo se despliegan las mismas
+entradas, una debajo de otra y a todo el ancho; se cierra al elegir una entrada, al tocar el botón de
+nuevo o con la tecla **Esc** (el foco vuelve al botón). Con el teclado, **Tab** recorre primero el
+encabezado, después las entradas del menú y por último el contenido.
+
+Si escribís una dirección de administración que no existe (por ejemplo `/admin/algo`), se muestra la
+pantalla de «página no encontrada» sin el menú lateral.
+
+**Panel de inicio.** Es la pantalla a la que llegás al iniciar sesión como administrador. Se titula **Panel de
 administración** y muestra lo mismo que el panel del vendedor (ver [5.0](#50-panel-de-inicio-vendedor):
 ventas, pedidos por estado, catálogo e inventario, ventas de los últimos 30 días, pedidos y ventas
 recientes), con los enlaces apuntando a las pantallas `/admin/...`. Además tiene:
@@ -963,7 +985,8 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 - El panel de inicio del personal (`/admin` y `/vendedor`) es más simple que el de los mapas de
   pantalla: no tiene variaciones porcentuales respecto del período anterior, ni selector de período
   (el gráfico es siempre de los últimos 30 días), ni «pedidos del mes» ni «stock total». No tiene
-  enlace en el encabezado (se llega al iniciar sesión o escribiendo la dirección), no se actualiza
+  enlace propio en el encabezado (se llega al iniciar sesión, con la entrada **Panel de inicio** del
+  menú o escribiendo la dirección), no se actualiza
   solo, y «Productos activos» cuenta solo los productos con al menos una variante en stock (la
   consulta de productos es la misma del catálogo público).
 - En el historial de inventario, la reposición por una cancelación figura a nombre del cliente dueño

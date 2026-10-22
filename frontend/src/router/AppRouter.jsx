@@ -13,6 +13,7 @@ import RestablecerPassword from "../pages/auth/RestablecerPassword";
 import Direcciones from "../pages/customer/Direcciones";
 import Cart from "../pages/customer/Cart";
 import RoleGuard from "../components/auth/RoleGuard";
+import AdminLayout from "../components/layout/AdminLayout";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import SellerDashboard from "../pages/seller/SellerDashboard";
 import Sellers from "../pages/admin/Sellers";
@@ -62,53 +63,100 @@ function AppRoutes() {
           </RoleGuard>
         }
       />
-      {/* Paneles de inicio del personal: a donde llega cada rol al iniciar
-          sesión (ver Login.jsx). */}
+      {/* Pantallas del administrador: todas comparten AdminLayout (menú lateral
+          + contenido, ver components/layout/AdminLayout.jsx). El layout va
+          guardado por RoleGuard Y cada hija conserva el suyo (defensa en
+          profundidad: si alguien saca una hija del grupo, sigue protegida).
+          Una URL /admin/xyz que no existe no coincide con ninguna hija, así que
+          cae en el comodín `*` de más abajo (NotFound, sin menú lateral).
+          RF-026 (zonas y tarifas de envío) es solo admin. */}
       <Route
-        path="/admin"
         element={
           <RoleGuard roles={["admin"]}>
-            <AdminDashboard />
+            <AdminLayout />
           </RoleGuard>
         }
-      />
+      >
+        <Route
+          path="/admin"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <AdminDashboard />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/productos"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <AdminProducts />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/inventario"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <AdminInventory />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/pedidos"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <AdminOrders />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/ventas"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <AdminSales />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/envios"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <ZonasCobertura />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/vendedores"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <Sellers />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/usuarios"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <Users />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="/admin/roles"
+          element={
+            <RoleGuard roles={["admin"]}>
+              <Roles />
+            </RoleGuard>
+          }
+        />
+      </Route>
+      {/* Panel de inicio del vendedor: a donde llega al iniciar sesión (ver
+          Login.jsx). El del admin es /admin, dentro del layout de arriba. */}
       <Route
         path="/vendedor"
         element={
           <RoleGuard roles={["vendedor"]}>
             <SellerDashboard />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/admin/vendedores"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <Sellers />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/admin/usuarios"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <Users />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/admin/roles"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <Roles />
-          </RoleGuard>
-        }
-      />
-      <Route
-        path="/admin/productos"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <AdminProducts />
           </RoleGuard>
         }
       />
@@ -121,27 +169,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/inventario"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <AdminInventory />
-          </RoleGuard>
-        }
-      />
-      <Route
         path="/vendedor/inventario"
         element={
           <RoleGuard roles={["vendedor"]}>
             <SellerInventory />
-          </RoleGuard>
-        }
-      />
-      {/* RF-026: zonas de cobertura y tarifas de envío (solo admin). */}
-      <Route
-        path="/admin/envios"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <ZonasCobertura />
           </RoleGuard>
         }
       />
@@ -173,14 +204,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/pedidos"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <AdminOrders />
-          </RoleGuard>
-        }
-      />
-      <Route
         path="/vendedor/pedidos"
         element={
           <RoleGuard roles={["vendedor"]}>
@@ -189,15 +212,8 @@ function AppRoutes() {
         }
       />
       {/* Sprint 5: consulta de ventas (RF-042). En v1.0 admin y vendedor ven
-          todas las ventas desde el mismo panel compartido. */}
-      <Route
-        path="/admin/ventas"
-        element={
-          <RoleGuard roles={["admin"]}>
-            <AdminSales />
-          </RoleGuard>
-        }
-      />
+          todas las ventas desde el mismo panel compartido (la del admin está
+          en el layout de arriba). */}
       <Route
         path="/vendedor/ventas"
         element={
