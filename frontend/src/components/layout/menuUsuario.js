@@ -7,7 +7,13 @@
 // Esta misma lista alimenta el menú lateral del admin (AdminSidebar): la
 // pantalla nueva se agrega UNA vez y aparece en los dos menús.
 
-const CATALOGO = { etiqueta: "Catálogo", ruta: "/catalogo" };
+// `soloMenuUsuario`: la entrada va en el menú de usuario del Header pero NO en
+// el menú lateral (que tiene su propio enlace «Ver la tienda»).
+const CATALOGO = {
+  etiqueta: "Catálogo",
+  ruta: "/catalogo",
+  soloMenuUsuario: true,
+};
 
 // Visitante (sin sesión).
 export const ENTRADAS_VISITANTE = [
@@ -49,8 +55,13 @@ export const ENTRADAS_POR_ROL = {
 // (las que muestra el menú lateral de AdminSidebar). Sale de la misma lista que
 // el menú de usuario, así los dos nunca se desalinean. El `icono` (opcional)
 // es el nombre de un ícono de AdminSidebar.
+// `rol` puede venir de localStorage: Object.hasOwn evita que un rol como
+// "constructor" devuelva una propiedad heredada del objeto (igual que UserMenu).
 export function entradasDePanel(rol) {
-  return (ENTRADAS_POR_ROL[rol] ?? []).filter((entrada) => entrada !== CATALOGO);
+  if (typeof rol !== "string" || !Object.hasOwn(ENTRADAS_POR_ROL, rol)) {
+    return [];
+  }
+  return ENTRADAS_POR_ROL[rol].filter((entrada) => !entrada.soloMenuUsuario);
 }
 
 // Cómo se muestra el rol debajo del nombre.

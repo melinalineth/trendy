@@ -15,11 +15,23 @@
   min-width: 0;
 }
 
+/* Para que la columna oscura llegue hasta abajo aun en pantallas cortas
+   (cargando, sin datos) SIN depender de la altura del Header: el área de la
+   pantalla (.app-shell__contenido, ver App.css) pasa a ser una columna flex
+   solo cuando contiene este layout, y el layout crece para llenarla. El resto
+   de las pantallas no entra en esta regla y no cambia. Sin soporte de :has el
+   resultado es solo que la columna oscura termina donde termina el contenido. */
+.app-shell__contenido:has(> .admin-layout) {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__contenido > .admin-layout {
+  flex: 1 0 auto;
+}
+
 @media (min-width: 900px) {
   .admin-layout {
     flex-direction: row;
-    /* Para que la columna oscura llegue hasta abajo aun en pantallas cortas
-       (cargando, sin datos): alto de la ventana menos el Header (~4.8 rem). */
-    min-height: calc(100vh - 4.8rem);
   }
 }

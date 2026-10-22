@@ -1,7 +1,16 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import IconoMenu from "./IconoMenu";
 import "./AdminSidebar.css";
+
+// El router también resuelve "/admin/" y "/admin/productos/" (con barra final)
+// y sin distinguir mayúsculas; NavLink con `end` no, y dejaría el menú sin
+// ninguna entrada resaltada. Por eso la entrada activa se calcula comparando
+// la ruta actual y la de cada entrada normalizadas. Coincidencia EXACTA (no por
+// prefijo): "/admin" no queda activa en "/admin/productos".
+function sinBarraFinal(ruta) {
+  return ruta.replace(/\/+$/, "").toLowerCase();
+}
 
 // Menú lateral de las pantallas del personal (hoy lo usa el admin vía
 // AdminLayout; recibe las entradas por props para que el vendedor pueda
@@ -83,29 +92,34 @@ function AdminSidebar({
           <ul className="admin-sidebar__lista">
             {entradas.map((entrada) => (
               <li key={entrada.ruta}>
-                {/* `end` en TODAS: "/admin" no debe quedar activa en
-                    "/admin/productos"; el resto no tiene subrutas. */}
-                <NavLink
+                <Link
                   to={entrada.ruta}
-                  end
                   className="admin-sidebar__enlace"
+                  aria-current={
+                    sinBarraFinal(location.pathname) ===
+                    sinBarraFinal(entrada.ruta)
+                      ? "page"
+                      : undefined
+                  }
                   onClick={alElegirEntrada}
                 >
                   <IconoMenu nombre={entrada.icono} />
                   <span>{entrada.etiqueta}</span>
-                </NavLink>
+                </Link>
               </li>
             ))}
           </ul>
         </nav>
 
-        <Link
-          to={rutaTienda}
-          className="admin-sidebar__enlace admin-sidebar__tienda"
-        >
-          <IconoMenu nombre="tienda" />
-          <span>Ver la tienda</span>
-        </Link>
+        <div className="admin-sidebar__pie">
+          <Link
+            to={rutaTienda}
+            className="admin-sidebar__enlace admin-sidebar__tienda"
+          >
+            <IconoMenu nombre="tienda" />
+            <span>Ver la tienda</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

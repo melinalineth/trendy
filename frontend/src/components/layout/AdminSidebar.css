@@ -3,6 +3,9 @@
    Mobile-first: por defecto es una barra con un botón que despliega la lista;
    desde 900 px es una columna fija con la lista siempre visible. */
 .admin-sidebar {
+  /* Ancho de la marca de la entrada activa. Se reserva (transparente) en TODAS
+     las entradas para que el texto no se corra al cambiar de activa a inactiva. */
+  --admin-sidebar-marca: 3px;
   background-color: var(--color-navy-800);
   color: var(--color-text-inverse-muted);
 }
@@ -54,8 +57,10 @@
   display: block;
 }
 
+/* El texto arranca alineado con el ícono de las entradas (su padding + marca). */
 .admin-sidebar__identidad {
-  padding: var(--space-2) var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3) var(--space-4)
+    calc(var(--space-3) + var(--admin-sidebar-marca));
 }
 
 .admin-sidebar__titulo {
@@ -90,7 +95,8 @@
   box-sizing: border-box;
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  border-left: var(--admin-sidebar-marca) solid transparent;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: var(--color-text-inverse-muted);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -110,10 +116,14 @@
   text-decoration: none;
 }
 
-/* Página actual: NavLink agrega aria-current="page" (y la clase .active). */
+/* Página actual (aria-current="page", lo calcula AdminSidebar.jsx). Se
+   distingue por el fondo magenta Y por una marca blanca a la izquierda y un
+   texto más pesado, no solo por el color (WCAG 1.4.1). */
 .admin-sidebar__enlace[aria-current="page"] {
+  border-left-color: currentcolor;
   background-color: var(--color-brand-500);
   color: var(--color-text-inverse);
+  font-weight: 700;
   box-shadow: var(--shadow-glow-brand);
 }
 
@@ -131,17 +141,32 @@
 }
 
 /* "Ver la tienda" separado de las pantallas del panel. */
-.admin-sidebar__tienda {
+.admin-sidebar__pie {
   margin-top: var(--space-4);
-  border-top: 1px solid var(--color-border-inverse);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
   padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-inverse);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .admin-sidebar__enlace,
   .admin-sidebar__toggle-flecha {
     transition: none;
+  }
+}
+
+/* Alto contraste de Windows (forced-colors): el navegador reemplaza los colores
+   y se pierden el magenta y la sombra. La entrada activa se sigue notando por
+   el color del sistema para "seleccionado", la marca a la izquierda y el
+   texto en negrita; las demás reservan la marca invisible. */
+@media (forced-colors: active) {
+  .admin-sidebar__enlace {
+    border-left-color: Canvas;
+  }
+
+  .admin-sidebar__enlace[aria-current="page"] {
+    border-left-color: HighlightText;
+    background-color: Highlight;
+    color: HighlightText;
   }
 }
 
@@ -169,9 +194,16 @@
     display: block;
     position: sticky;
     top: 0;
-    max-height: 100vh;
+    /* Alto de la ventana menos el Header (AdminLayout lo mide y lo publica en
+       --app-header-alto; sin ese dato queda en 0 y vale la ventana entera). Así
+       «Ver la tienda» se ve sin scrollear y la columna no empuja el alto de la
+       página más allá de la ventana. */
+    max-height: calc(100vh - var(--app-header-alto, 0px));
     overflow-y: auto;
-    padding: var(--space-6) var(--space-3) var(--space-4);
+    /* El padding lateral (20 px) deja lugar al "glow" de la entrada activa
+       (--shadow-glow-brand, ~15 px): con overflow-y: auto el eje X también
+       recorta, y con menos lugar la sombra se cortaba a los lados. */
+    padding: var(--space-6) var(--space-5) var(--space-4);
     border-top: none;
   }
 }

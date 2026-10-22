@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import AdminSidebar from "./AdminSidebar";
@@ -22,8 +23,32 @@ function AdminLayout() {
   const nombre =
     typeof usuario?.nombre === "string" ? usuario.nombre.trim() : "";
 
+  // Alto real del Header, medido (no un número fijo: cambia con el tamaño de
+  // la letra del usuario o si el Header salta de línea). El menú lateral lo usa
+  // en AdminSidebar.css para no ser más alto que el espacio que queda debajo
+  // del Header. Solo escribe una variable CSS en el DOM: no hay estado de React.
+  const layoutRef = useRef(null);
+  useEffect(() => {
+    const header = document.querySelector(".app-header");
+    const layout = layoutRef.current;
+    if (!header || !layout || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const medir = () =>
+      layout.style.setProperty(
+        "--app-header-alto",
+        `${header.getBoundingClientRect().height}px`,
+      );
+    medir();
+
+    const observador = new ResizeObserver(medir);
+    observador.observe(header);
+    return () => observador.disconnect();
+  }, []);
+
   return (
-    <div className="admin-layout">
+    <div className="admin-layout" ref={layoutRef}>
       <AdminSidebar entradas={entradasDePanel("admin")} nombre={nombre} />
       <main className="admin-layout__contenido">
         <Outlet />
