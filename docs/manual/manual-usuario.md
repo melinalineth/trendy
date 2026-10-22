@@ -30,7 +30,7 @@ pantalla manda: avisale al equipo.
 
 | Rol | Cómo se obtiene | Qué puede hacer |
 | --- | --- | --- |
-| **Visitante** (sin sesión) | Entrando al sitio | Ver el catálogo y el detalle de cada producto, registrarse, iniciar sesión y recuperar la contraseña. |
+| **Visitante** (sin sesión) | Entrando al sitio | Ver el catálogo y el detalle de cada producto, registrarse, iniciar sesión, recuperar la contraseña y leer los **Términos de uso** (`/terminos`) y la **Política de privacidad** (`/privacidad`), que son borradores pendientes de aprobación. |
 | **Cliente** | Registrándose en la pantalla «Crear cuenta» | Todo lo del visitante, más: guardar direcciones, usar el carrito, comprar (checkout), ver sus pedidos y el seguimiento del envío. |
 | **Vendedor** | Lo crea el equipo técnico (ver el [README](../../README.md#cómo-crear-un-vendedor-o-un-administrador)) | Gestionar productos, inventario y pedidos (estados, envío, cobro contra entrega, cancelaciones) y consultar las ventas. Ve **todos** los pedidos y **todas** las ventas, no solo «los suyos». |
 | **Administrador** | Lo crea el equipo técnico | Todo lo del vendedor, más: zonas de cobertura y tarifas de envío, cancelar pedidos vencidos y ver/activar/desactivar usuarios y vendedores. |
@@ -123,7 +123,8 @@ Pantalla **Crear cuenta**. Completá:
 - **Correo electrónico** (con formato de correo)
 - **Contraseña** (mínimo 8 caracteres)
 - La casilla **Acepto las políticas de privacidad y los términos de uso**. El botón **Crear cuenta**
-  queda deshabilitado hasta que la marques.
+  queda deshabilitado hasta que la marques. Las palabras «políticas de privacidad» y «términos de
+  uso» son enlaces que abren los textos en otra pestaña (ver más abajo).
 
 Qué puede pasar:
 
@@ -135,6 +136,37 @@ Qué puede pasar:
 - Cualquier otro problema (por ejemplo una contraseña de menos de 8 caracteres o un correo que el
   navegador acepta pero el sistema no): **No pudimos completar el registro. Revisá los datos e
   intentá de nuevo.** El mensaje no dice cuál es el campo con el problema; revisá los tres.
+
+#### Términos de uso y Política de privacidad (`/terminos` y `/privacidad`)
+
+Son dos páginas públicas (no hace falta iniciar sesión) a las que se llega desde los enlaces de la
+casilla del registro: **políticas de privacidad** abre `/privacidad` y **términos de uso** abre
+`/terminos`, cada una en una pestaña nueva, así no perdés lo que ya escribiste. Hacer clic en un
+enlace no marca ni desmarca la casilla.
+
+- **Borrador.** Arriba de las dos páginas hay un aviso amarillo: «Borrador: este texto está
+  pendiente de revisión y aprobación del equipo de Trendy. No constituye asesoría legal.» Los textos
+  describen cómo funciona la tienda hoy, pero **todavía no fueron aprobados por el equipo** y no son
+  asesoría legal.
+- Cada página muestra la fecha de «Última actualización», un índice con enlaces a sus secciones
+  numeradas, y al pie un enlace a la otra página y otro para **Volver al registro**.
+- **Términos de uso**: qué es Trendy, cuentas y credenciales, pedidos y precios (el precio queda fijo
+  al crear el pedido), medios de pago (contra entrega solo en zonas habilitadas: la opción se muestra siempre, pero no se
+  puede confirmar el pedido fuera de ellas; Mercado Pago sin
+  garantías, porque nunca se probó con el servicio real), envíos solo a zonas de cobertura,
+  cancelaciones y cambios a cargo del personal, sin reembolsos ni devoluciones en el sistema, uso
+  aceptable, disponibilidad sin garantía, cambios a los términos y contacto.
+- **Política de privacidad**: qué datos se guardan y para qué, cómo se guardan (contraseña con
+  bcrypt; sesión en el navegador, 1 hora por defecto; y, como no se envían correos, el código de
+  recuperación y el correo se escriben en el registro del servidor, con el código legible hasta que
+  vence o se usa), quién los ve (vendedores y administradores ven en los pedidos nombre, correo,
+  dirección de entrega completa y productos, y en las ventas solo el nombre; los administradores
+  además ven el listado de usuarios, activan o desactivan cuentas y editan los permisos de cada
+  rol), terceros (Mercado Pago e imágenes de sitios externos), conservación (sin herramienta de
+  borrado), derechos y cookies (no se usan; no hay analítica).
+- **Pendiente de definir**: el canal de contacto, el plazo de conservación de datos y la revisión de
+  cómo aplica la Ley 1581 de 2012 (habeas data). Los textos no inventan datos de empresa (NIT,
+  dirección, teléfono ni correo).
 
 ### 3.2 Iniciar sesión (`/login`)
 

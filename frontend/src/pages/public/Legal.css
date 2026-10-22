@@ -1,0 +1,123 @@
+/* Páginas legales (Términos de uso y Política de privacidad). Solo tokens.
+   Columna de lectura angosta, jerarquía clara y legible desde 375 px. */
+
+.legal {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4) var(--space-12);
+}
+
+.legal__borrador {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-warning-500);
+  border-left-width: 6px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-warning-100);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.legal__encabezado {
+  margin-bottom: var(--space-6);
+}
+
+.legal__titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-3xl);
+}
+
+.legal__fecha {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.legal__intro {
+  margin-top: var(--space-4);
+}
+
+/* Índice */
+.legal__indice {
+  margin: 0 0 var(--space-8);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+}
+
+.legal__indice-titulo {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.legal__indice-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+  list-style: decimal;
+  font-size: var(--text-sm);
+}
+
+/* Secciones */
+.legal__seccion {
+  margin-bottom: var(--space-8);
+  scroll-margin-top: var(--space-6);
+}
+
+.legal__seccion-titulo {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xl);
+}
+
+.legal__seccion p,
+.legal__seccion li {
+  color: var(--color-text);
+}
+
+.legal__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+  list-style: disc;
+}
+
+/* Enlaces del documento: subrayados para no depender solo del color */
+.legal a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal a:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Pie del documento */
+.legal__pie {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 480px) {
+  .legal {
+    padding-top: var(--space-6);
+  }
+
+  .legal__titulo {
+    font-size: var(--text-2xl);
+  }
+
+  .legal__seccion-titulo {
+    font-size: var(--text-lg);
+  }
+}
