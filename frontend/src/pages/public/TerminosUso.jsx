@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { LEGAL_FECHA_ISO, LEGAL_FECHA_TEXTO } from "./legalMeta";
 import "./Legal.css";
 
 // Términos de uso (ruta pública /terminos). Es el documento al que apunta la
@@ -95,7 +96,9 @@ const SECCIONES = [
           <li>
             <strong>Pago contra entrega:</strong> pagás al recibir el pedido.
             Solo está disponible en las zonas donde el equipo de Trendy lo
-            habilitó; si tu dirección está en otra zona, no vas a poder elegirlo.
+            habilitó. La opción se muestra siempre en el checkout, pero si tu
+            dirección está en otra zona no vas a poder confirmar el pedido con
+            ese medio de pago.
           </li>
           <li>
             <strong>Mercado Pago:</strong> se ofrece en el checkout y te lleva a
@@ -256,7 +259,8 @@ function TerminosUso() {
       <header className="legal__encabezado">
         <h1 className="legal__titulo">Términos de uso</h1>
         <p className="legal__fecha">
-          Última actualización: <time dateTime="2026-10-21">21 de octubre de 2026</time>
+          Última actualización:{" "}
+          <time dateTime={LEGAL_FECHA_ISO}>{LEGAL_FECHA_TEXTO}</time>
         </p>
         <p className="legal__intro">
           Estas son las reglas para usar la tienda en línea de Trendy. Están

@@ -93,9 +93,9 @@
 }
 
 .legal a:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-focus-brand);
 }
 
 /* Pie del documento */

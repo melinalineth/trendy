@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { LEGAL_FECHA_ISO, LEGAL_FECHA_TEXTO } from "./legalMeta";
 import "./Legal.css";
 
 // Política de privacidad (ruta pública /privacidad). Es el documento al que
@@ -68,7 +69,8 @@ const SECCIONES = [
           <li>
             <strong>Recuperación de contraseña:</strong> si la pedís, se guarda
             un código de un solo uso, vinculado a tu cuenta, que vence a los 30
-            minutos.
+            minutos. Mirá también «Cómo se guardan» para saber dónde queda
+            escrito ese código.
           </li>
         </ul>
         <p>
@@ -93,6 +95,14 @@ const SECCIONES = [
             Tu contraseña nunca se guarda tal cual la escribís: se guarda
             transformada con bcrypt (un hash), de modo que el equipo no puede
             leerla.
+          </li>
+          <li>
+            Recuperación de contraseña: como Trendy todavía no envía correos, el
+            código de recuperación y tu correo se escriben en el registro
+            (consola) del servidor, al que accede quien lo administra. El código
+            se guarda legible, sin transformarlo, hasta que vence (30 minutos) o
+            se usa. Los registros del servidor también pueden contener otros
+            mensajes de error.
           </li>
           <li>
             Ningún sistema es infalible: no podemos garantizar una seguridad
@@ -137,13 +147,23 @@ const SECCIONES = [
           </li>
           <li>
             <strong>Vendedores y administradores:</strong> para gestionar la
-            tienda ven los pedidos y las ventas, y en ellos tu nombre, tu correo,
-            la dirección de entrega y los productos que compraste.
+            tienda ven los pedidos y las ventas.
+            <ul className="legal__lista">
+              <li>
+                En los <strong>pedidos</strong> ven tu nombre, tu correo, la
+                dirección de entrega completa (destinatario, teléfono, calle,
+                ciudad, departamento y, si los cargaste, código postal y
+                referencia) y los productos que compraste.
+              </li>
+              <li>
+                En las <strong>ventas</strong> ven tu nombre.
+              </li>
+            </ul>
           </li>
           <li>
             <strong>Administradores:</strong> además ven el listado de usuarios
-            (nombre, correo, rol y estado), pueden desactivar cuentas y cambiar
-            roles.
+            (nombre, correo, rol y estado), pueden activar o desactivar cuentas
+            y editar los permisos de cada rol.
           </li>
           <li>
             Quienes administran el servidor y la base de datos pueden, por la
@@ -251,7 +271,8 @@ function PoliticaPrivacidad() {
       <header className="legal__encabezado">
         <h1 className="legal__titulo">Política de privacidad</h1>
         <p className="legal__fecha">
-          Última actualización: <time dateTime="2026-10-21">21 de octubre de 2026</time>
+          Última actualización:{" "}
+          <time dateTime={LEGAL_FECHA_ISO}>{LEGAL_FECHA_TEXTO}</time>
         </p>
         <p className="legal__intro">
           Acá te contamos, en lenguaje simple, qué datos tuyos usa la tienda de
