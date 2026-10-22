@@ -260,7 +260,8 @@ sesión de Trendy: no uses dos incógnitos.) **La
 sesión dura 1 hora**: iniciá sesión en las tres como máximo 30 minutos antes de empezar. En cada ventana
 dejá abierta una pestaña por pantalla (son tus atajos; en las ventanas B y C también podés navegar con el
 **menú lateral** azul oscuro, a la izquierda, que tiene las pantallas de cada rol; el menú de usuario del
-encabezado del administrador y del vendedor tiene solo **Cerrar sesión**):
+encabezado del administrador y del vendedor tiene solo **Cerrar sesión**; desde la tienda, el título
+**Trendy** del encabezado los devuelve a su panel):
 
 - A (cliente): `/catalogo`, `/carrito`, `/pedidos`
 - B (admin): `/admin`, `/admin/pedidos`, `/admin/ventas`, `/admin/envios`
@@ -387,7 +388,7 @@ Texto sugerido (leelo con tus palabras):
 > que corrimos dos veces sobre el código integrado, con revisiones independientes en cada pull request
 > de código —que encontraron errores reales y se corrigieron— y TDD en las partes críticas. Les
 > decimos con la misma claridad lo que falta: Mercado Pago real nunca se probó, no hay un servidor
-> público, el frontend no tiene pruebas automáticas y varias pantallas necesitan pulido, como un menú.
+> público, el frontend no tiene pruebas automáticas y varias pantallas necesitan pulido, como los textos legales, que son un borrador pendiente de aprobación.
 > Lo dejamos documentado para que quien siga sepa exactamente dónde está parado. Gracias.»
 
 ---
@@ -514,7 +515,8 @@ respaldos automáticos.
 **12. ¿Cómo se navega?**
 El administrador y el vendedor navegan con un menú lateral fijo a la izquierda, con las pantallas que
 existen hoy para su rol (en el celular se despliega con un botón); su menú de usuario del encabezado
-(ícono de la persona) tiene solo **Cerrar sesión**. El cliente usa ese menú de usuario: **Mis pedidos**,
+(ícono de la persona) tiene solo **Cerrar sesión**; si salen a la tienda («Ver la tienda»), vuelven a su panel tocando el título
+**Trendy** del encabezado (el visitante y el cliente, con ese título, llegan a la portada). El cliente usa ese menú de usuario: **Mis pedidos**,
 **Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. Al iniciar sesión, el administrador
 y el vendedor llegan a su panel de inicio con datos reales (ventas, pedidos por estado, inventario,
 gráfico de 30 días), y la primera entrada del menú lateral, **Panel de inicio**, vuelve a él. La página de inicio (`/`) es una portada simple

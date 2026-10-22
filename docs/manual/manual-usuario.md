@@ -42,7 +42,10 @@ administrador), a pedido del cliente.
 
 El encabezado es el mismo en todas las pantallas y trae lo siguiente:
 
-- El título **Trendy** y una barra **Buscar productos...** con una
+- El título **Trendy**, que es un enlace: el visitante y el cliente llegan a la página de inicio (`/`) y
+  el vendedor y el administrador, a su panel de inicio (`/vendedor` o `/admin`), así que desde el
+  catálogo, los textos legales o cualquier pantalla fuera del menú lateral vuelven con un clic. Al lado,
+  una barra **Buscar productos...** con una
   lupa. Esa barra del encabezado **no filtra nada**: para buscar usá el catálogo (ver
   [4.2](#42-catálogo-buscar-y-filtrar)).
 - El **menú de usuario**: el botón con el ícono de una persona (ver más abajo).
@@ -485,7 +488,8 @@ en magenta, con una marca blanca a la izquierda y el texto en negrita (así se n
 los colores; **Panel de inicio** solo se resalta en `/vendedor`, no en las demás, y vale igual si la
 dirección termina en una barra, como `/vendedor/`). El menú se queda visible mientras bajás por una
 pantalla larga. El menú de usuario del encabezado (el ícono de la persona) ya no repite estas entradas:
-tiene solo **Cerrar sesión**.
+tiene solo **Cerrar sesión**. Si entrás a la tienda con **Ver la tienda** (el catálogo no lleva el menú
+lateral), volvés a tu panel tocando el título **Trendy** del encabezado.
 
 **En el celular o la tablet** (ventanas de menos de 900 píxeles de ancho) el menú no ocupa la pantalla:
 debajo del encabezado aparece un botón **Menú del vendedor**. Al tocarlo se despliegan las mismas
@@ -704,7 +708,9 @@ pedidos y ventas, con las direcciones que empiezan con `/admin/`) y además lo s
 del encabezado, y el contenido de la pantalla a la derecha. Arriba dice **Administración** y tu nombre;
 después van las entradas, cada una con un ícono: **Panel de inicio**, **Productos**, **Inventario**,
 **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios** y **Roles**. El menú de usuario
-del encabezado (el ícono de la persona) ya no repite estas entradas: tiene solo **Cerrar sesión**. Al final hay
+del encabezado (el ícono de la persona) ya no repite estas entradas: tiene solo **Cerrar sesión**. Desde la
+tienda (el catálogo no lleva el menú lateral) volvés a tu panel tocando el título **Trendy** del
+encabezado. Al final hay
 un enlace **Ver la tienda**, que abre el catálogo (esa pantalla ya no lleva el menú lateral). La
 pantalla en la que estás aparece resaltada en magenta, con una marca blanca a la izquierda y el texto
 en negrita (así se nota aunque no distingas los colores; **Panel de inicio** solo se resalta en
@@ -1011,8 +1017,9 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 - El panel de inicio del personal (`/admin` y `/vendedor`) es más simple que el de los mapas de
   pantalla: no tiene variaciones porcentuales respecto del período anterior, ni selector de período
   (el gráfico es siempre de los últimos 30 días), ni «pedidos del mes» ni «stock total». No tiene
-  enlace propio en el encabezado (se llega al iniciar sesión, con la entrada **Panel de inicio** del
-  menú lateral o escribiendo la dirección), no se actualiza
+  entrada propia en el menú de usuario del encabezado (se llega al iniciar sesión, con la entrada
+  **Panel de inicio** del menú lateral, con el título **Trendy** del encabezado o escribiendo la
+  dirección), no se actualiza
   solo, y «Productos activos» cuenta solo los productos con al menos una variante en stock (la
   consulta de productos es la misma del catálogo público).
 - En el historial de inventario, la reposición por una cancelación figura a nombre del cliente dueño
