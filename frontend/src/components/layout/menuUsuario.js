@@ -4,8 +4,15 @@
 // Regla: solo van rutas que existen en router/AppRouter.jsx. Si una ruta se
 // agrega al router, recién ahí se agrega su entrada.
 //
-// Esta misma lista alimenta el menú lateral del admin (AdminSidebar): la
-// pantalla nueva se agrega UNA vez y aparece en los dos menús.
+// Esta misma lista alimenta el menú lateral del personal (PersonalSidebar): la
+// pantalla nueva se agrega UNA vez y el menú lateral la muestra. Los roles que
+// tienen menú lateral (ROLES_CON_MENU_LATERAL) navegan desde ahí y su menú de
+// usuario del Header queda solo con «Cerrar sesión» (ver entradasMenuUsuario).
+
+// Roles con menú lateral (PersonalLayout en router/AppRouter.jsx). Si otro rol
+// gana menú lateral, se agrega acá UNA línea y su menú de usuario deja de
+// repetir las entradas.
+export const ROLES_CON_MENU_LATERAL = ["admin", "vendedor"];
 
 // `soloMenuUsuario`: la entrada va en el menú de usuario del Header pero NO en
 // el menú lateral (que tiene su propio enlace «Ver la tienda»).
@@ -30,11 +37,11 @@ export const ENTRADAS_POR_ROL = {
     CATALOGO,
   ],
   vendedor: [
-    { etiqueta: "Panel de inicio", ruta: "/vendedor" },
-    { etiqueta: "Productos", ruta: "/vendedor/productos" },
-    { etiqueta: "Inventario", ruta: "/vendedor/inventario" },
-    { etiqueta: "Pedidos", ruta: "/vendedor/pedidos" },
-    { etiqueta: "Ventas", ruta: "/vendedor/ventas" },
+    { etiqueta: "Panel de inicio", ruta: "/vendedor", icono: "panel" },
+    { etiqueta: "Productos", ruta: "/vendedor/productos", icono: "productos" },
+    { etiqueta: "Inventario", ruta: "/vendedor/inventario", icono: "inventario" },
+    { etiqueta: "Pedidos", ruta: "/vendedor/pedidos", icono: "pedidos" },
+    { etiqueta: "Ventas", ruta: "/vendedor/ventas", icono: "ventas" },
     CATALOGO,
   ],
   admin: [
@@ -52,9 +59,9 @@ export const ENTRADAS_POR_ROL = {
 };
 
 // Entradas de un rol SIN el acceso al catálogo: son las pantallas del panel
-// (las que muestra el menú lateral de AdminSidebar). Sale de la misma lista que
+// (las que muestra el menú lateral de PersonalSidebar). Sale de la misma lista que
 // el menú de usuario, así los dos nunca se desalinean. El `icono` (opcional)
-// es el nombre de un ícono de AdminSidebar.
+// es el nombre de un ícono de IconoMenu.
 // `rol` puede venir de localStorage: Object.hasOwn evita que un rol como
 // "constructor" devuelva una propiedad heredada del objeto (igual que UserMenu).
 export function entradasDePanel(rol) {
@@ -62,6 +69,30 @@ export function entradasDePanel(rol) {
     return [];
   }
   return ENTRADAS_POR_ROL[rol].filter((entrada) => !entrada.soloMenuUsuario);
+}
+
+// Entradas de navegación del menú de usuario del Header para un rol. Los roles
+// con menú lateral no repiten ahí sus pantallas: devuelve [] y el menú muestra
+// solo la identidad y «Cerrar sesión». Cliente (y cualquier rol sin menú
+// lateral) conserva todas sus entradas. Un rol desconocido (p. ej. "constructor"
+// leído de localStorage) devuelve [] igual que antes.
+export function entradasMenuUsuario(rol) {
+  if (typeof rol !== "string" || !Object.hasOwn(ENTRADAS_POR_ROL, rol)) {
+    return [];
+  }
+  if (ROLES_CON_MENU_LATERAL.includes(rol)) return [];
+  return ENTRADAS_POR_ROL[rol];
+}
+
+// A dónde lleva el título «Trendy» del Header. El personal (roles con menú
+// lateral) vuelve a su panel de inicio, que es la primera entrada de su lista
+// (ENTRADAS_POR_ROL); cliente, visitante y cualquier rol desconocido (p. ej.
+// "constructor" leído de localStorage) van a la portada.
+export function rutaInicioDeRol(rol) {
+  if (typeof rol === "string" && ROLES_CON_MENU_LATERAL.includes(rol)) {
+    return entradasDePanel(rol)[0]?.ruta ?? "/";
+  }
+  return "/";
 }
 
 // Cómo se muestra el rol debajo del nombre.

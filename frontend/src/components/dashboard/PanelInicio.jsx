@@ -154,11 +154,9 @@ function accesosRapidos(base) {
 // son los mismos; el admin suma «Clientes registrados» y los accesos a
 // vendedores, usuarios, roles y zonas.
 //
-// `envuelto`: el panel normalmente es el <main> de la pantalla (vendedor). Si
-// una pantalla ya lo envuelve en su propio <main> (AdminLayout), se pasa
-// `envuelto` y el panel usa un <div> para no anidar dos <main>.
-export default function PanelInicio({ rol, envuelto = false }) {
-  const Raiz = envuelto ? "div" : "main";
+// El <main> de la pantalla lo pone PersonalLayout (admin y vendedor): el panel
+// es un <div> para no anidar dos <main>.
+export default function PanelInicio({ rol }) {
   const { usuario } = useAuth();
   const esAdmin = rol === "admin";
   const base = esAdmin ? "/admin" : "/vendedor";
@@ -174,7 +172,7 @@ export default function PanelInicio({ rol, envuelto = false }) {
   );
 
   return (
-    <Raiz className="panel-inicio">
+    <div className="panel-inicio">
       <header className="panel-inicio__encabezado">
         <h1>{esAdmin ? "Panel de administración" : "Panel de vendedor"}</h1>
         <p>
@@ -325,6 +323,6 @@ export default function PanelInicio({ rol, envuelto = false }) {
           ))}
         </ul>
       </nav>
-    </Raiz>
+    </div>
   );
 }

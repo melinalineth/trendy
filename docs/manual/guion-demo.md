@@ -258,16 +258,17 @@ respuesta de cada login:
 (Las ventanas de incógnito de un mismo navegador suelen compartir el almacenamiento y, con él, la
 sesión de Trendy: no uses dos incógnitos.) **La
 sesión dura 1 hora**: iniciá sesión en las tres como máximo 30 minutos antes de empezar. En cada ventana
-dejá abierta una pestaña por pantalla (son tus atajos; el menú de usuario también lleva a cada una según
-el rol, y en la ventana B además está el **menú lateral** azul oscuro del administrador, a la izquierda,
-con las mismas pantallas):
+dejá abierta una pestaña por pantalla (son tus atajos; en las ventanas B y C también podés navegar con el
+**menú lateral** azul oscuro, a la izquierda, que tiene las pantallas de cada rol; el menú de usuario del
+encabezado del administrador y del vendedor tiene solo **Cerrar sesión**; desde la tienda, el título
+**Trendy** del encabezado los devuelve a su panel):
 
 - A (cliente): `/catalogo`, `/carrito`, `/pedidos`
 - B (admin): `/admin`, `/admin/pedidos`, `/admin/ventas`, `/admin/envios`
 - C (vendedor): `/vendedor`, `/vendedor/pedidos`, `/vendedor/ventas`, `/vendedor/productos`, `/vendedor/inventario`
 
 Tamaño: pantalla de escritorio, 1280 × 720 o más, zoom al 100 % (con menos de 900 px de ancho el menú
-lateral del administrador se pliega en un botón **Menú de administración**). Cerrá notificaciones y otras pestañas.
+lateral se pliega en un botón: **Menú de administración** o **Menú del vendedor**). Cerrá notificaciones y otras pestañas.
 Acordate de que tras iniciar sesión el sistema te deja según el rol: el cliente en `/` (la página de
 inicio, que solo lleva al catálogo), el administrador en `/admin` y el vendedor en `/vendedor` (sus
 paneles de inicio, con datos reales). Así, las ventanas B y C quedan en la primera pestaña de su lista;
@@ -387,7 +388,7 @@ Texto sugerido (leelo con tus palabras):
 > que corrimos dos veces sobre el código integrado, con revisiones independientes en cada pull request
 > de código —que encontraron errores reales y se corrigieron— y TDD en las partes críticas. Les
 > decimos con la misma claridad lo que falta: Mercado Pago real nunca se probó, no hay un servidor
-> público, el frontend no tiene pruebas automáticas y varias pantallas necesitan pulido, como un menú.
+> público, el frontend no tiene pruebas automáticas y varias pantallas necesitan pulido, como los textos legales, que son un borrador pendiente de aprobación.
 > Lo dejamos documentado para que quien siga sepa exactamente dónde está parado. Gracias.»
 
 ---
@@ -405,7 +406,7 @@ Texto sugerido (leelo con tus palabras):
     recién confirmado; si preguntan, es un texto engañoso conocido (manda el estado del pedido).
   - *Punto 13:* el formato de moneda no es uniforme (`$39.900` vs `$ 39.900`). No lo comentes.
   - *Punto 14:* el seguimiento del cliente no dibuja el historial. Los tableros de inicio del personal
-    (`/admin` y `/vendedor`, con la entrada **Panel de inicio** en el menú) ya muestran datos reales
+    (`/admin` y `/vendedor`, con la entrada **Panel de inicio** en el menú lateral) ya muestran datos reales
     (ventas, pedidos por estado, inventario, gráfico de 30 días), pero son más simples que los de los
     mapas de pantalla (sin porcentajes ni selector de período; ver «Límites conocidos» del manual).
     **Cómo evitarlo:** usá las pestañas preparadas (3.6); si preguntan por el historial, la API ya lo
@@ -512,11 +513,13 @@ que pasó, también desde cero (docs/despliegue/staging.md). **No hay un servido
 respaldos automáticos.
 
 **12. ¿Cómo se navega?**
-Desde el menú de usuario del encabezado (ícono de la persona): según el rol muestra las pantallas que
-existen hoy y **Cerrar sesión**. El administrador además tiene un menú lateral fijo a la izquierda con las
-mismas pantallas (en el celular se despliega con un botón; el vendedor todavía no lo tiene). Al iniciar sesión, el administrador y el vendedor llegan a su panel de
-inicio con datos reales (ventas, pedidos por estado, inventario, gráfico de 30 días), y la primera
-entrada de su menú, **Panel de inicio**, vuelve a él. La página de inicio (`/`) es una portada simple
+El administrador y el vendedor navegan con un menú lateral fijo a la izquierda, con las pantallas que
+existen hoy para su rol (en el celular se despliega con un botón); su menú de usuario del encabezado
+(ícono de la persona) tiene solo **Cerrar sesión**; si salen a la tienda («Ver la tienda»), vuelven a su panel tocando el título
+**Trendy** del encabezado (el visitante y el cliente, con ese título, llegan a la portada). El cliente usa ese menú de usuario: **Mis pedidos**,
+**Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. Al iniciar sesión, el administrador
+y el vendedor llegan a su panel de inicio con datos reales (ventas, pedidos por estado, inventario,
+gráfico de 30 días), y la primera entrada del menú lateral, **Panel de inicio**, vuelve a él. La página de inicio (`/`) es una portada simple
 (banner, categorías y una muestra del catálogo): no es un panel.
 
 **13. ¿Por qué precios enteros, sin centavos?**

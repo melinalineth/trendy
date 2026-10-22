@@ -1,8 +1,9 @@
-/* Estructura de las pantallas del admin: menú lateral + contenido. Solo
+/* Estructura de las pantallas del personal (admin y vendedor): menú lateral +
+   contenido. Solo
    tokens (styles/tokens.css). Mobile-first: en celular y tablet (< 900 px) el
-   menú va arriba del contenido (colapsable, ver AdminSidebar.css); desde 900 px
+   menú va arriba del contenido (colapsable, ver PersonalSidebar.css); desde 900 px
    es una columna a la izquierda. */
-.admin-layout {
+.personal-layout {
   display: flex;
   flex-direction: column;
 }
@@ -10,7 +11,7 @@
 /* min-width: 0 deja que una tabla ancha dentro de una página haga scroll en su
    propio contenedor en vez de ensanchar toda la pantalla. No lleva padding:
    cada página ya trae el suyo (padding + max-width + margin auto). */
-.admin-layout__contenido {
+.personal-layout__contenido {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -21,17 +22,17 @@
    solo cuando contiene este layout, y el layout crece para llenarla. El resto
    de las pantallas no entra en esta regla y no cambia. Sin soporte de :has el
    resultado es solo que la columna oscura termina donde termina el contenido. */
-.app-shell__contenido:has(> .admin-layout) {
+.app-shell__contenido:has(> .personal-layout) {
   display: flex;
   flex-direction: column;
 }
 
-.app-shell__contenido > .admin-layout {
+.app-shell__contenido > .personal-layout {
   flex: 1 0 auto;
 }
 
 @media (min-width: 900px) {
-  .admin-layout {
+  .personal-layout {
     flex-direction: row;
   }
 }

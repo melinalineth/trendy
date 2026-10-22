@@ -5,6 +5,7 @@ import {
   ENTRADAS_POR_ROL,
   ENTRADAS_VISITANTE,
   ETIQUETA_ROL,
+  entradasMenuUsuario,
 } from "./menuUsuario";
 import "./UserMenu.css";
 
@@ -16,7 +17,8 @@ import "./UserMenu.css";
 // panel. El panel muestra:
 //  - visitante: Iniciar sesión / Crear cuenta;
 //  - con sesión: nombre y rol, las entradas del rol (menuUsuario.js) y
-//    "Cerrar sesión".
+//    "Cerrar sesión". Admin y vendedor tienen menú lateral y navegan desde ahí:
+//    su menú queda solo con la identidad y "Cerrar sesión".
 // Se cierra con Escape (devolviendo el foco al botón), con un clic afuera,
 // al salir con Tab del botón o del panel y al cambiar de ruta.
 function UserMenu() {
@@ -46,7 +48,7 @@ function UserMenu() {
 
   let entradas = ENTRADAS_VISITANTE;
   if (isAuthenticated) {
-    entradas = rolConocido ? ENTRADAS_POR_ROL[rol] : [];
+    entradas = entradasMenuUsuario(rol);
   }
 
   // Mientras está abierto: clic/toque afuera y Escape cierran el menú.
@@ -95,6 +97,34 @@ function UserMenu() {
     navigate("/login", { replace: true });
   }
 
+  const lista = (
+    <ul className="user-menu__list">
+      {entradas.map((entrada) => (
+        <li key={entrada.ruta}>
+          <Link
+            to={entrada.ruta}
+            className="user-menu__item"
+            onClick={() => setAbiertoEn(null)}
+          >
+            {entrada.etiqueta}
+          </Link>
+        </li>
+      ))}
+
+      {isAuthenticated && (
+        <li>
+          <button
+            type="button"
+            className="user-menu__item user-menu__item--logout"
+            onClick={cerrarSesion}
+          >
+            Cerrar sesión
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+
   return (
     <div className="user-menu" ref={contenedorRef} onBlur={alPerderFoco}>
       <button
@@ -122,33 +152,13 @@ function UserMenu() {
             </div>
           )}
 
-          <nav aria-label="Menú de usuario">
-            <ul className="user-menu__list">
-              {entradas.map((entrada) => (
-                <li key={entrada.ruta}>
-                  <Link
-                    to={entrada.ruta}
-                    className="user-menu__item"
-                    onClick={() => setAbiertoEn(null)}
-                  >
-                    {entrada.etiqueta}
-                  </Link>
-                </li>
-              ))}
-
-              {isAuthenticated && (
-                <li>
-                  <button
-                    type="button"
-                    className="user-menu__item user-menu__item--logout"
-                    onClick={cerrarSesion}
-                  >
-                    Cerrar sesión
-                  </button>
-                </li>
-              )}
-            </ul>
-          </nav>
+          {/* Landmark de navegación solo si hay enlaces de navegación: el
+              personal tiene solo «Cerrar sesión» (una acción, no navegación). */}
+          {entradas.length > 0 ? (
+            <nav aria-label="Menú de usuario">{lista}</nav>
+          ) : (
+            lista
+          )}
         </div>
       )}
     </div>

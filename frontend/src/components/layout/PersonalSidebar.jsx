@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import IconoMenu from "./IconoMenu";
-import "./AdminSidebar.css";
+import "./PersonalSidebar.css";
 
 // El router también resuelve "/admin/" y "/admin/productos/" (con barra final)
 // y sin distinguir mayúsculas; NavLink con `end` no, y dejaría el menú sin
@@ -12,10 +12,10 @@ function sinBarraFinal(ruta) {
   return ruta.replace(/\/+$/, "").toLowerCase();
 }
 
-// Menú lateral de las pantallas del personal (hoy lo usa el admin vía
-// AdminLayout; recibe las entradas por props para que el vendedor pueda
-// reutilizarlo). Cada entrada es `{ etiqueta, ruta, icono? }` (ver
-// menuUsuario.js, que es la única fuente de la lista).
+// Menú lateral de las pantallas del personal (admin y vendedor, vía
+// PersonalLayout). Recibe por props las entradas y los textos del rol, así que
+// es el mismo componente para los dos. Cada entrada es `{ etiqueta, ruta,
+// icono? }` (ver menuUsuario.js, que es la única fuente de la lista).
 //
 // - Escritorio (>= 900 px): columna fija a la izquierda, siempre visible, que
 //   acompaña el scroll (sticky).
@@ -25,7 +25,7 @@ function sinBarraFinal(ruta) {
 //   (devolviendo el foco al botón), al elegir una entrada y al cambiar de ruta.
 //   En escritorio el botón no se ve y la lista siempre está visible (lo decide
 //   el CSS, no el estado).
-function AdminSidebar({
+function PersonalSidebar({
   entradas,
   titulo = "Administración",
   nombre = "",
@@ -68,33 +68,33 @@ function AdminSidebar({
   }
 
   return (
-    <div className={`admin-sidebar${abierto ? " admin-sidebar--abierto" : ""}`}>
+    <div className={`personal-sidebar${abierto ? " personal-sidebar--abierto" : ""}`}>
       <button
         type="button"
         ref={botonRef}
-        className="admin-sidebar__toggle"
+        className="personal-sidebar__toggle"
         aria-expanded={abierto}
         aria-controls={panelId}
         onClick={() => setAbiertoEn(abierto ? null : location.key)}
       >
         <IconoMenu nombre="menu" />
-        <span className="admin-sidebar__toggle-texto">{etiquetaMenu}</span>
-        <IconoMenu nombre="flecha" className="admin-sidebar__toggle-flecha" />
+        <span className="personal-sidebar__toggle-texto">{etiquetaMenu}</span>
+        <IconoMenu nombre="flecha" className="personal-sidebar__toggle-flecha" />
       </button>
 
-      <div className="admin-sidebar__interior" id={panelId}>
-        <div className="admin-sidebar__identidad">
-          <p className="admin-sidebar__titulo">{titulo}</p>
-          {nombre && <p className="admin-sidebar__nombre">{nombre}</p>}
+      <div className="personal-sidebar__interior" id={panelId}>
+        <div className="personal-sidebar__identidad">
+          <p className="personal-sidebar__titulo">{titulo}</p>
+          {nombre && <p className="personal-sidebar__nombre">{nombre}</p>}
         </div>
 
         <nav aria-label={etiquetaMenu}>
-          <ul className="admin-sidebar__lista">
+          <ul className="personal-sidebar__lista">
             {entradas.map((entrada) => (
               <li key={entrada.ruta}>
                 <Link
                   to={entrada.ruta}
-                  className="admin-sidebar__enlace"
+                  className="personal-sidebar__enlace"
                   aria-current={
                     sinBarraFinal(location.pathname) ===
                     sinBarraFinal(entrada.ruta)
@@ -111,10 +111,10 @@ function AdminSidebar({
           </ul>
         </nav>
 
-        <div className="admin-sidebar__pie">
+        <div className="personal-sidebar__pie">
           <Link
             to={rutaTienda}
-            className="admin-sidebar__enlace admin-sidebar__tienda"
+            className="personal-sidebar__enlace personal-sidebar__tienda"
           >
             <IconoMenu nombre="tienda" />
             <span>Ver la tienda</span>
@@ -125,4 +125,4 @@ function AdminSidebar({
   );
 }
 
-export default AdminSidebar;
+export default PersonalSidebar;

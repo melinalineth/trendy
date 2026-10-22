@@ -29,6 +29,25 @@
   color: var(--color-plum-800);
 }
 
+/* El título es un enlace que se ve igual que antes (mismo color y sin
+   subrayado); en hover y foco se subraya. Foco: contorno sólido en ciruela,
+   que contrasta con el fondo blanco del Header. */
+.header-title__enlace {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header-title__enlace:hover {
+  text-decoration: underline;
+}
+
+.header-title__enlace:focus-visible {
+  outline: 2px solid var(--color-plum-800);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+  text-decoration: underline;
+}
+
 /* Buscador, menú de usuario y carrito en una sola fila. */
 .header__actions {
   display: flex;

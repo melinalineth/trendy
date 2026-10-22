@@ -1,17 +1,17 @@
-/* Menú lateral del admin (azul pizarra de los mapas de pantalla, entrada
+/* Menú lateral del personal: admin y vendedor (azul pizarra de los mapas de pantalla, entrada
    activa en magenta con "glow"). Solo tokens de styles/tokens.css.
    Mobile-first: por defecto es una barra con un botón que despliega la lista;
    desde 900 px es una columna fija con la lista siempre visible. */
-.admin-sidebar {
+.personal-sidebar {
   /* Ancho de la marca de la entrada activa. Se reserva (transparente) en TODAS
      las entradas para que el texto no se corra al cambiar de activa a inactiva. */
-  --admin-sidebar-marca: 3px;
+  --personal-sidebar-marca: 3px;
   background-color: var(--color-navy-800);
   color: var(--color-text-inverse-muted);
 }
 
-/* ---- Botón "Menú de administración" (solo se ve en < 900 px) ---- */
-.admin-sidebar__toggle {
+/* ---- Botón del menú, p. ej. "Menú de administración" (solo se ve en < 900 px) ---- */
+.personal-sidebar__toggle {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -29,41 +29,41 @@
   cursor: pointer;
 }
 
-.admin-sidebar__toggle:hover {
+.personal-sidebar__toggle:hover {
   background-color: var(--color-overlay-inverse);
 }
 
-.admin-sidebar__toggle-texto {
+.personal-sidebar__toggle-texto {
   flex: 1 1 auto;
 }
 
-.admin-sidebar__toggle-flecha {
+.personal-sidebar__toggle-flecha {
   flex: none;
   transition: transform var(--transition-fast);
 }
 
-.admin-sidebar--abierto .admin-sidebar__toggle-flecha {
+.personal-sidebar--abierto .personal-sidebar__toggle-flecha {
   transform: rotate(180deg);
 }
 
 /* ---- Contenido: oculto hasta abrir el botón (celular) ---- */
-.admin-sidebar__interior {
+.personal-sidebar__interior {
   display: none;
   padding: var(--space-3) var(--space-3) var(--space-4);
   border-top: 1px solid var(--color-border-inverse);
 }
 
-.admin-sidebar--abierto .admin-sidebar__interior {
+.personal-sidebar--abierto .personal-sidebar__interior {
   display: block;
 }
 
 /* El texto arranca alineado con el ícono de las entradas (su padding + marca). */
-.admin-sidebar__identidad {
+.personal-sidebar__identidad {
   padding: var(--space-2) var(--space-3) var(--space-4)
-    calc(var(--space-3) + var(--admin-sidebar-marca));
+    calc(var(--space-3) + var(--personal-sidebar-marca));
 }
 
-.admin-sidebar__titulo {
+.personal-sidebar__titulo {
   margin: 0;
   color: var(--color-text-inverse);
   font-family: var(--font-heading);
@@ -71,14 +71,14 @@
   font-weight: 700;
 }
 
-.admin-sidebar__nombre {
+.personal-sidebar__nombre {
   margin: var(--space-1) 0 0;
   color: var(--color-text-inverse-muted);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
-.admin-sidebar__lista {
+.personal-sidebar__lista {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -88,14 +88,14 @@
 }
 
 /* ---- Entradas (también "Ver la tienda"). Alto mínimo 44 px. ---- */
-.admin-sidebar__enlace {
+.personal-sidebar__enlace {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   box-sizing: border-box;
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
-  border-left: var(--admin-sidebar-marca) solid transparent;
+  border-left: var(--personal-sidebar-marca) solid transparent;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   color: var(--color-text-inverse-muted);
   font-size: var(--text-sm);
@@ -106,20 +106,20 @@
     color var(--transition-fast);
 }
 
-.admin-sidebar__enlace svg {
+.personal-sidebar__enlace svg {
   flex: none;
 }
 
-.admin-sidebar__enlace:hover {
+.personal-sidebar__enlace:hover {
   background-color: var(--color-overlay-inverse);
   color: var(--color-text-inverse);
   text-decoration: none;
 }
 
-/* Página actual (aria-current="page", lo calcula AdminSidebar.jsx). Se
+/* Página actual (aria-current="page", lo calcula PersonalSidebar.jsx). Se
    distingue por el fondo magenta Y por una marca blanca a la izquierda y un
    texto más pesado, no solo por el color (WCAG 1.4.1). */
-.admin-sidebar__enlace[aria-current="page"] {
+.personal-sidebar__enlace[aria-current="page"] {
   border-left-color: currentcolor;
   background-color: var(--color-brand-500);
   color: var(--color-text-inverse);
@@ -130,26 +130,26 @@
 /* Foco visible: contorno sólido claro (contraste alto sobre el azul oscuro y
    también sobre el magenta de la entrada activa). El offset de 2 px cabe en el
    padding del contenedor, que tiene overflow y si no lo recortaría. */
-.admin-sidebar__enlace:focus-visible,
-.admin-sidebar__toggle:focus-visible {
+.personal-sidebar__enlace:focus-visible,
+.personal-sidebar__toggle:focus-visible {
   outline: 2px solid var(--color-text-inverse);
   outline-offset: 2px;
 }
 
-.admin-sidebar__toggle:focus-visible {
+.personal-sidebar__toggle:focus-visible {
   outline-offset: -4px;
 }
 
 /* "Ver la tienda" separado de las pantallas del panel. */
-.admin-sidebar__pie {
+.personal-sidebar__pie {
   margin-top: var(--space-4);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border-inverse);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .admin-sidebar__enlace,
-  .admin-sidebar__toggle-flecha {
+  .personal-sidebar__enlace,
+  .personal-sidebar__toggle-flecha {
     transition: none;
   }
 }
@@ -159,11 +159,11 @@
    el color del sistema para "seleccionado", la marca a la izquierda y el
    texto en negrita; las demás reservan la marca invisible. */
 @media (forced-colors: active) {
-  .admin-sidebar__enlace {
+  .personal-sidebar__enlace {
     border-left-color: Canvas;
   }
 
-  .admin-sidebar__enlace[aria-current="page"] {
+  .personal-sidebar__enlace[aria-current="page"] {
     border-left-color: HighlightText;
     background-color: Highlight;
     color: HighlightText;
@@ -172,7 +172,7 @@
 
 /* ---- Escritorio: columna fija, siempre visible, que acompaña el scroll ---- */
 @media (min-width: 900px) {
-  .admin-sidebar {
+  .personal-sidebar {
     flex: 0 0 15rem;
     width: 15rem;
     background: linear-gradient(
@@ -182,19 +182,19 @@
     );
   }
 
-  .admin-sidebar__toggle {
+  .personal-sidebar__toggle {
     display: none;
   }
 
-  /* La columna (.admin-sidebar) se estira hasta el final del contenido para
+  /* La columna (.personal-sidebar) se estira hasta el final del contenido para
      que el fondo oscuro llegue abajo; el interior se queda pegado arriba
      mientras se hace scroll. Si la ventana es muy baja, el menú scrollea
      adentro en vez de cortarse. */
-  .admin-sidebar__interior {
+  .personal-sidebar__interior {
     display: block;
     position: sticky;
     top: 0;
-    /* Alto de la ventana menos el Header (AdminLayout lo mide y lo publica en
+    /* Alto de la ventana menos el Header (PersonalLayout lo mide y lo publica en
        --app-header-alto; sin ese dato queda en 0 y vale la ventana entera). Así
        «Ver la tienda» se ve sin scrollear y la columna no empuja el alto de la
        página más allá de la ventana. */
