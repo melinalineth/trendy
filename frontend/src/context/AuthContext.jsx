@@ -37,6 +37,23 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener(AUTH_LOGOUT_EVENT, limpiarSesion);
   }, [limpiarSesion]);
 
+  // Otra pestaña inició o cerró sesión: localStorage cambia y el evento
+  // "storage" solo llega a las demás pestañas, así que acá releemos el estado
+  // para no dejar la interfaz con un usuario que ya no tiene sesión (o al
+  // revés). Cubre también un localStorage.clear() (event.key === null).
+  useEffect(() => {
+    function alCambiarStorage(event) {
+      const claves = [AUTH_TOKEN_KEY, AUTH_USUARIO_KEY];
+      if (event.key !== null && !claves.includes(event.key)) return;
+
+      setToken(localStorage.getItem(AUTH_TOKEN_KEY));
+      setUsuario(leerUsuarioGuardado());
+    }
+
+    window.addEventListener("storage", alCambiarStorage);
+    return () => window.removeEventListener("storage", alCambiarStorage);
+  }, []);
+
   const login = useCallback(async (correo, password) => {
     const data = await authService.login({ correo, password });
     localStorage.setItem(AUTH_TOKEN_KEY, data.token);
@@ -50,9 +67,15 @@ export function AuthProvider({ children }) {
     return authService.register(datos);
   }, []);
 
+  // Cierre de sesión "mejor esfuerzo": el backend usa JWT sin estado y su
+  // /auth/logout solo responde 200 (no invalida el token), así que si la
+  // llamada falla (red caída, 401, 500) igual cerramos la sesión local. Por
+  // eso el error no se propaga: el usuario pidió salir y tiene que salir.
   const logout = useCallback(async () => {
     try {
       await authService.logout();
+    } catch {
+      // Ignorado a propósito: ver comentario de arriba.
     } finally {
       limpiarSesion();
     }

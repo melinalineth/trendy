@@ -10,8 +10,12 @@ function login(datos) {
   return api.post("/auth/login", datos).then((response) => response.data);
 }
 
+// Con timeout para que un backend colgado no deje al usuario esperando para
+// salir: el cierre de sesión local no depende de esta respuesta.
 function logout() {
-  return api.post("/auth/logout").then((response) => response.data);
+  return api
+    .post("/auth/logout", null, { timeout: 5000 })
+    .then((response) => response.data);
 }
 
 function recuperarPassword(correo) {

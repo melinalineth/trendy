@@ -1,0 +1,115 @@
+/* Menú de usuario del Header. Solo tokens (tokens.css): panel blanco con el
+   nombre en morado ciruela, igual que el resto del encabezado. */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.user-menu__button:hover,
+.user-menu__button[aria-expanded="true"] {
+  background-color: var(--color-brand-50);
+}
+
+.user-menu__button:focus-visible {
+  outline: none;
+  border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-focus-brand);
+}
+
+/* El panel cuelga debajo del botón, pegado a la derecha, y nunca más ancho
+   que la pantalla (celulares de 375 px). */
+.user-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 50;
+  box-sizing: border-box;
+  width: 15rem;
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.user-menu__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.user-menu__name {
+  color: var(--color-plum-800);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.user-menu__role {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.user-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.user-menu__item {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.user-menu__item:hover,
+.user-menu__item:focus-visible {
+  outline: none;
+  background-color: var(--color-brand-50);
+  color: var(--color-brand-600);
+}
+
+.user-menu__item:focus-visible {
+  box-shadow: var(--shadow-focus-brand);
+}
+
+/* "Cerrar sesión" separado del resto para no tocarlo por error. */
+.user-menu__item--logout {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  color: var(--color-plum-800);
+}

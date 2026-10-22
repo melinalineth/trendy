@@ -29,7 +29,7 @@
   color: var(--color-plum-800);
 }
 
-/* Buscador, ícono de cuenta, enlaces y carrito en una sola fila. */
+/* Buscador, menú de usuario y carrito en una sola fila. */
 .header__actions {
   display: flex;
   align-items: center;
@@ -43,36 +43,10 @@
   flex: 1 1 220px;
 }
 
-/* El ícono de cuenta es un <button>: sin esto se ve como caja blanca del
-   navegador. */
-.header__icon {
-  padding: var(--space-1);
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-size: var(--text-xl);
-  line-height: 1;
-  cursor: pointer;
-}
-
 .header-subtitle {
   margin: 4px 0 0;
   font-size: 0.9rem;
   opacity: 0.9;
-}
-
-/* Accesos de texto: "Mis pedidos" (solo cliente) y "Ventas" (admin y vendedor) */
-.header__link {
-  color: var(--color-plum-800);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.header__link:hover,
-.header__link:focus-visible {
-  color: var(--color-brand-600);
-  text-decoration: underline;
 }
 
 /* Acceso al carrito con contador de líneas */
