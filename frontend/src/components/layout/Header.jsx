@@ -15,8 +15,9 @@ const Header = ({ title = "Trendy", subtitle }) => {
   const mostrarCarrito = !isAuthenticated || rol === "cliente";
 
   // En la barra quedan solo el buscador, el menú de usuario y el carrito. Los
-  // accesos por rol ("Mis pedidos", "Ventas", etc.) viven dentro del menú
-  // (UserMenu / menuUsuario.js) para no repetirlos acá.
+  // accesos del cliente ("Mis pedidos", etc.) viven dentro del menú (UserMenu
+  // / menuUsuario.js) para no repetirlos acá; el personal navega con el menú
+  // lateral (PersonalLayout) y su menú de usuario solo cierra sesión.
   return (
     <header className="app-header">
       <div className="header-content">

@@ -37,11 +37,11 @@ export const ENTRADAS_POR_ROL = {
     CATALOGO,
   ],
   vendedor: [
-    { etiqueta: "Panel de inicio", ruta: "/vendedor" },
-    { etiqueta: "Productos", ruta: "/vendedor/productos" },
-    { etiqueta: "Inventario", ruta: "/vendedor/inventario" },
-    { etiqueta: "Pedidos", ruta: "/vendedor/pedidos" },
-    { etiqueta: "Ventas", ruta: "/vendedor/ventas" },
+    { etiqueta: "Panel de inicio", ruta: "/vendedor", icono: "panel" },
+    { etiqueta: "Productos", ruta: "/vendedor/productos", icono: "productos" },
+    { etiqueta: "Inventario", ruta: "/vendedor/inventario", icono: "inventario" },
+    { etiqueta: "Pedidos", ruta: "/vendedor/pedidos", icono: "pedidos" },
+    { etiqueta: "Ventas", ruta: "/vendedor/ventas", icono: "ventas" },
     CATALOGO,
   ],
   admin: [
