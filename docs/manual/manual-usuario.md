@@ -40,19 +40,33 @@ administrador), a pedido del cliente.
 
 ## 2. Antes de empezar: cómo moverte
 
-**Trendy todavía no tiene un menú de navegación.** El encabezado es el mismo en todas las pantallas y
-solo trae lo siguiente:
+El encabezado es el mismo en todas las pantallas y trae lo siguiente:
 
 - El título **Trendy** y una barra **Buscar productos...** con una
   lupa. Esa barra del encabezado **no filtra nada**: para buscar usá el catálogo (ver
   [4.2](#42-catálogo-buscar-y-filtrar)).
-- Un botón con el ícono de una persona que **no hace nada** por ahora.
-- **Mis pedidos**: solo aparece si iniciaste sesión como cliente.
-- **Ventas**: solo aparece si iniciaste sesión como vendedor o administrador.
+- El **menú de usuario**: el botón con el ícono de una persona (ver más abajo).
 - El ícono del carrito, con un número: es la cantidad de productos **distintos** que tenés en el
   carrito (dos camisetas iguales cuentan 1). Solo lo ven los visitantes y los clientes.
 
-El resto de las pantallas se abre **escribiendo la dirección en la barra del navegador**, a
+**El menú de usuario** se abre tocando el ícono de la persona y se cierra con la tecla **Esc**, tocando
+fuera del panel o al cambiar de pantalla. Con el teclado: **Enter** abre el menú, las flechas
+**↑ ↓** (y **Inicio** / **Fin**) recorren las opciones y **Esc** lo cierra y devuelve el foco al botón. Lo
+que ofrece depende de tu sesión:
+
+| Quién | Qué muestra el menú |
+| --- | --- |
+| Visitante (sin sesión) | **Iniciar sesión** y **Crear cuenta**. |
+| Cliente | Tu nombre y el rol, y: **Mis pedidos**, **Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. |
+| Vendedor | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Catálogo** y **Cerrar sesión**. |
+| Administrador | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios**, **Roles**, **Catálogo** y **Cerrar sesión**. |
+
+Cada entrada del personal lleva a la pantalla de **su** rol (por ejemplo, **Ventas** abre
+`/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). El menú no tiene una
+entrada de «Panel» o tablero de inicio, porque esos tableros todavía no están conectados.
+
+Las pantallas que no están en el menú (como **Finalizar compra**, que se llega desde el carrito) y todas
+las demás también se abren **escribiendo la dirección en la barra del navegador**, a
 continuación de la dirección del sitio:
 
 | Para ir a... | Escribí | Quién |
@@ -65,11 +79,11 @@ continuación de la dirección del sitio:
 | Mi carrito | `/carrito` | Cliente |
 | Mis direcciones | `/direcciones` | Cliente |
 | Finalizar compra | `/checkout` | Cliente |
-| Mis pedidos | `/pedidos` (o el enlace **Mis pedidos**) | Cliente |
+| Mis pedidos | `/pedidos` (o la entrada **Mis pedidos** del menú) | Cliente |
 | Productos | `/vendedor/productos` (vendedor) o `/admin/productos` (administrador) | Vendedor / Administrador |
 | Inventario | `/vendedor/inventario` (vendedor) o `/admin/inventario` (administrador) | Vendedor / Administrador |
 | Gestión de pedidos | `/vendedor/pedidos` (vendedor) o `/admin/pedidos` (administrador) | Vendedor / Administrador |
-| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o el enlace **Ventas** | Vendedor / Administrador |
+| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o la entrada **Ventas** del menú | Vendedor / Administrador |
 | Vendedores | `/admin/vendedores` | Administrador |
 | Usuarios | `/admin/usuarios` | Administrador |
 | Roles y permisos | `/admin/roles` | Administrador |
@@ -107,9 +121,18 @@ aparece un aviso en cada una: «Todavía no hay categorías con productos. ¡Vol
 pudimos cargar los productos. Intentá de nuevo más tarde.** (no hay botón para reintentar: recargá la
 página).
 
-**No hay botón para cerrar sesión.** La sesión dura 1 hora (valor por defecto del servidor) y se cierra
-sola al vencer: la próxima petición te manda a iniciar sesión de nuevo. Si necesitás entrar con otra
-cuenta antes, abrí una **ventana privada** del navegador o borrá los datos del sitio.
+**Cerrar sesión.** Abrí el menú de usuario y tocá **Cerrar sesión** (es la última opción). Trendy avisa
+al servidor y borra tu sesión de este navegador (el token y tus datos guardados), vacía el número del
+carrito del encabezado, cierra el menú y te lleva a **Iniciar sesión**. Si el servidor no responde, la sesión
+local se cierra igual (puede tardar hasta 5 segundos si el servidor no contesta). A partir de ahí el
+encabezado vuelve a mostrar el menú de visitante y las pantallas de cliente o de personal te mandan a
+**Iniciar sesión**. Si tenés Trendy abierto en otra pestaña del mismo navegador, esa pestaña también pasa a
+visitante.
+
+Dos aclaraciones: la sesión dura 1 hora (valor por defecto del servidor) y se cierra sola al vencer: la
+próxima petición te manda a iniciar sesión de nuevo. Y el servidor **no invalida** el token al cerrar
+sesión (usa tokens sin estado y su respuesta solo confirma el cierre): cerrar sesión borra el token de
+tu navegador, pero un token copiado antes seguiría siendo válido hasta que venza.
 
 Recomendación: usá una pantalla de escritorio (1280 píxeles de ancho o más).
 
@@ -515,7 +538,7 @@ deshacer.» Se confirma con **Sí, cancelar pedido** y queda el aviso «Pedido P
 se puede cancelar, la pantalla dice por qué (por ejemplo «Un pedido ya entregado no se puede
 cancelar.»).
 
-### 5.4 Ventas (`/vendedor/ventas`, o el enlace **Ventas**)
+### 5.4 Ventas (`/vendedor/ventas`, o la entrada **Ventas** del menú)
 
 Pantalla **Ventas** («Consultá las ventas y filtralas por fecha y estado.»). Una venta es el registro
 del pedido que se confirmó; nunca se borra.
@@ -818,11 +841,12 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 
 **Pantallas y navegación**
 
-- **No hay menú de navegación ni botón para cerrar sesión** (ver sección 2). La página de inicio solo
-  enlaza al catálogo y a los productos: las categorías que muestra no preseleccionan el filtro.
+- La página de inicio solo enlaza al catálogo y a los productos: las categorías que muestra no
+  preseleccionan el filtro. El menú de usuario no tiene todavía una entrada de «Panel» (los tableros de
+  inicio de cada rol no están conectados).
 - El **historial del envío no se dibuja** en la pantalla del cliente: el sistema ya lo guarda y lo
   entrega, pero solo se ve el paso actual.
-- El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa y el ícono de persona del
+- El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa del
   encabezado, tampoco.
 - Las direcciones no se pueden editar ni eliminar.
 - **Roles y permisos** no tiene permisos configurados y no gobierna nada.
