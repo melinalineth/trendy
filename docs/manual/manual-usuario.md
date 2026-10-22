@@ -680,8 +680,9 @@ después van las entradas, cada una con un ícono: **Panel de inicio**, **Produc
 **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios** y **Roles** (son las mismas
 que ofrece el menú de usuario del encabezado, que sigue existiendo con **Cerrar sesión**). Al final hay
 un enlace **Ver la tienda**, que abre el catálogo (esa pantalla ya no lleva el menú lateral). La
-pantalla en la que estás aparece resaltada en magenta (**Panel de inicio** solo se resalta en `/admin`,
-no en las demás). El menú se queda visible mientras bajás por una pantalla larga.
+pantalla en la que estás aparece resaltada en magenta, con una marca blanca a la izquierda y el texto
+en negrita (así se nota aunque no distingas los colores; **Panel de inicio** solo se resalta en
+`/admin`, no en las demás, y vale igual si la dirección termina en una barra, como `/admin/`). El menú se queda visible mientras bajás por una pantalla larga.
 
 **En el celular o la tablet** (ventanas de menos de 900 píxeles de ancho) el menú no ocupa la pantalla:
 arriba del contenido aparece un botón **Menú de administración**. Al tocarlo se despliegan las mismas
