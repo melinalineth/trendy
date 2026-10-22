@@ -50,9 +50,9 @@ El encabezado es el mismo en todas las pantallas y trae lo siguiente:
   carrito (dos camisetas iguales cuentan 1). Solo lo ven los visitantes y los clientes.
 
 **El menú de usuario** se abre tocando el ícono de la persona y se cierra con la tecla **Esc**, tocando
-fuera del panel o al cambiar de pantalla. Con el teclado: **Enter** abre el menú, las flechas
-**↑ ↓** (y **Inicio** / **Fin**) recorren las opciones y **Esc** lo cierra y devuelve el foco al botón. Lo
-que ofrece depende de tu sesión:
+fuera del panel, al salir del menú con la tecla **Tab** o al cambiar de pantalla. Con el teclado:
+**Enter** (o **Espacio**) sobre el botón abre el panel, **Tab** recorre las opciones (el foco se ve con un
+contorno) y **Esc** lo cierra y devuelve el foco al botón. Lo que ofrece depende de tu sesión:
 
 | Quién | Qué muestra el menú |
 | --- | --- |
@@ -121,13 +121,13 @@ aparece un aviso en cada una: «Todavía no hay categorías con productos. ¡Vol
 pudimos cargar los productos. Intentá de nuevo más tarde.** (no hay botón para reintentar: recargá la
 página).
 
-**Cerrar sesión.** Abrí el menú de usuario y tocá **Cerrar sesión** (es la última opción). Trendy avisa
-al servidor y borra tu sesión de este navegador (el token y tus datos guardados), vacía el número del
-carrito del encabezado, cierra el menú y te lleva a **Iniciar sesión**. Si el servidor no responde, la sesión
-local se cierra igual (puede tardar hasta 5 segundos si el servidor no contesta). A partir de ahí el
-encabezado vuelve a mostrar el menú de visitante y las pantallas de cliente o de personal te mandan a
-**Iniciar sesión**. Si tenés Trendy abierto en otra pestaña del mismo navegador, esa pestaña también pasa a
-visitante.
+**Cerrar sesión.** Abrí el menú de usuario y tocá **Cerrar sesión** (es la última opción). Trendy borra
+**al instante** tu sesión de este navegador (el token y tus datos guardados), vacía el número del carrito
+del encabezado, cierra el menú y te lleva a **Iniciar sesión**; el aviso al servidor se envía después, en
+segundo plano. Si el servidor no responde, la sesión local ya está cerrada igual y no ves ningún error. A
+partir de ahí el encabezado vuelve a mostrar el menú de visitante y las pantallas de cliente o de personal
+te mandan a **Iniciar sesión**. Si tenés Trendy abierto en otra pestaña del mismo navegador, esa pestaña
+también pasa a visitante.
 
 Dos aclaraciones: la sesión dura 1 hora (valor por defecto del servidor) y se cierra sola al vencer: la
 próxima petición te manda a iniciar sesión de nuevo. Y el servidor **no invalida** el token al cerrar
