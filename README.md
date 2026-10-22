@@ -216,7 +216,7 @@ No verificado / pendiente:
 - No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
   crean con `scripts/crear-usuario.js`, ver arriba).
 - Pendiente: completar la navegación y otros huecos de uso (el menú de usuario ya ofrece las pantallas
-  de cada rol y «Cerrar sesión», pero no tiene entrada «Panel»; la página de inicio es una portada simple
+  de cada rol (incluido el «Panel de inicio» del personal) y «Cerrar sesión»; la página de inicio es una portada simple
   y sus categorías no preseleccionan el filtro del catálogo). Están documentados en la sección «Límites conocidos» de
   [`docs/manual/manual-usuario.md`](docs/manual/manual-usuario.md).
 - El contra entrega se habilita y deshabilita por zona desde `/admin/envios` (columna «Contra

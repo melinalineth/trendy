@@ -21,6 +21,7 @@ export const ENTRADAS_POR_ROL = {
     CATALOGO,
   ],
   vendedor: [
+    { etiqueta: "Panel de inicio", ruta: "/vendedor" },
     { etiqueta: "Productos", ruta: "/vendedor/productos" },
     { etiqueta: "Inventario", ruta: "/vendedor/inventario" },
     { etiqueta: "Pedidos", ruta: "/vendedor/pedidos" },
@@ -28,6 +29,7 @@ export const ENTRADAS_POR_ROL = {
     CATALOGO,
   ],
   admin: [
+    { etiqueta: "Panel de inicio", ruta: "/admin" },
     { etiqueta: "Productos", ruta: "/admin/productos" },
     { etiqueta: "Inventario", ruta: "/admin/inventario" },
     { etiqueta: "Pedidos", ruta: "/admin/pedidos" },

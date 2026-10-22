@@ -58,12 +58,13 @@ contorno) y **Esc** lo cierra y devuelve el foco al botón. Lo que ofrece depend
 | --- | --- |
 | Visitante (sin sesión) | **Iniciar sesión** y **Crear cuenta**. |
 | Cliente | Tu nombre y el rol, y: **Mis pedidos**, **Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. |
-| Vendedor | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Catálogo** y **Cerrar sesión**. |
-| Administrador | Tu nombre y el rol, y: **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios**, **Roles**, **Catálogo** y **Cerrar sesión**. |
+| Vendedor | Tu nombre y el rol, y: **Panel de inicio**, **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Catálogo** y **Cerrar sesión**. |
+| Administrador | Tu nombre y el rol, y: **Panel de inicio**, **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios**, **Roles**, **Catálogo** y **Cerrar sesión**. |
 
 Cada entrada del personal lleva a la pantalla de **su** rol (por ejemplo, **Ventas** abre
-`/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). El menú no tiene una
-entrada de «Panel» o tablero de inicio, porque esos tableros todavía no están conectados.
+`/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). **Panel de inicio** es la
+primera entrada del personal y vuelve al tablero al que llegaste al iniciar sesión (`/vendedor` o
+`/admin`).
 
 Las pantallas que no están en el menú (como **Finalizar compra**, que se llega desde el carrito) y todas
 las demás también se abren **escribiendo la dirección en la barra del navegador**, a
@@ -948,8 +949,7 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
 **Pantallas y navegación**
 
 - La página de inicio solo enlaza al catálogo y a los productos: las categorías que muestra no
-  preseleccionan el filtro. El menú de usuario no tiene todavía una entrada de «Panel» (los tableros de
-  inicio de cada rol no están conectados).
+  preseleccionan el filtro.
 - El **historial del envío no se dibuja** en la pantalla del cliente: el sistema ya lo guarda y lo
   entrega, pero solo se ve el paso actual.
 - El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa del

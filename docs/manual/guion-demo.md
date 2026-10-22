@@ -402,12 +402,12 @@ Texto sugerido (leelo con tus palabras):
     **Cómo evitarlo:** no abras pedidos entregados y no te detengas en el campo Envío de un pedido
     recién confirmado; si preguntan, es un texto engañoso conocido (manda el estado del pedido).
   - *Punto 13:* el formato de moneda no es uniforme (`$39.900` vs `$ 39.900`). No lo comentes.
-  - *Punto 14:* el seguimiento del cliente no dibuja el historial; el menú de usuario todavía no tiene
-    entrada «Panel» (los paneles `/admin` y `/vendedor` se alcanzan al iniciar sesión o escribiendo la
-    URL). Esos tableros de inicio del personal ya muestran datos reales (ventas, pedidos por estado,
-    inventario, gráfico de 30 días), pero son más simples que los de los mapas de pantalla (sin
-    porcentajes ni selector de período; ver «Límites conocidos» del manual). **Cómo evitarlo:** usá las
-    pestañas preparadas (3.6); si preguntan por el historial, la API ya lo devuelve y falta dibujarlo.
+  - *Punto 14:* el seguimiento del cliente no dibuja el historial. Los tableros de inicio del personal
+    (`/admin` y `/vendedor`, con la entrada **Panel de inicio** en el menú) ya muestran datos reales
+    (ventas, pedidos por estado, inventario, gráfico de 30 días), pero son más simples que los de los
+    mapas de pantalla (sin porcentajes ni selector de período; ver «Límites conocidos» del manual).
+    **Cómo evitarlo:** usá las pestañas preparadas (3.6); si preguntan por el historial, la API ya lo
+    devuelve y falta dibujarlo.
   - *Punto 15:* accesibilidad de los componentes comunes. No uses teclado ni lector de pantalla en la
     demo.
   - *Punto 16:* `GET /ventas` se pide dos veces por carga en desarrollo (modo estricto de React); no
@@ -512,9 +512,9 @@ respaldos automáticos.
 **12. ¿Cómo se navega?**
 Desde el menú de usuario del encabezado (ícono de la persona): según el rol muestra las pantallas que
 existen hoy y **Cerrar sesión**. Al iniciar sesión, el administrador y el vendedor llegan a su panel de
-inicio con datos reales (ventas, pedidos por estado, inventario, gráfico de 30 días), pero el menú todavía
-no tiene una entrada «Panel» para volver a él (deuda declarada, punto 14). La página de inicio (`/`) es
-una portada simple (banner, categorías y una muestra del catálogo): no es un panel.
+inicio con datos reales (ventas, pedidos por estado, inventario, gráfico de 30 días), y la primera
+entrada de su menú, **Panel de inicio**, vuelve a él. La página de inicio (`/`) es una portada simple
+(banner, categorías y una muestra del catálogo): no es un panel.
 
 **13. ¿Por qué precios enteros, sin centavos?**
 Para evitar que la pasarela rechace un pago. Ojo: es una regla de **prevención** basada en fuentes no
