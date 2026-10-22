@@ -411,10 +411,12 @@ tu nombre y muestra el estado de la tienda con los datos de ese momento, todos r
 - **Actividad reciente**:
   - **Ventas de los últimos 30 días**: un gráfico de barras con el total de ventas **registradas**
     de cada día (las anuladas no cuentan), de los últimos 30 días contando hoy, con los días en hora
-    de Bogotá. Debajo hay un resumen escrito (período, cantidad, total y día con más ventas) y el
+    de Bogotá. Debajo hay un resumen escrito (período, cantidad, total y día de mayor venta) y el
     desplegable **Ver los datos del gráfico en una tabla**, que lista los días que tuvieron ventas.
-    Si no hubo ventas en el período dice «No hay ventas registradas en los últimos 30 días.». Si hubiera
-    más de 1.000 ventas en el período, el gráfico avisa que muestra solo las más recientes.
+    Si no hubo ventas en el período dice «No hay ventas registradas en los últimos 30 días.». Si las
+    cifras pueden no ser exactas (hay más de 1.000 ventas en el período, o entró o salió una venta
+    mientras se cargaba el gráfico), debajo del resumen aparece el aviso «Estas cifras pueden estar
+    incompletas...»: recargá la página o consultá el listado de **Ventas**.
   - **Pedidos recientes**: los últimos 5 (**N.º pedido**, **Cliente**, **Estado**, **Total**,
     **Fecha**) y el enlace **Ver todos**, que abre **Gestión de pedidos**. Sin pedidos dice «Todavía no
     hay pedidos.».
