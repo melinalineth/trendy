@@ -5,7 +5,14 @@
 // agrega al router, recién ahí se agrega su entrada.
 //
 // Esta misma lista alimenta el menú lateral del personal (PersonalSidebar): la
-// pantalla nueva se agrega UNA vez y aparece en los dos menús.
+// pantalla nueva se agrega UNA vez y el menú lateral la muestra. Los roles que
+// tienen menú lateral (ROLES_CON_MENU_LATERAL) navegan desde ahí y su menú de
+// usuario del Header queda solo con «Cerrar sesión» (ver entradasMenuUsuario).
+
+// Roles con menú lateral (PersonalLayout en router/AppRouter.jsx). Si otro rol
+// gana menú lateral, se agrega acá UNA línea y su menú de usuario deja de
+// repetir las entradas.
+export const ROLES_CON_MENU_LATERAL = ["admin", "vendedor"];
 
 // `soloMenuUsuario`: la entrada va en el menú de usuario del Header pero NO en
 // el menú lateral (que tiene su propio enlace «Ver la tienda»).
@@ -62,6 +69,19 @@ export function entradasDePanel(rol) {
     return [];
   }
   return ENTRADAS_POR_ROL[rol].filter((entrada) => !entrada.soloMenuUsuario);
+}
+
+// Entradas de navegación del menú de usuario del Header para un rol. Los roles
+// con menú lateral no repiten ahí sus pantallas: devuelve [] y el menú muestra
+// solo la identidad y «Cerrar sesión». Cliente (y cualquier rol sin menú
+// lateral) conserva todas sus entradas. Un rol desconocido (p. ej. "constructor"
+// leído de localStorage) devuelve [] igual que antes.
+export function entradasMenuUsuario(rol) {
+  if (typeof rol !== "string" || !Object.hasOwn(ENTRADAS_POR_ROL, rol)) {
+    return [];
+  }
+  if (ROLES_CON_MENU_LATERAL.includes(rol)) return [];
+  return ENTRADAS_POR_ROL[rol];
 }
 
 // Cómo se muestra el rol debajo del nombre.
