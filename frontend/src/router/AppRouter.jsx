@@ -13,7 +13,7 @@ import RestablecerPassword from "../pages/auth/RestablecerPassword";
 import Direcciones from "../pages/customer/Direcciones";
 import Cart from "../pages/customer/Cart";
 import RoleGuard from "../components/auth/RoleGuard";
-import AdminLayout from "../components/layout/AdminLayout";
+import PersonalLayout from "../components/layout/PersonalLayout";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import SellerDashboard from "../pages/seller/SellerDashboard";
 import Sellers from "../pages/admin/Sellers";
@@ -63,8 +63,8 @@ function AppRoutes() {
           </RoleGuard>
         }
       />
-      {/* Pantallas del administrador: todas comparten AdminLayout (menú lateral
-          + contenido, ver components/layout/AdminLayout.jsx). El layout va
+      {/* Pantallas del administrador: todas comparten PersonalLayout (menú
+          lateral + contenido, ver components/layout/PersonalLayout.jsx). El layout va
           guardado por RoleGuard Y cada hija conserva el suyo (defensa en
           profundidad: si alguien saca una hija del grupo, sigue protegida).
           Una URL /admin/xyz que no existe no coincide con ninguna hija, así que
@@ -73,7 +73,7 @@ function AppRoutes() {
       <Route
         element={
           <RoleGuard roles={["admin"]}>
-            <AdminLayout />
+            <PersonalLayout rol="admin" />
           </RoleGuard>
         }
       >

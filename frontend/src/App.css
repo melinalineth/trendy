@@ -1,8 +1,8 @@
 /* Estructura global: Header arriba y, debajo, la pantalla de la ruta. El
    contenedor ocupa al menos el alto de la ventana y el área de la pantalla
    (.app-shell__contenido) absorbe el espacio que sobra, de modo que una
-   pantalla que necesita llenar el alto (hoy, el menú lateral del admin, ver
-   components/layout/AdminLayout.css) lo haga sin conocer la altura del Header.
+   pantalla que necesita llenar el alto (hoy, el menú lateral del personal, ver
+   components/layout/PersonalLayout.css) lo haga sin conocer la altura del Header.
 
    .app-shell__contenido es un contenedor de bloque normal (no flex) para el
    resto de las pantallas: las páginas que se centran con `margin: 0 auto` y

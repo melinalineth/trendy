@@ -155,7 +155,7 @@ function accesosRapidos(base) {
 // vendedores, usuarios, roles y zonas.
 //
 // `envuelto`: el panel normalmente es el <main> de la pantalla (vendedor). Si
-// una pantalla ya lo envuelve en su propio <main> (AdminLayout), se pasa
+// una pantalla ya lo envuelve en su propio <main> (PersonalLayout), se pasa
 // `envuelto` y el panel usa un <div> para no anidar dos <main>.
 export default function PanelInicio({ rol, envuelto = false }) {
   const Raiz = envuelto ? "div" : "main";

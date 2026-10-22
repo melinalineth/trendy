@@ -4,7 +4,7 @@
 // Regla: solo van rutas que existen en router/AppRouter.jsx. Si una ruta se
 // agrega al router, recién ahí se agrega su entrada.
 //
-// Esta misma lista alimenta el menú lateral del admin (AdminSidebar): la
+// Esta misma lista alimenta el menú lateral del personal (PersonalSidebar): la
 // pantalla nueva se agrega UNA vez y aparece en los dos menús.
 
 // `soloMenuUsuario`: la entrada va en el menú de usuario del Header pero NO en
@@ -52,9 +52,9 @@ export const ENTRADAS_POR_ROL = {
 };
 
 // Entradas de un rol SIN el acceso al catálogo: son las pantallas del panel
-// (las que muestra el menú lateral de AdminSidebar). Sale de la misma lista que
+// (las que muestra el menú lateral de PersonalSidebar). Sale de la misma lista que
 // el menú de usuario, así los dos nunca se desalinean. El `icono` (opcional)
-// es el nombre de un ícono de AdminSidebar.
+// es el nombre de un ícono de IconoMenu.
 // `rol` puede venir de localStorage: Object.hasOwn evita que un rol como
 // "constructor" devuelva una propiedad heredada del objeto (igual que UserMenu).
 export function entradasDePanel(rol) {
