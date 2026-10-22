@@ -151,12 +151,18 @@ export function useResumenVentas() {
 // no son ingresos), pasando por todas las páginas hasta el tope. Devuelve
 //   - dias: [{ fecha, cantidad, total }] uno por día, de más viejo a más nuevo,
 //   - periodo: { desde, hasta },
-//   - totalPeriodo: { cantidad, total } que informa el backend para el período
-//     (el gráfico debe sumar lo mismo),
-//   - incompleto: true si hay más ventas que las que se recorrieron.
+//   - totalPeriodo: { cantidad, total } que informa el backend en la ÚLTIMA
+//     página leída (el gráfico debe sumar lo mismo),
+//   - incompleto: true si las cifras del gráfico pueden no ser exactas: hay más
+//     ventas que las que se recorrieron (tope de páginas) o la cantidad de
+//     ventas distintas leídas no coincide con `totalPeriodo.cantidad` (entró o
+//     salió una venta mientras se pedían las páginas).
+// El listado va por skip/take ordenado por fecha descendente: si entra una venta
+// nueva entre dos páginas, la última de la primera reaparece en la segunda. Por
+// eso las ventas se deduplican por `id` antes de sumarlas.
 async function cargarVentasUltimosDias() {
   const { desde, hasta, dias } = rangoUltimosDias(DIAS_GRAFICO);
-  const ventas = [];
+  const ventasPorId = new Map();
   let totalPeriodo = null;
   let totalPaginas = 1;
 
@@ -175,14 +181,19 @@ async function cargarVentasUltimosDias() {
 
     totalPeriodo = data.totales.registradas;
     totalPaginas = data.paginacion?.totalPaginas ?? 1;
-    if (Array.isArray(data.ventas)) ventas.push(...data.ventas);
+    if (Array.isArray(data.ventas)) {
+      data.ventas.forEach((venta) => ventasPorId.set(venta.id, venta));
+    }
   }
 
+  const recorridoCompleto = totalPaginas <= MAX_PAGINAS_GRAFICO;
+  const cantidadCoincide = ventasPorId.size === totalPeriodo.cantidad;
+
   return {
-    dias: agruparVentasPorDia(ventas, dias),
+    dias: agruparVentasPorDia([...ventasPorId.values()], dias),
     periodo: { desde, hasta },
     totalPeriodo,
-    incompleto: totalPaginas > MAX_PAGINAS_GRAFICO,
+    incompleto: !recorridoCompleto || !cantidadCoincide,
   };
 }
 

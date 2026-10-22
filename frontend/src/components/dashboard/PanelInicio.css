@@ -72,10 +72,17 @@
   margin: 0;
 }
 
+/* El <div> de la tarjeta solo tiene <dt> y <dd> (HTML válido dentro de la <dl>);
+   la grilla los acomoda: ícono a la izquierda, título sobre la cifra. */
 .panel-inicio__stat {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "icono titulo"
+    "icono dato";
+  align-items: start;
+  column-gap: var(--space-4);
   /* Misma altura en carga, error y datos: el panel no salta al llegar la
      respuesta. */
   min-height: 11.5rem;
@@ -88,8 +95,9 @@
 }
 
 .panel-inicio__stat-icono {
+  grid-area: icono;
   display: flex;
-  flex-shrink: 0;
+  margin: 0;
   align-items: center;
   justify-content: center;
   width: 3rem;
@@ -124,18 +132,16 @@
   color: var(--color-danger-500);
 }
 
-.panel-inicio__stat-cuerpo {
-  flex: 1;
-  min-width: 0;
-}
-
 .panel-inicio__stat-titulo {
+  grid-area: titulo;
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
 
 .panel-inicio__stat-dato {
+  grid-area: dato;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

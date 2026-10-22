@@ -2,8 +2,12 @@ import { ErrorDeCarga, Esqueleto } from "./EstadoDeCarga";
 
 // Tarjeta de una cifra del panel de inicio. `fuente` es el resultado de uno de
 // los hooks de usePanelInicio ({ datos, cargando, error, recargar }) y
-// `contenido(datos)` devuelve { valor, detalle } cuando ya hay datos. Va dentro
-// de una <dl>: el título es el <dt> y la cifra con su detalle el <dd>.
+// `contenido(datos)` devuelve { valor, detalle } cuando ya hay datos.
+//
+// Va dentro de una <dl>. Para que el HTML sea válido, el <div> de cada tarjeta
+// solo contiene <dt> y <dd>: el título es el <dt>, el ícono decorativo un <dd>
+// aria-hidden (lo leen solo los ojos) y la cifra con su detalle el otro <dd>.
+// La grilla del CSS los acomoda como ícono | título sobre cifra.
 export default function TarjetaEstadistica({
   titulo,
   color,
@@ -16,31 +20,29 @@ export default function TarjetaEstadistica({
 
   return (
     <div className="panel-inicio__stat" aria-busy={cargando}>
-      <span
+      <dt className="panel-inicio__stat-titulo">{titulo}</dt>
+
+      <dd
         className={`panel-inicio__stat-icono panel-inicio__stat-icono--${color}`}
         aria-hidden="true"
       >
         {icono}
-      </span>
+      </dd>
 
-      <div className="panel-inicio__stat-cuerpo">
-        <dt className="panel-inicio__stat-titulo">{titulo}</dt>
+      <dd className="panel-inicio__stat-dato">
+        {cargando && <Esqueleto texto={`Cargando ${titulo.toLowerCase()}...`} />}
 
-        <dd className="panel-inicio__stat-dato">
-          {cargando && <Esqueleto texto={`Cargando ${titulo.toLowerCase()}...`} />}
+        {!cargando && error && (
+          <ErrorDeCarga titulo={titulo} mensaje={error} onReintentar={recargar} />
+        )}
 
-          {!cargando && error && (
-            <ErrorDeCarga mensaje={error} onReintentar={recargar} />
-          )}
-
-          {resumen && (
-            <>
-              <strong className="panel-inicio__stat-valor">{resumen.valor}</strong>
-              <span className="panel-inicio__stat-detalle">{resumen.detalle}</span>
-            </>
-          )}
-        </dd>
-      </div>
+        {resumen && (
+          <>
+            <strong className="panel-inicio__stat-valor">{resumen.valor}</strong>
+            <span className="panel-inicio__stat-detalle">{resumen.detalle}</span>
+          </>
+        )}
+      </dd>
     </div>
   );
 }

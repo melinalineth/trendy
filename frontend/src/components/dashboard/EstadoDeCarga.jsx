@@ -35,14 +35,19 @@ export function Esqueleto({ filas = 0, texto = "Cargando..." }) {
 }
 
 // Mensaje de error de una tarjeta con su botón para reintentar solo esa
-// petición.
-export function ErrorDeCarga({ mensaje, onReintentar }) {
+// petición. Con el servidor caído fallan ~14 tarjetas a la vez: por eso el
+// aviso es `role="status"` (cortés, no interrumpe; un `alert` por tarjeta
+// anunciaría 14 de golpe) y cada botón lleva el título de su tarjeta en el
+// nombre accesible («Reintentar: Ventas registradas»), que empieza con el
+// texto visible «Reintentar».
+export function ErrorDeCarga({ titulo, mensaje, onReintentar }) {
   return (
-    <div className="panel-inicio__error" role="alert">
+    <div className="panel-inicio__error" role="status">
       <p>{mensaje}</p>
       <Button
         className="panel-inicio__btn-secundario"
         text="Reintentar"
+        ariaLabel={`Reintentar: ${titulo}`}
         onClick={onReintentar}
       />
     </div>

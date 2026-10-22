@@ -65,7 +65,7 @@ export default function TarjetaPanel({
         )}
 
         {!cargando && error && (
-          <ErrorDeCarga mensaje={error} onReintentar={recargar} />
+          <ErrorDeCarga titulo={titulo} mensaje={error} onReintentar={recargar} />
         )}
 
         {hayDatos && estaVacio(datos) && (

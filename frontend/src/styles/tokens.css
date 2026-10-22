@@ -52,8 +52,8 @@
   --color-danger-300: #f6c3da;
   --color-danger-100: #fee2e2;
 
-  /* Acento adicional fuera de la paleta de estado (ej. stat-icon "purple"
-     del dashboard, badge "Nuevo") — no representa un estado semántico como
+  /* Acento adicional fuera de la paleta de estado (ej. el ícono morado de las
+     tarjetas del panel de inicio, badge "Nuevo") — no representa un estado semántico como
      success/warning/info/danger, es solo un quinto color decorativo. */
   --color-purple-500: #7352db;
   --color-purple-100: #eee8ff;

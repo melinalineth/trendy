@@ -19,25 +19,40 @@ function indicesDeRotulos(cantidad) {
   return [...new Set(pasos.map((paso) => Math.round(paso * ultimo)))];
 }
 
+// Salvedad cuando las cifras pueden no ser exactas (ver `incompleto` en
+// useVentasUltimosDias).
+const TEXTO_INCOMPLETO =
+  "Estas cifras pueden estar incompletas: hay más ventas que las que el gráfico puede recorrer o las ventas cambiaron mientras se cargaban. Recargá la página para ver cifras al día, o usá el listado de ventas.";
+
 function textoResumen(dias, periodo) {
   const ventas = dias.reduce((suma, dia) => suma + dia.cantidad, 0);
   const total = dias.reduce((suma, dia) => suma + dia.total, 0);
   const rango = `del ${etiquetaDia(periodo.desde)} al ${etiquetaDia(periodo.hasta)}`;
   const mejor = dias.reduce((a, b) => (b.total > a.total ? b : a), dias[0]);
 
-  return `Ventas registradas ${rango}: ${textoVentas(ventas)} por ${formatearPrecio(total)}. El día con más ventas fue el ${etiquetaDia(mejor.fecha)}, con ${formatearPrecio(mejor.total)}.`;
+  return `Ventas registradas ${rango}: ${textoVentas(ventas)} por ${formatearPrecio(total)}. El día de mayor venta fue el ${etiquetaDia(mejor.fecha)}, con ${formatearPrecio(mejor.total)}.`;
 }
 
 export default function GraficoVentas({ dias, periodo, incompleto }) {
   const maximo = Math.max(...dias.map((dia) => dia.total));
   const tope = topeDeEscala(maximo);
   const resumen = textoResumen(dias, periodo);
+  // Un solo texto para lectores de pantalla (nombre de la imagen), con la
+  // salvedad incluida; los párrafos visibles de abajo van aria-hidden para que
+  // no se lea dos veces.
+  const nombreAccesible = incompleto
+    ? `${resumen} ${TEXTO_INCOMPLETO}`
+    : resumen;
   const diasConVentas = dias.filter((dia) => dia.cantidad > 0);
   const rotulos = indicesDeRotulos(dias.length);
 
   return (
     <div className="panel-inicio__grafico-contenedor">
-      <div className="panel-inicio__grafico" role="img" aria-label={resumen}>
+      <div
+        className="panel-inicio__grafico"
+        role="img"
+        aria-label={nombreAccesible}
+      >
         <div className="panel-inicio__grafico-eje-y" aria-hidden="true">
           <span>{montoCorto(tope)}</span>
           <span>{montoCorto(tope / 2)}</span>
@@ -76,13 +91,13 @@ export default function GraficoVentas({ dias, periodo, incompleto }) {
         </div>
       </div>
 
-      <p className="panel-inicio__grafico-resumen">{resumen}</p>
+      <p className="panel-inicio__grafico-resumen" aria-hidden="true">
+        {resumen}
+      </p>
 
       {incompleto && (
-        <p className="panel-inicio__grafico-aviso">
-          Hay más ventas en el período que las que el gráfico puede recorrer:
-          muestra solo las más recientes. Para ver todas, usá el listado de
-          ventas.
+        <p className="panel-inicio__grafico-aviso" aria-hidden="true">
+          {TEXTO_INCOMPLETO}
         </p>
       )}
 
@@ -115,6 +130,7 @@ export default function GraficoVentas({ dias, periodo, incompleto }) {
 
         <p className="panel-inicio__grafico-nota">
           Los días sin ventas no aparecen en la tabla.
+          {incompleto && " Las cifras pueden estar incompletas."}
         </p>
       </details>
     </div>
