@@ -13,6 +13,8 @@ import RestablecerPassword from "../pages/auth/RestablecerPassword";
 import Direcciones from "../pages/customer/Direcciones";
 import Cart from "../pages/customer/Cart";
 import RoleGuard from "../components/auth/RoleGuard";
+import AdminDashboard from "../pages/admin/AdminDashboard";
+import SellerDashboard from "../pages/seller/SellerDashboard";
 import Sellers from "../pages/admin/Sellers";
 import Users from "../pages/admin/Users";
 import Roles from "../pages/admin/Roles";
@@ -57,6 +59,24 @@ function AppRoutes() {
         element={
           <RoleGuard roles={["cliente"]}>
             <Cart />
+          </RoleGuard>
+        }
+      />
+      {/* Paneles de inicio del personal: a donde llega cada rol al iniciar
+          sesión (ver Login.jsx). */}
+      <Route
+        path="/admin"
+        element={
+          <RoleGuard roles={["admin"]}>
+            <AdminDashboard />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/vendedor"
+        element={
+          <RoleGuard roles={["vendedor"]}>
+            <SellerDashboard />
           </RoleGuard>
         }
       />

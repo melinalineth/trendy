@@ -9,6 +9,14 @@ import "./auth.css";
 
 const MENSAJE_ERROR_GENERICO = "Correo o contraseña incorrectos.";
 
+// A dónde va cada rol al iniciar sesión: el personal entra a su panel de
+// inicio; el cliente (y cualquier rol que no conozcamos) a la portada.
+function rutaDeInicio(rol) {
+  if (rol === "admin") return "/admin";
+  if (rol === "vendedor") return "/vendedor";
+  return "/";
+}
+
 function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -24,8 +32,8 @@ function Login() {
     setCargando(true);
 
     try {
-      await login(correo, password);
-      navigate("/");
+      const sesion = await login(correo, password);
+      navigate(rutaDeInicio(sesion?.usuario?.rol?.nombre));
     } catch (err) {
       const mensaje = err.response?.data?.mensaje || MENSAJE_ERROR_GENERICO;
       setError(mensaje);

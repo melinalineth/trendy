@@ -13,9 +13,9 @@
   color: var(--color-text-inverse);
 }
 
-/* Nuevo. Usa el mismo acento morado que .stat-icon.purple (AdminDashboard.css)
-   en vez de --color-info-*, que ya lo usa .badge--info (Pagado) — mismo
-   token, no el mismo color que .badge--info. */
+/* Nuevo. Usa el mismo acento morado que .panel-inicio__stat-icono--purple
+   (PanelInicio.css) en vez de --color-info-*, que ya lo usa .badge--info
+   (Pagado) — mismo token, no el mismo color que .badge--info. */
 .badge--new {
   background-color: var(--color-purple-100);
   color: var(--color-purple-500);

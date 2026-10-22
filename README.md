@@ -172,8 +172,8 @@ Nunca commitees `.env`; los reales están en `.gitignore`.
 | --- | --- |
 | Visitante | Registrarse, iniciar sesión, recuperar contraseña, ver el catálogo (filtros y búsqueda) y el detalle de producto |
 | Cliente | Direcciones, carrito, checkout, pedidos propios con seguimiento del paso actual del envío (la API entrega el historial, pero la pantalla no lo dibuja), pago con Mercado Pago o contra entrega |
-| Vendedor | Productos, imágenes y variantes, inventario, gestión de pedidos y del envío, consulta de ventas (ve todas) |
-| Administrador | Todo lo del vendedor, más usuarios, activación de vendedores, roles y permisos, zonas de cobertura y tarifas, contra entrega por zona y cancelación de pedidos vencidos |
+| Vendedor | Panel de inicio (`/vendedor`, adonde llega al iniciar sesión) con ventas, pedidos por estado, inventario, ventas de los últimos 30 días y pedidos recientes con datos reales; productos, imágenes y variantes, inventario, gestión de pedidos y del envío, consulta de ventas (ve todas) |
+| Administrador | Todo lo del vendedor (con su panel de inicio en `/admin`, que suma la cantidad de clientes), más usuarios, activación de vendedores, roles y permisos, zonas de cobertura y tarifas, contra entrega por zona y cancelación de pedidos vencidos |
 
 Reglas que conviene conocer (detalle en `docs/diseno/`):
 
@@ -216,7 +216,7 @@ No verificado / pendiente:
 - No hay forma de crear vendedores desde la aplicación ni de crear el primer admin sin el seed (se
   crean con `scripts/crear-usuario.js`, ver arriba).
 - Pendiente: completar la navegación y otros huecos de uso (el menú de usuario ya ofrece las pantallas
-  de cada rol y «Cerrar sesión», pero no tiene entrada «Panel»; la página de inicio es una portada simple
+  de cada rol (incluido el «Panel de inicio» del personal) y «Cerrar sesión»; la página de inicio es una portada simple
   y sus categorías no preseleccionan el filtro del catálogo). Están documentados en la sección «Límites conocidos» de
   [`docs/manual/manual-usuario.md`](docs/manual/manual-usuario.md).
 - El contra entrega se habilita y deshabilita por zona desde `/admin/envios` (columna «Contra
