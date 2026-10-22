@@ -67,17 +67,23 @@ export function AuthProvider({ children }) {
     return authService.register(datos);
   }, []);
 
-  // Cierre de sesión "mejor esfuerzo": el backend usa JWT sin estado y su
-  // /auth/logout solo responde 200 (no invalida el token), así que si la
-  // llamada falla (red caída, 401, 500) igual cerramos la sesión local. Por
-  // eso el error no se propaga: el usuario pidió salir y tiene que salir.
-  const logout = useCallback(async () => {
-    try {
-      await authService.logout();
-    } catch {
-      // Ignorado a propósito: ver comentario de arriba.
-    } finally {
-      limpiarSesion();
+  // Cierre de sesión: "limpiar primero, avisar después". El backend usa JWT
+  // sin estado y su /auth/logout solo responde 200 (no invalida el token), así
+  // que la sesión local se borra AL INSTANTE, sin esperar al servidor (si
+  // estuviera caído o colgado, la sesión seguiría viva en esta y en otras
+  // pestañas). Después se avisa al backend en segundo plano con el token
+  // capturado antes de borrarlo (el interceptor ya no lo encontraría) y se
+  // ignora cualquier error. Es idempotente: sin token no hace nada, así que
+  // un segundo clic no dispara otro POST.
+  const logout = useCallback(() => {
+    const tokenActual = localStorage.getItem(AUTH_TOKEN_KEY);
+
+    limpiarSesion();
+
+    if (tokenActual) {
+      authService.logout(tokenActual).catch(() => {
+        // Mejor esfuerzo: el usuario ya salió, no hay nada que mostrar.
+      });
     }
   }, [limpiarSesion]);
 

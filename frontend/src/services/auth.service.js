@@ -10,11 +10,19 @@ function login(datos) {
   return api.post("/auth/login", datos).then((response) => response.data);
 }
 
-// Con timeout para que un backend colgado no deje al usuario esperando para
-// salir: el cierre de sesión local no depende de esta respuesta.
-function logout() {
+// Aviso de cierre de sesión al backend. Se llama DESPUÉS de borrar la sesión
+// local, así que recibe el token y lo manda en el header (el interceptor ya no
+// lo encuentra en localStorage). `omitirCierreAutomatico` evita que un 401
+// tardío de esta llamada dispare el cierre global y borre una sesión nueva si
+// el usuario ya volvió a iniciar sesión. El timeout es solo un tope para no
+// dejar un request colgado: ya no condiciona la interfaz.
+function logout(token) {
   return api
-    .post("/auth/logout", null, { timeout: 5000 })
+    .post("/auth/logout", null, {
+      timeout: 5000,
+      headers: { Authorization: `Bearer ${token}` },
+      omitirCierreAutomatico: true,
+    })
     .then((response) => response.data);
 }
 

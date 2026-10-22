@@ -8,13 +8,17 @@ import {
 } from "./menuUsuario";
 import "./UserMenu.css";
 
-// Menú de usuario del Header (RF-002). Botón con aria-haspopup/aria-expanded
-// que abre un panel con:
+// Menú de usuario del Header (RF-002), con el patrón "disclosure" de WAI-ARIA
+// para menús de navegación: un botón con aria-expanded/aria-controls que
+// muestra u oculta un panel con una lista normal de enlaces (no es un
+// role="menu", que obligaría a lectores de pantalla a modo aplicación y a
+// manejar el foco con flechas). El foco se queda en el botón y Tab entra al
+// panel. El panel muestra:
 //  - visitante: Iniciar sesión / Crear cuenta;
 //  - con sesión: nombre y rol, las entradas del rol (menuUsuario.js) y
 //    "Cerrar sesión".
 // Se cierra con Escape (devolviendo el foco al botón), con un clic afuera,
-// al salir con Tab del panel y al cambiar de ruta.
+// al salir con Tab del botón o del panel y al cambiar de ruta.
 function UserMenu() {
   const { usuario, isAuthenticated, logout } = useAuth();
   const location = useLocation();
@@ -29,23 +33,21 @@ function UserMenu() {
 
   const contenedorRef = useRef(null);
   const botonRef = useRef(null);
-  const panelRef = useRef(null);
 
+  // `usuario` viene de localStorage: puede estar corrupto o tener un rol que
+  // este frontend no conoce. Object.hasOwn evita que un rol como
+  // "constructor" devuelva una propiedad heredada del objeto.
+  const nombre =
+    typeof usuario?.nombre === "string" ? usuario.nombre.trim() : "";
   const rol = usuario?.rol?.nombre;
-  const entradas = isAuthenticated
-    ? (ENTRADAS_POR_ROL[rol] ?? [])
-    : ENTRADAS_VISITANTE;
+  const rolConocido =
+    typeof rol === "string" && Object.hasOwn(ENTRADAS_POR_ROL, rol);
+  const mostrarIdentidad = isAuthenticated && nombre !== "" && rolConocido;
 
-  function cerrar({ devolverFoco = false } = {}) {
-    setAbiertoEn(null);
-    if (devolverFoco) botonRef.current?.focus();
+  let entradas = ENTRADAS_VISITANTE;
+  if (isAuthenticated) {
+    entradas = rolConocido ? ENTRADAS_POR_ROL[rol] : [];
   }
-
-  // Al abrir, el foco pasa a la primera opción del panel.
-  useEffect(() => {
-    if (!abierto) return;
-    panelRef.current?.querySelector('[role="menuitem"]')?.focus();
-  }, [abierto]);
 
   // Mientras está abierto: clic/toque afuera y Escape cierran el menú.
   useEffect(() => {
@@ -73,10 +75,11 @@ function UserMenu() {
     };
   }, [abierto]);
 
-  // Si el foco pasa a otro elemento de la página (Tab hacia afuera) se cierra
-  // sin robarlo. Con relatedTarget nulo NO cerramos: Safari no enfoca los
-  // botones al hacer clic y cerraría el panel antes de que llegue el clic;
-  // el clic afuera ya lo resuelve el listener de pointerdown.
+  // Si el foco pasa a otro elemento de la página (Tab hacia afuera, ya sea
+  // desde el botón o desde el panel) se cierra sin robarlo. Con relatedTarget
+  // nulo NO cerramos: Safari no enfoca los botones al hacer clic y cerraría
+  // el panel antes de que llegue el clic; el clic afuera ya lo resuelve el
+  // listener de pointerdown.
   function alPerderFoco(event) {
     const destino = event.relatedTarget;
     if (destino && !contenedorRef.current?.contains(destino)) {
@@ -84,35 +87,12 @@ function UserMenu() {
     }
   }
 
-  // Flechas, Inicio y Fin recorren las opciones del panel.
-  function alTeclearEnPanel(event) {
-    const teclas = ["ArrowDown", "ArrowUp", "Home", "End"];
-    if (!teclas.includes(event.key)) return;
-
-    const items = [...panelRef.current.querySelectorAll('[role="menuitem"]')];
-    if (items.length === 0) return;
-
-    event.preventDefault();
-    const actual = items.indexOf(document.activeElement);
-    let destino;
-
-    if (event.key === "Home") destino = 0;
-    else if (event.key === "End") destino = items.length - 1;
-    else if (event.key === "ArrowDown") destino = (actual + 1) % items.length;
-    else destino = (actual - 1 + items.length) % items.length;
-
-    items[destino].focus();
-  }
-
-  // Cierre de sesión: la llamada al backend es "mejor esfuerzo" (el contexto
-  // limpia la sesión local igual si falla) y siempre terminamos en /login.
-  async function cerrarSesion() {
+  // Cierre de sesión: la sesión local se borra al instante (el contexto
+  // avisa al backend en segundo plano) y siempre terminamos en /login.
+  function cerrarSesion() {
     setAbiertoEn(null);
-    try {
-      await logout();
-    } finally {
-      navigate("/login", { replace: true });
-    }
+    logout();
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -121,12 +101,11 @@ function UserMenu() {
         type="button"
         ref={botonRef}
         className="user-menu__button"
-        aria-haspopup="menu"
         aria-expanded={abierto}
         aria-controls={abierto ? panelId : undefined}
         aria-label={
-          isAuthenticated
-            ? `Menú de usuario de ${usuario?.nombre ?? "tu cuenta"}`
+          isAuthenticated && nombre
+            ? `Menú de usuario de ${nombre}`
             : "Menú de usuario"
         }
         onClick={() => setAbiertoEn(abierto ? null : location.key)}
@@ -135,48 +114,41 @@ function UserMenu() {
       </button>
 
       {abierto && (
-        <div className="user-menu__panel" id={panelId} ref={panelRef}>
-          {isAuthenticated && (
+        <div className="user-menu__panel" id={panelId}>
+          {mostrarIdentidad && (
             <div className="user-menu__identity">
-              <span className="user-menu__name">{usuario?.nombre}</span>
-              <span className="user-menu__role">
-                {ETIQUETA_ROL[rol] ?? rol}
-              </span>
+              <span className="user-menu__name">{nombre}</span>
+              <span className="user-menu__role">{ETIQUETA_ROL[rol]}</span>
             </div>
           )}
 
-          <ul
-            className="user-menu__list"
-            role="menu"
-            aria-label="Menú de usuario"
-            onKeyDown={alTeclearEnPanel}
-          >
-            {entradas.map((entrada) => (
-              <li key={entrada.ruta} role="none">
-                <Link
-                  to={entrada.ruta}
-                  role="menuitem"
-                  className="user-menu__item"
-                  onClick={() => cerrar()}
-                >
-                  {entrada.etiqueta}
-                </Link>
-              </li>
-            ))}
+          <nav aria-label="Menú de usuario">
+            <ul className="user-menu__list">
+              {entradas.map((entrada) => (
+                <li key={entrada.ruta}>
+                  <Link
+                    to={entrada.ruta}
+                    className="user-menu__item"
+                    onClick={() => setAbiertoEn(null)}
+                  >
+                    {entrada.etiqueta}
+                  </Link>
+                </li>
+              ))}
 
-            {isAuthenticated && (
-              <li role="none">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="user-menu__item user-menu__item--logout"
-                  onClick={cerrarSesion}
-                >
-                  Cerrar sesión
-                </button>
-              </li>
-            )}
-          </ul>
+              {isAuthenticated && (
+                <li>
+                  <button
+                    type="button"
+                    className="user-menu__item user-menu__item--logout"
+                    onClick={cerrarSesion}
+                  >
+                    Cerrar sesión
+                  </button>
+                </li>
+              )}
+            </ul>
+          </nav>
         </div>
       )}
     </div>

@@ -25,10 +25,11 @@
   background-color: var(--color-brand-50);
 }
 
+/* Foco visible con un contorno sólido (no solo color de fondo o sombra
+   suave): cumple el contraste 3:1 y se mantiene en modo de alto contraste. */
 .user-menu__button:focus-visible {
-  outline: none;
-  border-color: var(--color-brand-500);
-  box-shadow: var(--shadow-focus-brand);
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
 }
 
 /* El panel cuelga debajo del botón, pegado a la derecha, y nunca más ancho
@@ -97,13 +98,14 @@
 
 .user-menu__item:hover,
 .user-menu__item:focus-visible {
-  outline: none;
   background-color: var(--color-brand-50);
   color: var(--color-brand-600);
 }
 
+/* Contorno hacia adentro para que el overflow del panel no lo recorte. */
 .user-menu__item:focus-visible {
-  box-shadow: var(--shadow-focus-brand);
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: -2px;
 }
 
 /* "Cerrar sesión" separado del resto para no tocarlo por error. */

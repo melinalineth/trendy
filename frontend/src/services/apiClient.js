@@ -28,7 +28,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    // Las llamadas que marcan `omitirCierreAutomatico` (el aviso de logout,
+    // que se envía cuando la sesión local ya se borró) no deben cerrar sesión.
+    if (
+      error.response &&
+      error.response.status === 401 &&
+      !error.config?.omitirCierreAutomatico
+    ) {
       localStorage.removeItem(AUTH_TOKEN_KEY);
       window.dispatchEvent(new Event(AUTH_LOGOUT_EVENT));
     }
