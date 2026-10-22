@@ -277,9 +277,23 @@ Tocá **Agregar dirección** y completá el formulario:
 - Botón **Guardar dirección** («Guardando...»). Si algo falta: **No pudimos guardar la dirección.
   Revisá los datos e intentá de nuevo.**
 
-Cada dirección guardada es una tarjeta con la etiqueta **Principal** cuando corresponde. Hoy **no se
-pueden editar ni eliminar** las direcciones desde la pantalla; si te equivocás, agregá una nueva (y
-marcala como principal).
+Cada dirección guardada es una tarjeta con la etiqueta **Principal** cuando corresponde. Cada tarjeta
+tiene estos botones:
+
+- **Editar**: abre el mismo formulario con los datos cargados. Los obligatorios no pueden quedar
+  vacíos (**El destinatario es requerido**, **La calle es requerida**, etc.). Botón **Guardar cambios**
+  («Guardando...»). Si salió bien: **Dirección actualizada.**
+- **Marcar como principal** (en las que no lo son): cambia la principal sin abrir el formulario y avisa
+  **Ahora la dirección de ... es tu principal.** Solo puede haber una principal.
+- **Eliminar**: pide confirmación mostrando la dirección. Si era la principal, la más reciente de las
+  que te queden pasa a serlo (si no queda ninguna, ninguna es principal). Si salió bien:
+  **Dirección eliminada.** Si ya no existía (por ejemplo, la borraste desde otra pestaña) la ventana se
+  cierra, arriba aparece **La dirección no existe** y la lista se actualiza sola. Lo mismo pasa si
+  intentás **Editar** una dirección que ya no existe.
+
+Los **pedidos que ya hiciste con una dirección no cambian** aunque la edites o la elimines: conservan el
+destinatario, el teléfono y el lugar de entrega que usaste (se ven en el detalle del pedido). Una
+dirección eliminada ya no aparece en el carrito ni en el checkout.
 
 Para que el envío tenga cobertura, la **Ciudad** y el **Departamento** tienen que coincidir con una
 zona de cobertura activa (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)); no distingue
@@ -363,6 +377,11 @@ Los pedidos contra entrega no vencen.
 - **No hay stock suficiente de Camiseta Básica (Talla M · Negro). Quedan 3 unidades. Ajustá la
   cantidad en tu carrito para continuar.** (con el enlace **Ir al carrito**)
 - **Todavía no hacemos envíos a la dirección elegida. Elegí otra dirección o agregá una nueva.**
+- **La dirección elegida ya no existe. Elegí otra dirección.** (por ejemplo, la eliminaste desde otra
+  pestaña mientras comprabas)
+- **Tu dirección cambió mientras confirmabas el pedido. Revisala y volvé a confirmar.** (editaste la
+  ciudad o el departamento de la dirección elegida desde otra pestaña mientras confirmabas: el envío
+  calculado ya no valía; el carrito y las direcciones se actualizan)
 - **Tu carrito está vacío. Si acabás de confirmar una compra, la encontrás en Mis pedidos.**
 - **No pudimos confirmar si tu pedido se registró: puede que sí. Revisá «Mis pedidos» antes de volver
   a intentar.** (si se cortó la conexión: mirá **Mis pedidos** antes de comprar de nuevo para no
@@ -856,7 +875,6 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
   entrega, pero solo se ve el paso actual.
 - El corazón y el carrito de las tarjetas del catálogo no hacen nada; la lupa y el ícono de persona del
   encabezado, tampoco.
-- Las direcciones no se pueden editar ni eliminar.
 - **Roles y permisos** no tiene permisos configurados y no gobierna nada.
 - **Contra entrega por zona**: el checkout siempre ofrece la opción y el rechazo llega recién al
   confirmar; y deshabilitar una zona deja sus pedidos contra entrega sin pago registrado pendientes
