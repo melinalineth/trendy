@@ -58,6 +58,20 @@ class CarritoVacioError extends Error {
   }
 }
 
+// RF-005: la dirección se editó (cambió la ciudad o el departamento, que definen
+// la cobertura y la tarifa) entre que se calculó el envío y se creó el pedido.
+// Se corta con rollback completo: el costo calculado ya no corresponde.
+class DireccionModificadaError extends Error {
+  constructor(
+    message = "La dirección cambió mientras confirmabas el pedido: revisala e intentá de nuevo"
+  ) {
+    super(message);
+    this.name = "DireccionModificadaError";
+    this.status = 409;
+    this.codigo = "DIRECCION_MODIFICADA";
+  }
+}
+
 // RN-001: un producto inactivo no se puede vender aunque siga en el carrito.
 class ProductoNoDisponibleError extends Error {
   constructor(varianteId) {
@@ -165,6 +179,24 @@ function presentarDetalle(detalle) {
   };
 }
 
+// Dirección dentro del pedido: SOLO los datos de entrega (lo que fue la copia
+// histórica de la entrega). Nada de usuarioId, esPrincipal ni eliminadaEn: son
+// metadatos de la cuenta que cambian aunque el pedido no.
+function presentarDireccion(direccion) {
+  if (!direccion) return null;
+
+  return {
+    id: direccion.id,
+    destinatario: direccion.destinatario,
+    telefono: direccion.telefono,
+    calle: direccion.calle,
+    ciudad: direccion.ciudad,
+    departamento: direccion.departamento,
+    codigoPostal: direccion.codigoPostal,
+    referencia: direccion.referencia,
+  };
+}
+
 function presentarInfoEnvio(info) {
   if (!info) return null;
 
@@ -205,7 +237,7 @@ function presentarPedido(pedido) {
     total: aNumero(pedido.total),
     creadoEn: pedido.creadoEn,
     ...(pedido.usuario ? { usuario: pedido.usuario } : {}),
-    ...(pedido.direccion !== undefined ? { direccion: pedido.direccion } : {}),
+    ...(pedido.direccion !== undefined ? { direccion: presentarDireccion(pedido.direccion) } : {}),
     detalles: (pedido.detalles ?? []).map(presentarDetalle),
     ...(pedido.infoEnvio !== undefined ? { infoEnvio: presentarInfoEnvio(pedido.infoEnvio) } : {}),
     ...(pedido.pago !== undefined ? { pago: presentarPago(pedido.pago) } : {}),
@@ -293,6 +325,27 @@ function esErrorReintentable(error, { reintentarUnique = false } = {}) {
   return false;
 }
 
+/**
+ * ¿Es el P2003 (FK rota) de la dirección del pedido o de su envío? Función pura
+ * (exportada para testearla con errores simulados). Mira el mensaje y el meta
+ * del error (con el adapter de MariaDB el nombre del índice viene en
+ * meta.driverAdapterError.cause.constraint).
+ */
+function esViolacionFkDeDireccion(error) {
+  if (error?.code !== "P2003") return false;
+
+  const texto = [
+    error.message,
+    error.meta?.field_name,
+    JSON.stringify(error.meta?.driverAdapterError?.cause ?? null),
+  ]
+    .filter((valor) => typeof valor === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return texto.includes("direccionid");
+}
+
 async function enTransaccion(operacion, fn, { reintentarUnique = false } = {}) {
   for (let intento = 1; ; intento++) {
     try {
@@ -349,7 +402,27 @@ function exigirMontosEnterosParaMercadoPago(items, lineas, costoEnvioCentavos) {
 // variante, que esta transacción ya tiene en exclusivo). Insertar las líneas
 // antes del descuento haría que dos transacciones tomen el compartido y
 // después ambas pidan el exclusivo.
-async function crearEnTransaccion(tx, { usuarioId, direccionId, metodoPago, costoEnvioCentavos }) {
+async function crearEnTransaccion(
+  tx,
+  { usuarioId, direccionId, direccion, metodoPago, costoEnvioCentavos }
+) {
+  // 0. RF-005: la dirección se leyó y se calculó el envío FUERA de esta
+  //    transacción, así que acá se vuelve a leer con lock COMPARTIDO (el INSERT
+  //    del pedido lo pediría igual por la FK). Las ediciones y bajas de
+  //    direcciones toman el lock exclusivo: o terminaron antes de esta lectura
+  //    (y se ven acá) o esperan a que el pedido confirme. Así el pedido nunca
+  //    queda atado a una dirección dada de baja o borrada (404) ni con un costo
+  //    de envío calculado para otra ciudad (409), y sin P2003 de por medio.
+  const vigente = await direccionRepository.bloquearCompartida(direccionId, usuarioId, tx);
+
+  if (!vigente) {
+    throw new DireccionNoAutorizadaError("La dirección no existe o no pertenece al usuario");
+  }
+
+  if (vigente.ciudad !== direccion.ciudad || vigente.departamento !== direccion.departamento) {
+    throw new DireccionModificadaError();
+  }
+
   // 1. Lock del carrito: dos creaciones simultáneas desde el mismo carrito
   //    se serializan; la segunda ve el carrito ya vaciado (CARRITO_VACIO).
   const carrito = await carritoRepository.bloquearPorUsuario(usuarioId, tx);
@@ -472,13 +545,24 @@ async function crearPedido(usuarioId, { direccionId, metodoPago }) {
   const datos = {
     usuarioId: idUsuario,
     direccionId,
+    direccion,
     metodoPago,
     costoEnvioCentavos: aCentavos(envio.costo),
   };
 
-  const pedidoId = await enTransaccion("CREAR_PEDIDO", (tx) => crearEnTransaccion(tx, datos), {
-    reintentarUnique: true,
-  });
+  let pedidoId;
+  try {
+    pedidoId = await enTransaccion("CREAR_PEDIDO", (tx) => crearEnTransaccion(tx, datos), {
+      reintentarUnique: true,
+    });
+  } catch (error) {
+    // Red de seguridad: con el lock del paso 0 no debería pasar, pero una FK
+    // de dirección rota es "la dirección ya no existe", no un 500.
+    if (esViolacionFkDeDireccion(error)) {
+      throw new DireccionNoAutorizadaError("La dirección no existe o no pertenece al usuario");
+    }
+    throw error;
+  }
 
   return presentarPedido(await pedidoRepository.obtenerPorId(pedidoId));
 }
@@ -957,8 +1041,6 @@ const ESTADOS_PEDIDO_EN_ENVIO = ESTADOS_ENVIO;
 // con fecha y hora; viene de HistorialEstadoEnvio (docs/diseno/info-envio.md
 // §5) y es [] en los envíos anteriores a esa tabla.
 function presentarSeguimiento(pedido, historial) {
-  const direccion = pedido.direccion;
-
   return {
     pedidoId: pedido.id,
     numero: pedido.numero,
@@ -966,18 +1048,7 @@ function presentarSeguimiento(pedido, historial) {
     estadoEnvio: pedido.infoEnvio.estadoEnvio,
     actualizadoEn: pedido.infoEnvio.actualizadoEn,
     costoEnvio: aNumero(pedido.infoEnvio.costoEnvio),
-    direccion: direccion
-      ? {
-          id: direccion.id,
-          destinatario: direccion.destinatario,
-          telefono: direccion.telefono,
-          calle: direccion.calle,
-          ciudad: direccion.ciudad,
-          departamento: direccion.departamento,
-          codigoPostal: direccion.codigoPostal,
-          referencia: direccion.referencia,
-        }
-      : null,
+    direccion: presentarDireccion(pedido.direccion),
     historial,
   };
 }
@@ -1068,6 +1139,9 @@ async function obtenerSeguimiento(pedidoId, usuario) {
 
 module.exports = {
   crearPedido,
+  enTransaccion,
+  esViolacionFkDeDireccion,
+  DireccionModificadaError,
   actualizarEstadoEnvio,
   obtenerSeguimiento,
   listarPedidos,

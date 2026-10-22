@@ -61,6 +61,16 @@ model Direccion {
   codigoPostal String?
   referencia   String?
   esPrincipal  Boolean @default(false)
+  // RF-005 (editar y eliminar): Pedido e InfoEnvio apuntan a esta fila por FK,
+  // sin copiar los campos, así que la fila ES la copia histórica de lo que se
+  // entregó. Si un pedido la usa, sus DATOS DE ENTREGA (destinatario, teléfono,
+  // calle, ciudad, departamento, código postal, referencia) no se modifican y
+  // la fila no se borra de verdad: una edición crea una fila nueva y una baja
+  // la marca acá. `esPrincipal` NO es parte de la copia histórica: es un
+  // metadato de la cuenta y cambia aunque la use un pedido. NULL = vigente; con
+  // fecha = dada de baja (no aparece en el listado ni se puede elegir para
+  // comprar, pero los pedidos que la usan la siguen mostrando).
+  eliminadaEn  DateTime?
   usuario      Usuario @relation(fields: [usuarioId], references: [id])
   pedidos      Pedido[]
   infoEnvios   InfoEnvio[]

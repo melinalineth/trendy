@@ -112,6 +112,14 @@ function describirErrorCreacion(error, items) {
         mensaje: "La dirección elegida ya no existe. Elegí otra dirección.",
         accion: null,
       };
+    // La dirección se editó (ciudad o departamento) mientras se confirmaba: el
+    // envío calculado ya no vale. El pedido NO se creó.
+    case "DIRECCION_MODIFICADA":
+      return {
+        mensaje:
+          "Tu dirección cambió mientras confirmabas el pedido. Revisala y volvé a confirmar.",
+        accion: null,
+      };
     case "VALIDACION_FALLIDA":
       return {
         mensaje: "Revisá la dirección y el método de pago elegidos.",
@@ -312,12 +320,14 @@ export default function Checkout() {
       // Con un error incierto también: si el pedido sí se creó, el carrito
       // quedó vacío y la página pasa a "Tu carrito está vacío".
       if (
-        ["STOCK_INSUFICIENTE", "PRODUCTO_NO_DISPONIBLE", "CARRITO_VACIO", "SIN_COBERTURA"].includes(codigo) ||
+        ["STOCK_INSUFICIENTE", "PRODUCTO_NO_DISPONIBLE", "CARRITO_VACIO", "SIN_COBERTURA", "DIRECCION_MODIFICADA"].includes(codigo) ||
         esErrorIncierto(resultado.error)
       ) {
         recargarCarrito();
       }
-      if (codigo === "DIRECCION_NO_ENCONTRADA") recargarDirecciones();
+      if (codigo === "DIRECCION_NO_ENCONTRADA" || codigo === "DIRECCION_MODIFICADA") {
+        recargarDirecciones();
+      }
 
       procesandoRef.current = false;
       setProcesando(false);

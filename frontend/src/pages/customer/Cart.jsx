@@ -29,11 +29,13 @@ function Cart() {
     error: errorDirecciones,
   } = useDirecciones();
 
-  // null = la persona todavía no eligió: se usa la dirección principal (si
-  // tiene) para que el envío aparezca calculado sin pasos extra.
+  // null = la persona todavía no eligió: se usa la dirección principal (o, si
+  // no hay, la primera, igual que el checkout) para que el envío aparezca
+  // calculado sin pasos extra.
   const [direccionElegida, setDireccionElegida] = useState(null);
   const direccionPrincipal = direcciones.find((d) => d.esPrincipal);
-  const direccionId = direccionElegida ?? direccionPrincipal?.id ?? null;
+  const direccionId =
+    direccionElegida ?? direccionPrincipal?.id ?? direcciones[0]?.id ?? null;
 
   const {
     carrito,
