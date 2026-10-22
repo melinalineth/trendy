@@ -66,6 +66,7 @@ continuación de la dirección del sitio:
 | Mis direcciones | `/direcciones` | Cliente |
 | Finalizar compra | `/checkout` | Cliente |
 | Mis pedidos | `/pedidos` (o el enlace **Mis pedidos**) | Cliente |
+| Panel de inicio del personal | `/vendedor` (vendedor) o `/admin` (administrador); es donde llegás al iniciar sesión | Vendedor / Administrador |
 | Productos | `/vendedor/productos` (vendedor) o `/admin/productos` (administrador) | Vendedor / Administrador |
 | Inventario | `/vendedor/inventario` (vendedor) o `/admin/inventario` (administrador) | Vendedor / Administrador |
 | Gestión de pedidos | `/vendedor/pedidos` (vendedor) o `/admin/pedidos` (administrador) | Vendedor / Administrador |
@@ -87,7 +88,9 @@ la pantalla **No encontramos esta página** debajo del encabezado, con dos boton
 **Ver el catálogo**. Esa pantalla sale igual con o sin sesión iniciada.
 
 **La página de inicio (`/`)** es la portada de la tienda y la ven todos, hayan iniciado sesión o no.
-Después de iniciar sesión siempre llegás ahí. De arriba abajo muestra:
+Si sos cliente, después de iniciar sesión llegás ahí; el vendedor y el administrador llegan a su
+propio panel de inicio (ver [5.0](#50-panel-de-inicio-vendedor) y [6.0](#60-panel-de-inicio-admin)).
+La portada muestra, de arriba abajo:
 
 - Un banner con **NUEVA COLECCIÓN**, «Descubrí tu estilo» y el botón **Comprar ahora**, que abre el
   catálogo. En pantallas anchas lo acompañan hasta 3 fotos de productos.
@@ -145,8 +148,9 @@ cuenta**.
 - Si los datos no coinciden aparece **Correo o contraseña incorrectos.** Es el mismo mensaje si el
   correo no existe, si la contraseña es incorrecta o si tu cuenta fue desactivada: a propósito no se
   dice cuál de las tres cosas pasó.
-- Si entraste bien, vas a la página de inicio. Desde ahí podés abrir el catálogo o seguir por las
-  direcciones de la sección 2.
+- Si entraste bien, el sistema te lleva según tu rol: el **cliente** a la página de inicio (`/`),
+  desde donde podés abrir el catálogo o seguir por las direcciones de la sección 2; el **vendedor** a
+  su panel de inicio (`/vendedor`) y el **administrador** al suyo (`/admin`).
 
 ### 3.3 Recuperar la contraseña
 
@@ -385,7 +389,43 @@ el historial** con la fecha de cada paso anterior (ver [Límites conocidos](#lí
 
 ## 5. Vendedor
 
-Un vendedor trabaja desde cuatro pantallas. Ve **todo** (todos los productos, pedidos y ventas).
+Un vendedor trabaja desde su panel de inicio y cuatro pantallas de gestión. Ve **todo** (todos los
+productos, pedidos y ventas).
+
+### 5.0 Panel de inicio (`/vendedor`)
+
+Es la pantalla a la que llegás al iniciar sesión como vendedor (también la abrís escribiendo
+`/vendedor`; el encabezado no tiene un enlace a ella). Se titula **Panel de vendedor**, te saluda por
+tu nombre y muestra el estado de la tienda con los datos de ese momento, todos reales, de arriba abajo:
+
+- **Ventas**: **Ventas registradas** y **Ventas anuladas**, cada una con el total en pesos y la
+  cantidad de ventas. Son las de **todas** las ventas, no las de un período.
+- **Pedidos por estado**: cuatro cantidades de pedidos. **Pedidos pendientes** («Pendiente de pago»),
+  **Pedidos en curso** (suma «Confirmado», «En preparación», «Enviado» y «En tránsito»), **Pedidos
+  entregados** y **Pedidos cancelados**. Los estados heredados de versiones anteriores (ver
+  [7.1](#71-estado-del-pedido)) no tienen tarjeta.
+- **Catálogo e inventario**: **Productos activos** (los productos activos con al menos una variante
+  en stock, que son los que se ven en el catálogo: uno activo con todo agotado no se cuenta),
+  **Variantes con stock bajo** (de 1 a 5 unidades) y **Variantes agotadas** (0 unidades), contadas
+  sobre todas las variantes del inventario.
+- **Actividad reciente**:
+  - **Ventas de los últimos 30 días**: un gráfico de barras con el total de ventas **registradas**
+    de cada día (las anuladas no cuentan), de los últimos 30 días contando hoy, con los días en hora
+    de Bogotá. Debajo hay un resumen escrito (período, cantidad, total y día con más ventas) y el
+    desplegable **Ver los datos del gráfico en una tabla**, que lista los días que tuvieron ventas.
+    Si no hubo ventas en el período dice «No hay ventas registradas en los últimos 30 días.». Si hubiera
+    más de 1.000 ventas en el período, el gráfico avisa que muestra solo las más recientes.
+  - **Pedidos recientes**: los últimos 5 (**N.º pedido**, **Cliente**, **Estado**, **Total**,
+    **Fecha**) y el enlace **Ver todos**, que abre **Gestión de pedidos**. Sin pedidos dice «Todavía no
+    hay pedidos.».
+  - **Ventas recientes**: las últimas 5 y el enlace **Ver todas**, que abre **Ventas**. Sin ventas dice
+    «Todavía no hay ventas.».
+- **Accesos rápidos**: **Pedidos**, **Ventas**, **Productos** e **Inventario**.
+
+Cada tarjeta carga **por separado**: mientras espera muestra barras grises; si su pedido al servidor
+falla, ese recuadro muestra el mensaje de error (por ejemplo «No pudimos conectarnos con el servidor.
+Revisá tu conexión e intentá de nuevo.») y un botón **Reintentar** que repite solo esa consulta, sin
+afectar al resto del panel. El panel no se actualiza solo: para ver datos nuevos, recargá la página.
 
 ### 5.1 Productos (`/vendedor/productos`)
 
@@ -551,6 +591,18 @@ del pedido que se confirmó; nunca se borra.
 
 Un administrador puede hacer todo lo del vendedor (las mismas pantallas de productos, inventario,
 pedidos y ventas, con las direcciones que empiezan con `/admin/`) y además lo siguiente.
+
+### 6.0 Panel de inicio (`/admin`)
+
+Es la pantalla a la que llegás al iniciar sesión como administrador. Se titula **Panel de
+administración** y muestra lo mismo que el panel del vendedor (ver [5.0](#50-panel-de-inicio-vendedor):
+ventas, pedidos por estado, catálogo e inventario, ventas de los últimos 30 días, pedidos y ventas
+recientes), con los enlaces apuntando a las pantallas `/admin/...`. Además tiene:
+
+- La tarjeta **Clientes registrados** (en la sección **Catálogo, inventario y clientes**): cuántas
+  cuentas con rol cliente hay y cuántas están activas.
+- En **Accesos rápidos**, además de los cuatro del vendedor: **Vendedores**, **Usuarios**, **Roles** y
+  **Zonas de envío**.
 
 ### 6.1 Usuarios (`/admin/usuarios`), Vendedores (`/admin/vendedores`) y Roles (`/admin/roles`)
 
@@ -794,6 +846,7 @@ particulares se leyeron en el código y no se reprodujeron en pantalla.
 | **La fecha «desde» no puede ser posterior a «hasta».** | Corregí el rango de fechas del filtro. |
 | **El rango de fechas no puede superar 366 días** | En **Ventas**, achicá el período entre **Desde** y **Hasta**. |
 | La pantalla no se actualiza | Tocá **Actualizar**. |
+| Una tarjeta del panel de inicio muestra un mensaje de error («No pudimos cargar...» o «No pudimos conectarnos con el servidor...») | Falló la consulta de esa tarjeta, el resto sigue bien. Tocá **Reintentar** en la tarjeta. |
 
 ---
 
@@ -831,7 +884,12 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
   hasta que el personal los cancele a mano (ver [6.4](#64-zonas-de-cobertura-y-tarifas-de-envío)).
 - **No se pueden crear vendedores ni administradores desde la aplicación** (los crea el equipo técnico
   con un script).
-- El tablero de inicio de cada rol (dashboards) todavía no está conectado.
+- El panel de inicio del personal (`/admin` y `/vendedor`) es más simple que el de los mapas de
+  pantalla: no tiene variaciones porcentuales respecto del período anterior, ni selector de período
+  (el gráfico es siempre de los últimos 30 días), ni «pedidos del mes» ni «stock total». No tiene
+  enlace en el encabezado (se llega al iniciar sesión o escribiendo la dirección), no se actualiza
+  solo, y «Productos activos» cuenta solo los productos con al menos una variante en stock (la
+  consulta de productos es la misma del catálogo público).
 - En el historial de inventario, la reposición por una cancelación figura a nombre del cliente dueño
   del pedido, no de quien canceló. Quien canceló queda registrado en la venta («Anulada por»), no en
   el inventario.
