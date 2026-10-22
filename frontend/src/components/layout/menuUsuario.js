@@ -84,6 +84,17 @@ export function entradasMenuUsuario(rol) {
   return ENTRADAS_POR_ROL[rol];
 }
 
+// A dónde lleva el título «Trendy» del Header. El personal (roles con menú
+// lateral) vuelve a su panel de inicio, que es la primera entrada de su lista
+// (ENTRADAS_POR_ROL); cliente, visitante y cualquier rol desconocido (p. ej.
+// "constructor" leído de localStorage) van a la portada.
+export function rutaInicioDeRol(rol) {
+  if (typeof rol === "string" && ROLES_CON_MENU_LATERAL.includes(rol)) {
+    return entradasDePanel(rol)[0]?.ruta ?? "/";
+  }
+  return "/";
+}
+
 // Cómo se muestra el rol debajo del nombre.
 export const ETIQUETA_ROL = {
   cliente: "Cliente",
