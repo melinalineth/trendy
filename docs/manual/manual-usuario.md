@@ -58,14 +58,19 @@ contorno) y **Esc** lo cierra y devuelve el foco al botón. Lo que ofrece depend
 | --- | --- |
 | Visitante (sin sesión) | **Iniciar sesión** y **Crear cuenta**. |
 | Cliente | Tu nombre y el rol, y: **Mis pedidos**, **Mis direcciones**, **Mi carrito**, **Catálogo** y **Cerrar sesión**. |
-| Vendedor | Tu nombre y el rol, y: **Panel de inicio**, **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Catálogo** y **Cerrar sesión**. |
-| Administrador | Tu nombre y el rol, y: **Panel de inicio**, **Productos**, **Inventario**, **Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios**, **Roles**, **Catálogo** y **Cerrar sesión**. |
+| Vendedor | Tu nombre y el rol, y solo **Cerrar sesión**. |
+| Administrador | Tu nombre y el rol, y solo **Cerrar sesión**. |
 
-Cada entrada del personal lleva a la pantalla de **su** rol (por ejemplo, **Ventas** abre
-`/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador). **Panel de inicio** es la
-primera entrada del personal y vuelve al tablero al que llegaste al iniciar sesión (`/vendedor` o
-`/admin`). El administrador, además, tiene un **menú lateral** con las mismas entradas en todas sus
-pantallas (ver [6.0](#60-menú-lateral-y-panel-de-inicio-admin)).
+El vendedor y el administrador **navegan desde el menú lateral**, un menú vertical azul oscuro que
+aparece a la izquierda, debajo del encabezado, en todas sus pantallas (en el celular es un botón
+desplegable). Por eso su menú de usuario no repite esas opciones. El vendedor ve ahí **Panel de
+inicio**, **Productos**, **Inventario**, **Pedidos** y **Ventas** (ver
+[5.0](#50-menú-lateral-y-panel-de-inicio-vendedor)); el administrador, esas cinco y además **Envíos y
+zonas**, **Vendedores**, **Usuarios** y **Roles** (ver
+[6.0](#60-menú-lateral-y-panel-de-inicio-admin)). Cada entrada lleva a la pantalla de **su** rol (por
+ejemplo, **Ventas** abre `/vendedor/ventas` para el vendedor y `/admin/ventas` para el administrador).
+**Panel de inicio** es la primera entrada y vuelve al tablero al que llegaste al iniciar sesión
+(`/vendedor` o `/admin`).
 
 Las pantallas que no están en el menú (como **Finalizar compra**, que se llega desde el carrito) y todas
 las demás también se abren **escribiendo la dirección en la barra del navegador**, a
@@ -81,12 +86,12 @@ continuación de la dirección del sitio:
 | Mi carrito | `/carrito` | Cliente |
 | Mis direcciones | `/direcciones` | Cliente |
 | Finalizar compra | `/checkout` | Cliente |
-| Mis pedidos | `/pedidos` (o la entrada **Mis pedidos** del menú) | Cliente |
+| Mis pedidos | `/pedidos` (o la entrada **Mis pedidos** del menú de usuario) | Cliente |
 | Panel de inicio del personal | `/vendedor` (vendedor) o `/admin` (administrador); es donde llegás al iniciar sesión | Vendedor / Administrador |
 | Productos | `/vendedor/productos` (vendedor) o `/admin/productos` (administrador) | Vendedor / Administrador |
 | Inventario | `/vendedor/inventario` (vendedor) o `/admin/inventario` (administrador) | Vendedor / Administrador |
 | Gestión de pedidos | `/vendedor/pedidos` (vendedor) o `/admin/pedidos` (administrador) | Vendedor / Administrador |
-| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o la entrada **Ventas** del menú | Vendedor / Administrador |
+| Ventas | `/vendedor/ventas` (vendedor) o `/admin/ventas` (administrador), o la entrada **Ventas** del menú lateral | Vendedor / Administrador |
 | Vendedores | `/admin/vendedores` | Administrador |
 | Usuarios | `/admin/usuarios` | Administrador |
 | Roles y permisos | `/admin/roles` | Administrador |
@@ -105,7 +110,7 @@ la pantalla **No encontramos esta página** debajo del encabezado, con dos boton
 
 **La página de inicio (`/`)** es la portada de la tienda y la ven todos, hayan iniciado sesión o no.
 Si sos cliente, después de iniciar sesión llegás ahí; el vendedor y el administrador llegan a su
-propio panel de inicio (ver [5.0](#50-panel-de-inicio-vendedor) y [6.0](#60-menú-lateral-y-panel-de-inicio-admin)).
+propio panel de inicio (ver [5.0](#50-menú-lateral-y-panel-de-inicio-vendedor) y [6.0](#60-menú-lateral-y-panel-de-inicio-admin)).
 La portada muestra, de arriba abajo:
 
 - Un banner con **NUEVA COLECCIÓN**, «Descubrí tu estilo» y el botón **Comprar ahora**, que abre el
@@ -468,10 +473,31 @@ el historial** con la fecha de cada paso anterior (ver [Límites conocidos](#lí
 Un vendedor trabaja desde su panel de inicio y cuatro pantallas de gestión. Ve **todo** (todos los
 productos, pedidos y ventas).
 
-### 5.0 Panel de inicio (`/vendedor`)
+### 5.0 Menú lateral y panel de inicio (`/vendedor`)
 
-Es la pantalla a la que llegás al iniciar sesión como vendedor (también la abrís escribiendo
-`/vendedor`; el encabezado no tiene un enlace a ella). Se titula **Panel de vendedor**, te saluda por
+**Menú lateral.** Todas las pantallas del vendedor (`/vendedor`, `/vendedor/productos`,
+`/vendedor/inventario`, `/vendedor/pedidos` y `/vendedor/ventas`) se muestran con un menú vertical azul
+oscuro a la izquierda, debajo del encabezado, y el contenido de la pantalla a la derecha. Arriba dice
+**Panel de vendedor** y tu nombre; después van las entradas, cada una con un ícono: **Panel de inicio**,
+**Productos**, **Inventario**, **Pedidos** y **Ventas**. Al final hay un enlace **Ver la tienda**, que
+abre el catálogo (esa pantalla no lleva el menú lateral). La pantalla en la que estás aparece resaltada
+en magenta, con una marca blanca a la izquierda y el texto en negrita (así se nota aunque no distingas
+los colores; **Panel de inicio** solo se resalta en `/vendedor`, no en las demás, y vale igual si la
+dirección termina en una barra, como `/vendedor/`). El menú se queda visible mientras bajás por una
+pantalla larga. El menú de usuario del encabezado (el ícono de la persona) ya no repite estas entradas:
+tiene solo **Cerrar sesión**.
+
+**En el celular o la tablet** (ventanas de menos de 900 píxeles de ancho) el menú no ocupa la pantalla:
+debajo del encabezado aparece un botón **Menú del vendedor**. Al tocarlo se despliegan las mismas
+entradas, una debajo de otra y a todo el ancho; se cierra al elegir una entrada, al tocar el botón de
+nuevo o con la tecla **Esc** (el foco vuelve al botón). Con el teclado, **Tab** recorre primero el
+encabezado, después las entradas del menú y por último el contenido.
+
+Si escribís una dirección del vendedor que no existe (por ejemplo `/vendedor/algo`), se muestra la
+pantalla de «página no encontrada» sin el menú lateral.
+
+**Panel de inicio.** Es la pantalla a la que llegás al iniciar sesión como vendedor (también la abrís
+con la entrada **Panel de inicio** del menú lateral o escribiendo `/vendedor`). Se titula **Panel de vendedor**, te saluda por
 tu nombre y muestra el estado de la tienda con los datos de ese momento, todos reales, de arriba abajo:
 
 - **Ventas**: **Ventas registradas** y **Ventas anuladas**, cada una con el total en pesos y la
@@ -633,7 +659,7 @@ deshacer.» Se confirma con **Sí, cancelar pedido** y queda el aviso «Pedido P
 se puede cancelar, la pantalla dice por qué (por ejemplo «Un pedido ya entregado no se puede
 cancelar.»).
 
-### 5.4 Ventas (`/vendedor/ventas`, o la entrada **Ventas** del menú)
+### 5.4 Ventas (`/vendedor/ventas`, o la entrada **Ventas** del menú lateral)
 
 Pantalla **Ventas** («Consultá las ventas y filtralas por fecha y estado.»). Una venta es el registro
 del pedido que se confirmó; nunca se borra.
@@ -677,8 +703,8 @@ pedidos y ventas, con las direcciones que empiezan con `/admin/`) y además lo s
 `/admin/usuarios` y `/admin/roles`) se muestran con un menú vertical azul oscuro a la izquierda, debajo
 del encabezado, y el contenido de la pantalla a la derecha. Arriba dice **Administración** y tu nombre;
 después van las entradas, cada una con un ícono: **Panel de inicio**, **Productos**, **Inventario**,
-**Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios** y **Roles** (son las mismas
-que ofrece el menú de usuario del encabezado, que sigue existiendo con **Cerrar sesión**). Al final hay
+**Pedidos**, **Ventas**, **Envíos y zonas**, **Vendedores**, **Usuarios** y **Roles**. El menú de usuario
+del encabezado (el ícono de la persona) ya no repite estas entradas: tiene solo **Cerrar sesión**. Al final hay
 un enlace **Ver la tienda**, que abre el catálogo (esa pantalla ya no lleva el menú lateral). La
 pantalla en la que estás aparece resaltada en magenta, con una marca blanca a la izquierda y el texto
 en negrita (así se nota aunque no distingas los colores; **Panel de inicio** solo se resalta en
@@ -694,7 +720,7 @@ Si escribís una dirección de administración que no existe (por ejemplo `/admi
 pantalla de «página no encontrada» sin el menú lateral.
 
 **Panel de inicio.** Es la pantalla a la que llegás al iniciar sesión como administrador. Se titula **Panel de
-administración** y muestra lo mismo que el panel del vendedor (ver [5.0](#50-panel-de-inicio-vendedor):
+administración** y muestra lo mismo que el panel del vendedor (ver [5.0](#50-menú-lateral-y-panel-de-inicio-vendedor):
 ventas, pedidos por estado, catálogo e inventario, ventas de los últimos 30 días, pedidos y ventas
 recientes), con los enlaces apuntando a las pantallas `/admin/...`. Además tiene:
 
@@ -986,7 +1012,7 @@ nadie se lleve una sorpresa. El detalle técnico está en `docs/bitacora/sprint-
   pantalla: no tiene variaciones porcentuales respecto del período anterior, ni selector de período
   (el gráfico es siempre de los últimos 30 días), ni «pedidos del mes» ni «stock total». No tiene
   enlace propio en el encabezado (se llega al iniciar sesión, con la entrada **Panel de inicio** del
-  menú o escribiendo la dirección), no se actualiza
+  menú lateral o escribiendo la dirección), no se actualiza
   solo, y «Productos activos» cuenta solo los productos con al menos una variante en stock (la
   consulta de productos es la misma del catálogo público).
 - En el historial de inventario, la reposición por una cancelación figura a nombre del cliente dueño
