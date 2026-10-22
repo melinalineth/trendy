@@ -97,6 +97,34 @@ function UserMenu() {
     navigate("/login", { replace: true });
   }
 
+  const lista = (
+    <ul className="user-menu__list">
+      {entradas.map((entrada) => (
+        <li key={entrada.ruta}>
+          <Link
+            to={entrada.ruta}
+            className="user-menu__item"
+            onClick={() => setAbiertoEn(null)}
+          >
+            {entrada.etiqueta}
+          </Link>
+        </li>
+      ))}
+
+      {isAuthenticated && (
+        <li>
+          <button
+            type="button"
+            className="user-menu__item user-menu__item--logout"
+            onClick={cerrarSesion}
+          >
+            Cerrar sesión
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+
   return (
     <div className="user-menu" ref={contenedorRef} onBlur={alPerderFoco}>
       <button
@@ -124,33 +152,13 @@ function UserMenu() {
             </div>
           )}
 
-          <nav aria-label="Menú de usuario">
-            <ul className="user-menu__list">
-              {entradas.map((entrada) => (
-                <li key={entrada.ruta}>
-                  <Link
-                    to={entrada.ruta}
-                    className="user-menu__item"
-                    onClick={() => setAbiertoEn(null)}
-                  >
-                    {entrada.etiqueta}
-                  </Link>
-                </li>
-              ))}
-
-              {isAuthenticated && (
-                <li>
-                  <button
-                    type="button"
-                    className="user-menu__item user-menu__item--logout"
-                    onClick={cerrarSesion}
-                  >
-                    Cerrar sesión
-                  </button>
-                </li>
-              )}
-            </ul>
-          </nav>
+          {/* Landmark de navegación solo si hay enlaces de navegación: el
+              personal tiene solo «Cerrar sesión» (una acción, no navegación). */}
+          {entradas.length > 0 ? (
+            <nav aria-label="Menú de usuario">{lista}</nav>
+          ) : (
+            lista
+          )}
         </div>
       )}
     </div>
