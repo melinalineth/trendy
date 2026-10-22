@@ -1,0 +1,177 @@
+/* Menú lateral del admin (azul pizarra de los mapas de pantalla, entrada
+   activa en magenta con "glow"). Solo tokens de styles/tokens.css.
+   Mobile-first: por defecto es una barra con un botón que despliega la lista;
+   desde 900 px es una columna fija con la lista siempre visible. */
+.admin-sidebar {
+  background-color: var(--color-navy-800);
+  color: var(--color-text-inverse-muted);
+}
+
+/* ---- Botón "Menú de administración" (solo se ve en < 900 px) ---- */
+.admin-sidebar__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: transparent;
+  color: var(--color-text-inverse);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-sidebar__toggle:hover {
+  background-color: var(--color-overlay-inverse);
+}
+
+.admin-sidebar__toggle-texto {
+  flex: 1 1 auto;
+}
+
+.admin-sidebar__toggle-flecha {
+  flex: none;
+  transition: transform var(--transition-fast);
+}
+
+.admin-sidebar--abierto .admin-sidebar__toggle-flecha {
+  transform: rotate(180deg);
+}
+
+/* ---- Contenido: oculto hasta abrir el botón (celular) ---- */
+.admin-sidebar__interior {
+  display: none;
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border-inverse);
+}
+
+.admin-sidebar--abierto .admin-sidebar__interior {
+  display: block;
+}
+
+.admin-sidebar__identidad {
+  padding: var(--space-2) var(--space-3) var(--space-4);
+}
+
+.admin-sidebar__titulo {
+  margin: 0;
+  color: var(--color-text-inverse);
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.admin-sidebar__nombre {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-inverse-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.admin-sidebar__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Entradas (también "Ver la tienda"). Alto mínimo 44 px. ---- */
+.admin-sidebar__enlace {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-inverse-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.admin-sidebar__enlace svg {
+  flex: none;
+}
+
+.admin-sidebar__enlace:hover {
+  background-color: var(--color-overlay-inverse);
+  color: var(--color-text-inverse);
+  text-decoration: none;
+}
+
+/* Página actual: NavLink agrega aria-current="page" (y la clase .active). */
+.admin-sidebar__enlace[aria-current="page"] {
+  background-color: var(--color-brand-500);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-glow-brand);
+}
+
+/* Foco visible: contorno sólido claro (contraste alto sobre el azul oscuro y
+   también sobre el magenta de la entrada activa). El offset de 2 px cabe en el
+   padding del contenedor, que tiene overflow y si no lo recortaría. */
+.admin-sidebar__enlace:focus-visible,
+.admin-sidebar__toggle:focus-visible {
+  outline: 2px solid var(--color-text-inverse);
+  outline-offset: 2px;
+}
+
+.admin-sidebar__toggle:focus-visible {
+  outline-offset: -4px;
+}
+
+/* "Ver la tienda" separado de las pantallas del panel. */
+.admin-sidebar__tienda {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border-inverse);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding-top: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar__enlace,
+  .admin-sidebar__toggle-flecha {
+    transition: none;
+  }
+}
+
+/* ---- Escritorio: columna fija, siempre visible, que acompaña el scroll ---- */
+@media (min-width: 900px) {
+  .admin-sidebar {
+    flex: 0 0 15rem;
+    width: 15rem;
+    background: linear-gradient(
+      to bottom,
+      var(--color-navy-800),
+      var(--color-navy-900)
+    );
+  }
+
+  .admin-sidebar__toggle {
+    display: none;
+  }
+
+  /* La columna (.admin-sidebar) se estira hasta el final del contenido para
+     que el fondo oscuro llegue abajo; el interior se queda pegado arriba
+     mientras se hace scroll. Si la ventana es muy baja, el menú scrollea
+     adentro en vez de cortarse. */
+  .admin-sidebar__interior {
+    display: block;
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: var(--space-6) var(--space-3) var(--space-4);
+    border-top: none;
+  }
+}

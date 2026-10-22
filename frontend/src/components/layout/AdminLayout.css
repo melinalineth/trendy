@@ -1,0 +1,25 @@
+/* Estructura de las pantallas del admin: menú lateral + contenido. Solo
+   tokens (styles/tokens.css). Mobile-first: en celular y tablet (< 900 px) el
+   menú va arriba del contenido (colapsable, ver AdminSidebar.css); desde 900 px
+   es una columna a la izquierda. */
+.admin-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+/* min-width: 0 deja que una tabla ancha dentro de una página haga scroll en su
+   propio contenedor en vez de ensanchar toda la pantalla. No lleva padding:
+   cada página ya trae el suyo (padding + max-width + margin auto). */
+.admin-layout__contenido {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .admin-layout {
+    flex-direction: row;
+    /* Para que la columna oscura llegue hasta abajo aun en pantallas cortas
+       (cargando, sin datos): alto de la ventana menos el Header (~4.8 rem). */
+    min-height: calc(100vh - 4.8rem);
+  }
+}
