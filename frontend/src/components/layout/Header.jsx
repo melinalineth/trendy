@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import SearchBar from "../products/SearchBar";
+import UserMenu from "./UserMenu";
 import { useAuth } from "../../hooks/useAuth";
 import { useCarritoContador } from "../../hooks/useCarritoContador";
 import "./Header.css";
@@ -13,50 +14,34 @@ const Header = ({ title = "Trendy", subtitle }) => {
   const rol = usuario?.rol?.nombre;
   const mostrarCarrito = !isAuthenticated || rol === "cliente";
 
+  // En la barra quedan solo el buscador, el menú de usuario y el carrito. Los
+  // accesos por rol ("Mis pedidos", "Ventas", etc.) viven dentro del menú
+  // (UserMenu / menuUsuario.js) para no repetirlos acá.
   return (
     <header className="app-header">
       <div className="header-content">
         <h1 className="header-title">{title}</h1>
         {subtitle && <p className="header-subtitle">{subtitle}</p>}
         <div className="header__actions">
-  <SearchBar />
+          <SearchBar />
 
-  <button className="header__icon">
-    👤
-  </button>
+          <UserMenu />
 
-  {/* Mis pedidos (RF-031): solo el cliente con sesión. */}
-  {isAuthenticated && rol === "cliente" && (
-    <Link to="/pedidos" className="header__link">
-      Mis pedidos
-    </Link>
-  )}
-
-  {/* Ventas (RF-042): solo admin y vendedor, cada uno en su ruta. */}
-  {isAuthenticated && (rol === "admin" || rol === "vendedor") && (
-    <Link
-      to={rol === "admin" ? "/admin/ventas" : "/vendedor/ventas"}
-      className="header__link"
-    >
-      Ventas
-    </Link>
-  )}
-
-  {mostrarCarrito && (
-    <Link
-      to="/carrito"
-      className="header__cart"
-      aria-label={
-        cantidadCarrito > 0
-          ? `Carrito, ${cantidadCarrito} producto(s)`
-          : "Carrito"
-      }
-    >
-      🛒
-      <span className="header__cart-count">{cantidadCarrito}</span>
-    </Link>
-  )}
-</div>
+          {mostrarCarrito && (
+            <Link
+              to="/carrito"
+              className="header__cart"
+              aria-label={
+                cantidadCarrito > 0
+                  ? `Carrito, ${cantidadCarrito} producto(s)`
+                  : "Carrito"
+              }
+            >
+              🛒
+              <span className="header__cart-count">{cantidadCarrito}</span>
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );
