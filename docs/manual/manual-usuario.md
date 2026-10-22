@@ -123,7 +123,8 @@ Pantalla **Crear cuenta**. Completá:
 - **Correo electrónico** (con formato de correo)
 - **Contraseña** (mínimo 8 caracteres)
 - La casilla **Acepto las políticas de privacidad y los términos de uso**. El botón **Crear cuenta**
-  queda deshabilitado hasta que la marques.
+  queda deshabilitado hasta que la marques. Las palabras «políticas de privacidad» y «términos de
+  uso» son enlaces que abren los textos en otra pestaña (ver más abajo).
 
 Qué puede pasar:
 
@@ -135,6 +136,33 @@ Qué puede pasar:
 - Cualquier otro problema (por ejemplo una contraseña de menos de 8 caracteres o un correo que el
   navegador acepta pero el sistema no): **No pudimos completar el registro. Revisá los datos e
   intentá de nuevo.** El mensaje no dice cuál es el campo con el problema; revisá los tres.
+
+#### Términos de uso y Política de privacidad (`/terminos` y `/privacidad`)
+
+Son dos páginas públicas (no hace falta iniciar sesión) a las que se llega desde los enlaces de la
+casilla del registro: **políticas de privacidad** abre `/privacidad` y **términos de uso** abre
+`/terminos`, cada una en una pestaña nueva, así no perdés lo que ya escribiste. Hacer clic en un
+enlace no marca ni desmarca la casilla.
+
+- **Borrador.** Arriba de las dos páginas hay un aviso amarillo: «Borrador: este texto está
+  pendiente de revisión y aprobación del equipo de Trendy. No constituye asesoría legal.» Los textos
+  describen cómo funciona la tienda hoy, pero **todavía no fueron aprobados por el equipo** y no son
+  asesoría legal.
+- Cada página muestra la fecha de «Última actualización», un índice con enlaces a sus secciones
+  numeradas, y al pie un enlace a la otra página y otro para **Volver al registro**.
+- **Términos de uso**: qué es Trendy, cuentas y credenciales, pedidos y precios (el precio queda fijo
+  al crear el pedido), medios de pago (contra entrega solo en zonas habilitadas; Mercado Pago sin
+  garantías, porque nunca se probó con el servicio real), envíos solo a zonas de cobertura,
+  cancelaciones y cambios a cargo del personal, sin reembolsos ni devoluciones en el sistema, uso
+  aceptable, disponibilidad sin garantía, cambios a los términos y contacto.
+- **Política de privacidad**: qué datos se guardan y para qué, cómo se guardan (contraseña con
+  bcrypt; sesión en el navegador, 1 hora por defecto), quién los ve (vendedores y administradores ven
+  pedidos y ventas con nombre, correo y dirección), terceros (Mercado Pago e imágenes de sitios
+  externos), conservación (sin herramienta de borrado), derechos y cookies (no se usan; no hay
+  analítica).
+- **Pendiente de definir**: el canal de contacto, el plazo de conservación de datos y la revisión de
+  cómo aplica la Ley 1581 de 2012 (habeas data). Los textos no inventan datos de empresa (NIT,
+  dirección, teléfono ni correo).
 
 ### 3.2 Iniciar sesión (`/login`)
 
