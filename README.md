@@ -227,7 +227,7 @@ No verificado / pendiente:
 ## Documentación
 
 - Requisitos y diseño: `docs/Trendy_ERS_v1.2.docx`, `docs/Trendy_DDS_v1.2.docx`,
-  `docs/Trendy_Plan_de_Trabajo_v1.0.docx`; mapas de pantallas en `docs/*.png`.
+  `docs/Trendy_Plan_de_Trabajo_v1.1.docx`; mapas de pantallas en `docs/*.png`.
 - Diseño técnico: [estados del pedido, envío y pago](docs/diseno/pedidos-estados.md),
   [info de envío e historial](docs/diseno/info-envio.md), [API de ventas](docs/diseno/ventas-api.md),
   [montos en COP](docs/diseno/montos-cop.md).
